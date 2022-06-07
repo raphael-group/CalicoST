@@ -559,11 +559,11 @@ def viterbi_nb_bb_sitewise(X, lengths, base_nb_mean, log_mu, alphas, total_bb_RD
         log_transmat: n_states * n_states. Transition probability after log transformation.
         log_startprob: n_states. Start probability after log transformation.
     Output
-        log_prob: a scalar.
+#        log_prob: a scalar.
         labels: size of n_observations.
     Intermediate
         log_emission: n_states * n_observations * n_spots. Log probability.
-        log_v: n_states * n_observations. Log of viterbi DP table. v[i,t] = max_{q_1, ..., q_{t-1}} P(o_1, q_1, ..., o_{t-1}, q_{t-1}, o_t, q_t=i | lambda). 
+        log_v: n_states * n_observations per chromosome. Log of viterbi DP table. v[i,t] = max_{q_1, ..., q_{t-1}} P(o_1, q_1, ..., o_{t-1}, q_{t-1}, o_t, q_t=i | lambda).
     '''
     n_obs = X.shape[0]
     n_comp = X.shape[1]
@@ -572,28 +572,42 @@ def viterbi_nb_bb_sitewise(X, lengths, base_nb_mean, log_mu, alphas, total_bb_RD
     log_sitewise_self_transmat = np.log(1 - np.exp(log_sitewise_transmat))
     log_emission = compute_emission_probability_nb_betabinom(X, base_nb_mean, log_mu, alphas, total_bb_RD, p_binom, taus)
     # initialize viterbi DP table and backtracking table
-    log_v = np.zeros((2*n_states, n_obs))
-    bt = np.zeros((2*n_states, n_obs))
+    labels = np.array([])
+    merged_labels = np.array([])
     cumlen = 0
     for le in lengths:
+        log_v = np.zeros((2*n_states, le))
+        bt = np.zeros((2*n_states, le))
         for t in np.arange(le):
             if cumlen == 0 and t == 0:
                 log_v[:, 0] = np.mean(log_emission[:,0,:], axis=1) + np.append(log_startprob,log_startprob) + np.log(0.5)
                 continue
             for i in np.arange(2*n_states):
                 if t > 0:
-                    tmp = log_v[:, (cumlen+t-1)] + np.append(log_transmat[:,i - n_states * int(i/n_states)], log_transmat[:,i - n_states * int(i/n_states)]) + np.mean(log_emission[i, (cumlen+t), :])
+                    tmp = log_v[:, (t-1)] + np.append(log_transmat[:,i - n_states * int(i/n_states)], log_transmat[:,i - n_states * int(i/n_states)]) + np.mean(log_emission[i, (cumlen+t), :])
                 else:
-                    tmp = log_v[:, (cumlen+t-1)] + np.append(log_startprob[i - n_states * int(i/n_states)], log_startprob[i - n_states * int(i/n_states)]) + np.mean(log_emission[i, (cumlen+t), :])
-                bt[i, (cumlen + t)] = np.argmax(tmp)
-                log_v[i, (cumlen + t)] = np.max(tmp)
+                    tmp = np.append(log_startprob[i - n_states * int(i/n_states)], log_startprob[i - n_states * int(i/n_states)]) + np.mean(log_emission[i, (cumlen+t), :])
+                bt[i, t] = np.argmax(tmp)
+                log_v[i, t] = np.max(tmp)
+        # backtracking to get the sequence
+        chr_labels = [ np.argmax(log_v[:,-1]) ]
+        for t2 in np.arange(le-1, 0, -1):
+            chr_labels.append( int(bt[chr_labels[-1],t2]) )
+        chr_labels = np.array(chr_labels[::-1]).astype(int)
+        
+        if cumlen == 0:
+            labels = chr_labels
+        else:
+            labels = np.append(labels, chr_labels)
+            
+        # merge two phases
+        chr_merged_labels = copy.copy(chr_labels)
+        chr_merged_labels[chr_merged_labels >= n_states] = chr_merged_labels[chr_merged_labels >= n_states] - n_states
+        
+        if cumlen == 0:
+            merged_labels = chr_merged_labels
+        else:
+            merged_labels = np.append(merged_labels, chr_merged_labels)
+        
         cumlen += le
-    # backtracking to get the sequence
-    labels = [ np.argmax(log_v[:,-1]) ]
-    for t in np.arange(n_obs-1, 0, -1):
-        labels.append( int(bt[labels[-1],t]) )
-    labels = np.array(labels[::-1]).astype(int)
-    # merge two phases
-    merged_labels = copy.copy(labels)
-    merged_labels[merged_labels >= n_states] = merged_labels[merged_labels >= n_states] - n_states
-    return np.max(log_v[:,-1]), labels, merged_labels
+    return labels, merged_labels
