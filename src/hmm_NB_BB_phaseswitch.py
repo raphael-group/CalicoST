@@ -591,22 +591,24 @@ def viterbi_nb_bb_sitewise(X, lengths, base_nb_mean, log_mu, alphas, total_bb_RD
                 log_v[i, t] = np.max(tmp)
         # backtracking to get the sequence
         chr_labels = [ np.argmax(log_v[:,-1]) ]
-        for t2 in np.arange(le-1, 0, -1):
-            chr_labels.append( int(bt[chr_labels[-1],t2]) )
-        chr_labels = np.array(chr_labels[::-1]).astype(int)
         
         if cumlen == 0:
-            labels = chr_labels
+            for t2 in np.arange(le-1, 0, -1):
+                chr_labels.append( int(bt[chr_labels[-1],t2]))
         else:
-            labels = np.append(labels, chr_labels)
-            
+            for t2 in np.arange(le-2, -1, -1):
+                chr_labels.append( int(bt[chr_labels[-1],t2]))
+
+        chr_labels = np.array(chr_labels[::-1]).astype(int)
         # merge two phases
         chr_merged_labels = copy.copy(chr_labels)
         chr_merged_labels[chr_merged_labels >= n_states] = chr_merged_labels[chr_merged_labels >= n_states] - n_states
         
         if cumlen == 0:
+            labels = chr_labels
             merged_labels = chr_merged_labels
         else:
+            labels = np.append(labels, chr_labels)
             merged_labels = np.append(merged_labels, chr_merged_labels)
         
         cumlen += le
