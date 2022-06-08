@@ -184,6 +184,44 @@ def forward_lattice_sitewise(lengths, log_transmat, log_startprob, log_emission,
         log_alpha: size n_states * n_observations. log alpha[j, t] = log P(o_1, ... o_t, q_t = j | lambda).
     '''
     n_obs = log_emission.shape[1]
+    n_states = int(np.ceil(log_emission.shape[0] / 2))
+    assert np.sum(lengths) == n_obs, "Sum of lengths must be equal to the first dimension of X!"
+    assert len(log_startprob) == n_states, "Length of startprob_ must be equal to the first dimension of log_transmat!"
+    log_sitewise_self_transmat = np.log(1 - np.exp(log_sitewise_transmat))
+    # initialize log_alpha
+    log_alpha = np.zeros((log_emission.shape[0], n_obs))
+    buf = np.zeros(log_emission.shape[0])
+    cumlen = 0
+    for le in lengths:
+        # start prob
+        combined_log_startprob = np.log(0.5) + np.append(log_startprob,log_startprob)
+        log_alpha[:, cumlen] = combined_log_startprob + np_mean_ax_squeeze(log_emission[:, cumlen, :], axis=1)
+        for t in np.arange(1, le):
+            phases_switch_mat = np.array([[log_sitewise_self_transmat[cumlen + t-1], log_sitewise_transmat[cumlen + t-1]], [log_sitewise_transmat[cumlen + t-1], log_sitewise_self_transmat[cumlen + t-1] ]])
+            combined_transmat = np.kron( np.exp(phases_switch_mat), np.exp(log_transmat) )
+            combined_transmat = np.log(combined_transmat)
+            for j in np.arange(log_emission.shape[0]):
+                for i in np.arange(log_emission.shape[0]):
+                    buf[i] = log_alpha[i, (cumlen + t - 1)] + combined_transmat[i, j]
+                log_alpha[j, (cumlen + t)] = mylogsumexp(buf) + np.mean(log_emission[j, (cumlen + t), :])
+        cumlen += le
+    return log_alpha
+
+
+@njit 
+def old_forward_lattice_sitewise(lengths, log_transmat, log_startprob, log_emission, log_sitewise_transmat):
+    '''
+    Note that n_states is the CNV states, and there are 2 * n_states of paired states for (CNV, phasing) pairs.
+    Input
+        lengths: sum of lengths = n_observations.
+        log_transmat: n_states * n_states. Transition probability after log transformation.
+        log_startprob: n_states. Start probability after log transformation.
+        log_emission: 2*n_states * n_observations * n_spots. Log probability.
+        log_sitewise_transmat: n_observations, the log transition probability of phase switch.
+    Output
+        log_alpha: size n_states * n_observations. log alpha[j, t] = log P(o_1, ... o_t, q_t = j | lambda).
+    '''
+    n_obs = log_emission.shape[1]
     n_states = int(log_emission.shape[0] / 2)
     assert np.sum(lengths) == n_obs, "Sum of lengths must be equal to the first dimension of X!"
     assert len(log_startprob) == n_states, "Length of startprob_ must be equal to the first dimension of log_transmat!"
@@ -207,6 +245,44 @@ def forward_lattice_sitewise(lengths, log_transmat, log_startprob, log_emission,
 
 @njit 
 def backward_lattice_sitewise(lengths, log_transmat, log_startprob, log_emission, log_sitewise_transmat):
+    '''
+    Note that n_states is the CNV states, and there are 2 * n_states of paired states for (CNV, phasing) pairs.
+    Input
+        X: size n_observations * n_components * n_spots.
+        lengths: sum of lengths = n_observations.
+        log_transmat: n_states * n_states. Transition probability after log transformation.
+        log_startprob: n_states. Start probability after log transformation.
+        log_emission: 2*n_states * n_observations * n_spots. Log probability.
+        log_sitewise_transmat: n_observations, the log transition probability of phase switch.
+    Output
+        log_beta: size n_states * n_observations. log beta[i, t] = log P(o_{t+1}, ..., o_T | q_t = i, lambda).
+    '''
+    n_obs = log_emission.shape[1]
+    n_states = int(np.ceil(log_emission.shape[0] / 2))
+    assert np.sum(lengths) == n_obs, "Sum of lengths must be equal to the first dimension of X!"
+    assert len(log_startprob) == n_states, "Length of startprob_ must be equal to the first dimension of log_transmat!"
+    log_sitewise_self_transmat = np.log(1 - np.exp(log_sitewise_transmat))
+    # initialize log_beta
+    log_beta = np.zeros((log_emission.shape[0], n_obs))
+    buf = np.zeros(log_emission.shape[0])
+    cumlen = 0
+    for le in lengths:
+        # start prob
+        log_beta[:, (cumlen + le - 1)] = 0
+        for t in np.arange(le-2, -1, -1):
+            phases_switch_mat = np.array([[log_sitewise_self_transmat[cumlen + t], log_sitewise_transmat[cumlen + t]], [log_sitewise_transmat[cumlen + t], log_sitewise_self_transmat[cumlen + t] ]])
+            combined_transmat = np.kron( np.exp(phases_switch_mat), np.exp(log_transmat) )
+            combined_transmat = np.log(combined_transmat)
+            for i in np.arange(log_emission.shape[0]):
+                for j in np.arange(log_emission.shape[0]):
+                    buf[j] = log_beta[j, (cumlen + t + 1)] + combined_transmat[i, j] + np.mean(log_emission[j, (cumlen + t + 1), :])
+                log_beta[i, (cumlen + t)] = mylogsumexp(buf)
+        cumlen += le
+    return log_beta
+
+
+@njit 
+def old_backward_lattice_sitewise(lengths, log_transmat, log_startprob, log_emission, log_sitewise_transmat):
     '''
     Note that n_states is the CNV states, and there are 2 * n_states of paired states for (CNV, phasing) pairs.
     Input
@@ -447,7 +523,7 @@ def update_emission_params_nb_bb_sitewise(X, log_gamma, base_nb_mean, alphas, to
 # whole inference
 ############################################################
 
-def run_baum_welch_nb_bb_sitewise(X, lengths, n_states, base_nb_mean, total_bb_RD, log_sitewise_transmat, fix_NB_dispersion=False, shared_NB_dispersion=False, fix_BB_dispersion=False, shared_BB_dispersion=False, is_diag=False, init_alphas=None, init_taus=None, max_iter=100, tol=1e-4):
+def run_baum_welch_nb_bb_sitewise(X, lengths, n_states, base_nb_mean, total_bb_RD, log_sitewise_transmat, fix_NB_dispersion=False, shared_NB_dispersion=False, fix_BB_dispersion=False, shared_BB_dispersion=False, is_diag=False, init_log_mu=None, init_p_binom=None, init_alphas=None, init_taus=None, max_iter=100, tol=1e-4):
     '''
     Input
         X: size n_observations * n_components * n_spots.
@@ -463,8 +539,8 @@ def run_baum_welch_nb_bb_sitewise(X, lengths, n_states, base_nb_mean, total_bb_R
     n_spots = X.shape[2]
     assert n_comp == 2
     # initialize NB logmean shift and BetaBinom prob
-    log_mu = np.linspace(-0.1, 0.1, n_states)
-    p_binom = np.linspace(0.05, 0.45, n_states)
+    log_mu = np.linspace(-0.1, 0.1, n_states) if init_log_mu is None else init_log_mu
+    p_binom = np.linspace(0.05, 0.45, n_states) if init_p_binom is None else init_p_binom
     # initialize (inverse of) dispersion param in NB and BetaBinom
     alphas = np.array([0.01] * n_states) if init_alphas is None else init_alphas
     taus = np.array([30] * n_states) if init_taus is None else init_taus
@@ -489,9 +565,12 @@ def run_baum_welch_nb_bb_sitewise(X, lengths, n_states, base_nb_mean, total_bb_R
             fix_NB_dispersion=fix_NB_dispersion, shared_NB_dispersion=shared_NB_dispersion, \
             fix_BB_dispersion=fix_BB_dispersion, shared_BB_dispersion=shared_BB_dispersion)
         # check convergence
-        if np.sum(np.abs( np.exp(new_log_startprob) - np.exp(log_startprob) )) < tol and \
-           np.sum(np.abs( np.exp(new_log_transmat) - np.exp(log_transmat) )) < tol and \
-           np.sum(np.abs(new_log_mu - log_mu)) < tol:
+        print( np.mean(np.abs( np.exp(new_log_startprob) - np.exp(log_startprob) )), \
+            np.mean(np.abs( np.exp(new_log_transmat) - np.exp(log_transmat) )), \
+            np.mean(np.abs(new_log_mu - log_mu)) )
+        if np.mean(np.abs( np.exp(new_log_startprob) - np.exp(log_startprob) )) < tol and \
+           np.mean(np.abs( np.exp(new_log_transmat) - np.exp(log_transmat) )) < tol and \
+           np.mean(np.abs(new_log_mu - log_mu)) < tol:
            break
         log_startprob = new_log_startprob
         log_transmat = new_log_transmat
