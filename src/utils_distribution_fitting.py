@@ -73,7 +73,7 @@ class Weighted_BetaBinom(GenericLikelihoodModel):
             if hasattr(self, 'start_params'):
                 start_params = self.start_params
             else:
-                start_params = np.append(0.5 * np.ones(self.nparams), 1)
+                start_params = np.append(0.5 / self.exog.shape[1] * np.ones(self.nparams), 1)
         
         return super(Weighted_BetaBinom, self).fit(start_params=start_params,
                                                maxiter=maxiter, maxfun=maxfun,
