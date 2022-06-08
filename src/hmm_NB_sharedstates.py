@@ -8,7 +8,7 @@ from scipy import linalg, special
 from scipy.special import logsumexp
 from sklearn import cluster
 from sklearn.utils import check_random_state
-from hmmlearn.hmm import _BaseHMM as BaseHMM
+from hmmlearn.hmm import BaseHMM
 import statsmodels
 import statsmodels.api as sm
 from statsmodels.base.model import GenericLikelihoodModel
@@ -78,13 +78,13 @@ class ConstrainedNBHMM(BaseHMM):
 
     Examples
     ----------
-    # base_nb_mean = eta.reshape(-1,1) * totalUMI.reshape(1,-1)
     base_nb_mean = eta.reshape(-1,1) * np.sum(totalUMI)
-    hmmmodel = ConstrainedNBHMM(base_nb_mean, n_components=3)
-    hmmmodel.fit( np.sum(count,axis=0).reshape(-1,1) )
-    hmmmodel.predict( np.sum(count,axis=0).reshape(-1,1) )
+    hmmmodel = ConstrainedNBHMM(n_components=3)
+    X = np.vstack( [np.sum(count,axis=0), base_nb_mean] ).T
+    hmmmodel.fit( X )
+    hmmmodel.predict( X )
     """
-    def __init__(self, base_nb_mean, n_components=1, shared_dispersion=False,
+    def __init__(self, n_components=1, shared_dispersion=False,
                  startprob_prior=1.0, transmat_prior=1.0,
                  algorithm="viterbi", random_state=None,
                  n_iter=10, tol=1e-2, verbose=False,
@@ -96,15 +96,12 @@ class ConstrainedNBHMM(BaseHMM):
                          random_state=random_state, n_iter=n_iter,
                          tol=tol, params=params, verbose=verbose,
                          init_params=init_params)
-        self.n_cells = base_nb_mean.shape[1]
-        self.n_genes = base_nb_mean.shape[0]
-        self.base_nb_mean = base_nb_mean
         self.shared_dispersion = shared_dispersion
         # initialize CNV's effect
         self.log_mu = np.linspace(-0.1, 0.1, self.n_components)
         # initialize inverse of dispersion
-        #self.alphas = np.array([0.01] * self.n_components)
-        self.alphas = 0.01 * np.ones((self.n_components, self.n_genes))
+        self.alphas = np.array([0.01] * self.n_components)
+        # self.alphas = 0.01 * np.ones(s(self.n_components, self.n_genes))
         # initialize start probability and transition probability
         self.startprob_ = np.ones(self.n_components) / self.n_components
         t = 0.9
@@ -117,27 +114,28 @@ class ConstrainedNBHMM(BaseHMM):
 
         Attributes
         ----------
-        X : array_like, shape (n_genes, n_cells)
-            Observed UMI count matrix
+        X : array_like, shape (n_genes, 2*n_cells)
+            First (n_genes, n_cells) is the observed UMI count matrix; second (n_genes, n_cells) is base_nb_mean.
 
         Returns
         -------
         lpr : array_like, shape (n_genes, n_components)
             Array containing the log probabilities of each data point in X.
         """
-        log_prob = np.zeros((self.n_genes, self.n_cells, self.n_components))
+        n_genes = X.shape[0]
+        n_cells = int(X.shape[1] / 2)
+        base_nb_mean = X[:, n_cells:]
+        log_prob = np.zeros((n_genes, n_cells, self.n_components))
         for i in range(self.n_components):
-            nb_mean = self.base_nb_mean * np.exp(self.log_mu[i])
-            #nb_std = np.sqrt(nb_mean + self.alphas[i] * nb_mean**2)
-            nb_std = np.sqrt(nb_mean + self.alphas[i,:].reshape(-1,1) * nb_mean**2)
+            nb_mean = base_nb_mean * np.exp(self.log_mu[i])
+            nb_std = np.sqrt(nb_mean + self.alphas[i] * nb_mean**2)
+            # nb_std = np.sqrt(nb_mean + self.alphas[i,:].reshape(-1,1) * nb_mean**2)
             n, p = convert_params(nb_mean, nb_std)
-            log_prob[:,:,i] = scipy.stats.nbinom.logpmf(X, n, p)
+            log_prob[:,:,i] = scipy.stats.nbinom.logpmf(X[:, :n_cells], n, p)
         return log_prob.mean(axis=1)
     #
     def _initialize_sufficient_statistics(self):
         stats = super()._initialize_sufficient_statistics()
-        stats['obs'] = np.zeros((self.n_genes, self.n_cells))
-        stats['post'] = np.zeros((self.n_genes, self.n_components))
         return stats
     #
     def _accumulate_sufficient_statistics(self, stats, X, lattice, posteriors, fwdlattice, bwdlattice):
@@ -176,40 +174,43 @@ class ConstrainedNBHMM(BaseHMM):
             stats['denoms'] = denoms
     #
     def _do_mstep(self, stats):
+        n_genes = stats['obs'].shape[0]
+        n_cells = int(stats['obs'].shape[1] / 2)
+        base_nb_mean = stats['obs'][:, n_cells:]
         super()._do_mstep(stats)
         if 'm' in self.params and 'a' in self.params:
             # NB regression fit dispersion and CNV's effect simultaneously
             if not self.shared_dispersion:
                 for i in range(self.n_components):
-                    model = Weighted_NegativeBinomial(stats['obs'].flatten(), \
-                                np.ones(self.n_genes*self.n_cells).reshape(-1,1), \
-                                weights=np.repeat(stats['post'][:,i], self.n_cells), exposure=self.base_nb_mean.flatten())
+                    model = Weighted_NegativeBinomial(stats['obs'][:, :n_cells].flatten(), \
+                                np.ones(n_genes*n_cells).reshape(-1,1), \
+                                weights=np.repeat(stats['post'][:,i], n_cells), exposure=base_nb_mean.flatten())
                     res = model.fit(disp=0, maxiter=500)
                     self.log_mu[i] = res.params[0]
-                    #self.alphas[i] = res.params[-1]
-                    self.alphas[i,:] = res.params[-1]
+                    self.alphas[i] = res.params[-1]
+                    # self.alphas[i,:] = res.params[-1]
             else:
-                all_states_nb_mean = np.tile(self.base_nb_mean.flatten(), self.n_components)
-                all_states_y = np.tile(stats['obs'].flatten(), self.n_components)
-                all_states_weights = np.concatenate([np.repeat(stats['post'][:,i], self.n_cells) for i in range(self.n_components)])
-                all_states_features = np.zeros((self.n_components*self.n_genes*self.n_cells, self.n_components))
+                all_states_nb_mean = np.tile(base_nb_mean.flatten(), self.n_components)
+                all_states_y = np.tile(stats['obs'][:, :n_cells].flatten(), self.n_components)
+                all_states_weights = np.concatenate([np.repeat(stats['post'][:,i], n_cells) for i in range(self.n_components)])
+                all_states_features = np.zeros((self.n_components*n_genes*n_cells, self.n_components))
                 for i in np.arange(self.n_components):
-                    all_states_features[(i*self.n_genes*self.n_cells):((i+1)*self.n_genes*self.n_cells), i] = 1
+                    all_states_features[(i*n_genes*n_cells):((i+1)*n_genes*n_cells), i] = 1
                 model = Weighted_NegativeBinomial(all_states_y, all_states_features, weights=all_states_weights, exposure=all_states_nb_mean)
                 res = model.fit(disp=0, maxiter=500)
                 self.log_mu = res.params[:-1]
-                #self.alphas[:] = res.params[-1]
-                self.alphas[:,:] = res.params[-1]
+                self.alphas[:] = res.params[-1]
+                # self.alphas[:,:] = res.params[-1]
                 # print(res.params)
         elif 'm' in self.params:
             # NB regression fit CNV's effect only
             for i in range(self.n_components):
-                # model = sm.GLM(stats['obs'].flatten(), np.ones(self.n_genes*self.n_cells).reshape(-1,1), \
-                #             family=sm.families.NegativeBinomial(alpha=self.alphas[i]), \
-                #             exposure=self.base_nb_mean.flatten())
                 model = sm.GLM(stats['obs'].flatten(), np.ones(self.n_genes*self.n_cells).reshape(-1,1), \
-                            family=sm.families.NegativeBinomial(alpha=np.repeat(self.alphas[i], self.n_cells)), \
-                            exposure=self.base_nb_mean.flatten(), var_weights=np.repeat(stats['post'][:,i], self.n_cells))
+                            family=sm.families.NegativeBinomial(alpha=self.alphas[i]), \
+                            exposure=base_nb_mean.flatten())
+                # model = sm.GLM(stats['obs'][:, :n_cells].flatten(), np.ones(n_genes*n_cells).reshape(-1,1), \
+                #             family=sm.families.NegativeBinomial(alpha=np.repeat(self.alphas[i], n_cells)), \
+                #             exposure=base_nb_mean.flatten(), var_weights=np.repeat(stats['post'][:,i], n_cells))
                 res = model.fit(disp=0, maxiter=500)
                 self.log_mu[i] = res.params[0]
         if 't' in self.params:
