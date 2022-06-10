@@ -340,6 +340,7 @@ def compute_posterior_obs(log_alpha, log_beta):
     return log_gamma
 
 
+@njit
 def compute_posterior_transition_sitewise(log_alpha, log_beta, log_transmat, log_emission):
     '''
     Input
@@ -361,14 +362,14 @@ def compute_posterior_transition_sitewise(log_alpha, log_beta, log_transmat, log
                 log_xi[i, j, t] = log_alpha[i, t] + log_transmat[i - n_states * int(i/n_states), j - n_states * int(j/n_states)] + np.mean(log_emission[j, t+1, :]) + log_beta[j, t+1]
     # normalize
     for t in np.arange(n_obs-1):
-        log_xi[:, :, t] -= scipy.special.logsumexp(log_xi[:, :, t])
+        log_xi[:, :, t] -= mylogsumexp(log_xi[:, :, t])
     return log_xi
 
 
 ############################################################
 # M step related
 ############################################################
-
+@njit
 def update_startprob_sitewise(lengths, log_gamma):
     '''
     Input
@@ -390,12 +391,12 @@ def update_startprob_sitewise(lengths, log_gamma):
     # initialize log_startprob
     log_startprob = np.zeros(n_states)
     # compute log_startprob of 2 * n_states
-    log_startprob = scipy.special.logsumexp(log_gamma[:, indices_start], axis=1)
+    log_startprob = mylogsumexp_ax_keep(log_gamma[:, indices_start], axis=1)
     # merge (CNV state, phase A) and (CNV state, phase B)
     log_startprob = log_startprob.flatten().reshape(2,-1)
-    log_startprob = scipy.special.logsumexp(log_startprob, axis=0)
+    log_startprob = mylogsumexp_ax_keep(log_startprob, axis=0)
     # normalize such that startprob sums to 1
-    log_startprob -= scipy.special.logsumexp(log_startprob)
+    log_startprob -= mylogsumexp(log_startprob)
     return log_startprob
 
 
@@ -417,11 +418,11 @@ def update_transition_sitewise(log_xi, is_diag=False):
     # row normalize log_transmat
     if not is_diag:
         for i in np.arange(n_states):
-            rowsum = mylogsumexp(log_transmat[i, :])
+            rowsum = scipy.special.logsumexp(log_transmat[i, :])
             log_transmat[i, :] -= rowsum
     else:
-        diagsum = mylogsumexp(np.diag(log_transmat))
-        totalsum = mylogsumexp(log_transmat)
+        diagsum = scipy.special.logsumexp(np.diag(log_transmat))
+        totalsum = scipy.special.logsumexp(log_transmat)
         t = diagsum - totalsum
         rest = np.log( (1 - np.exp(t)) / (n_states-1) )
         log_transmat = np.ones(log_transmat.shape) * rest
@@ -430,7 +431,8 @@ def update_transition_sitewise(log_xi, is_diag=False):
 
 
 def update_emission_params_nb_bb_sitewise(X, log_gamma, base_nb_mean, alphas, total_bb_RD, taus, \
-    fix_NB_dispersion=False, shared_NB_dispersion=False, fix_BB_dispersion=False, shared_BB_dispersion=False):
+    start_log_mu=None, start_p_binom=None, \
+    fix_NB_dispersion=False, shared_NB_dispersion=False, fix_BB_dispersion=False, shared_BB_dispersion=False, percent_threshold=0.99):
     """
     Attributes
     ----------
@@ -458,8 +460,11 @@ def update_emission_params_nb_bb_sitewise(X, log_gamma, base_nb_mean, alphas, to
             model = sm.GLM(X[:,0, :].flatten(), np.ones(n_obs * n_spots).reshape(-1,1), \
                         family=sm.families.NegativeBinomial(alpha=alphas[i]), \
                         exposure=base_nb_mean.flatten(), var_weights=np.repeat(gamma[i,:]+gamma[i+n_states,:], n_spots))
-            res = model.fit(disp=0, maxiter=500)
+            res = model.fit(disp=0, maxiter=500, xtol=1e-3, ftol=1e-3)
             log_mu[i] = res.params[0]
+            if not (start_log_mu is None):
+                res2 = model.fit(disp=0, maxiter=500, start_params=start_log_mu, xtol=1e-3, ftol=1e-3)
+                log_mu[i] = res.params[0] if model.nloglikeobs(res.params) < model.nloglikeobs(res2.params) else res2.params[0]
     else:
         log_mu = np.zeros(n_states)
         alphas = np.zeros(n_states)
@@ -468,9 +473,13 @@ def update_emission_params_nb_bb_sitewise(X, log_gamma, base_nb_mean, alphas, to
                 model = Weighted_NegativeBinomial(X[:,0,:].flatten(), \
                             np.ones(n_obs * n_spots).reshape(-1,1), \
                             weights=np.repeat(gamma[i,:]+gamma[i+n_states,:], n_spots), exposure=base_nb_mean.flatten())
-                res = model.fit(disp=0, maxiter=500)
+                res = model.fit(disp=0, maxiter=500, xtol=1e-3, ftol=1e-3)
                 log_mu[i] = res.params[0]
                 alphas[i] = res.params[-1]
+                if not (start_log_mu is None):
+                    res2 = model.fit(disp=0, maxiter=500, start_params=np.append([start_log_mu[i]], [alphas[i]]), xtol=1e-3, ftol=1e-3)
+                    log_mu[i] = res.params[0] if model.nloglikeobs(res.params) < model.nloglikeobs(res2.params) else res2.params[0]
+                    alphas[i] = res.params[-1] if model.nloglikeobs(res.params) < model.nloglikeobs(res2.params) else res2.params[-1]
         else:
             all_states_nb_mean = np.tile(base_nb_mean.flatten(), n_states)
             all_states_y = np.tile(X[:,0,:].flatten(), n_states)
@@ -479,9 +488,13 @@ def update_emission_params_nb_bb_sitewise(X, log_gamma, base_nb_mean, alphas, to
             for i in np.arange(n_states):
                 all_states_features[(i*n_obs*n_spots):((i+1)*n_obs*n_spots), i] = 1
             model = Weighted_NegativeBinomial(all_states_y, all_states_features, weights=all_states_weights, exposure=all_states_nb_mean)
-            res = model.fit(disp=0, maxiter=500)
+            res = model.fit(disp=0, maxiter=500, xtol=1e-3, ftol=1e-3)
             log_mu = res.params[:-1]
             alphas[:] = res.params[-1]
+            if not (start_log_mu is None):
+                res2 = model.fit(disp=0, maxiter=500, start_params=np.append(start_log_mu, [alphas[0]]), xtol=1e-3, ftol=1e-3)
+                log_mu = res.params[:-1] if model.nloglikeobs(res.params) < model.nloglikeobs(res2.params) else res2.params[:-1]
+                alphas[:] = res.params[-1] if model.nloglikeobs(res.params) < model.nloglikeobs(res2.params) else res2.params[-1]
     # allele frequeency signal by BetaBinom distribution
     if fix_BB_dispersion:
         p_binom = np.zeros(n_states)
@@ -491,8 +504,11 @@ def update_emission_params_nb_bb_sitewise(X, log_gamma, base_nb_mean, alphas, to
                 taus[i], \
                 weights=np.append(np.repeat(gamma[i,:], n_spots), np.repeat(gamma[i+n_states,:], n_spots)), \
                 exposure=np.append(total_bb_RD.flatten(),total_bb_RD.flatten()) )
-            res = model.fit(disp=0, maxiter=500)
+            res = model.fit(disp=0, maxiter=500, xtol=1e-3, ftol=1e-3)
             p_binom[i] = res.params[0]
+            if not (start_p_binom is None):
+                res2 = model.fit(disp=0, maxiter=500, start_params=start_p_binom, xtol=1e-3, ftol=1e-3)
+                p_binom[i] = res.params[0] if model.nloglikeobs(res.params) < model.nloglikeobs(res2.params) else res2.params[0]
     else:
         p_binom = np.zeros(n_states)
         taus = np.zeros(n_states)
@@ -502,20 +518,46 @@ def update_emission_params_nb_bb_sitewise(X, log_gamma, base_nb_mean, alphas, to
                     np.ones(2*n_obs * n_spots).reshape(-1,1), \
                     weights=np.append(np.repeat(gamma[i,:], n_spots), np.repeat(gamma[i+n_states,:], n_spots)), \
                     exposure=np.append(total_bb_RD.flatten(),total_bb_RD.flatten()) )
-                res = model.fit(disp=0, maxiter=500)
+                res = model.fit(disp=0, maxiter=500, xtol=1e-3, ftol=1e-3)
                 p_binom[i] = res.params[0]
                 taus[i] = res.params[-1]
+                if not (start_p_binom is None):
+                    res2 = model.fit(disp=0, maxiter=500, start_params=np.append([start_p_binom[i]], [taus[i]]), xtol=1e-3, ftol=1e-3)
+                    p_binom[i] = res.params[0] if model.nloglikeobs(res.params) < model.nloglikeobs(res2.params) else res2.params[0]
+                    taus[i] = res.params[-1] if model.nloglikeobs(res.params) < model.nloglikeobs(res2.params) else res2.params[-1]
         else:
-            all_states_exposure = np.tile( np.append(total_bb_RD.flatten(), total_bb_RD.flatten()), n_states)
-            all_states_y = np.tile( np.append(X[:,1,:].flatten(), total_bb_RD.flatten()-X[:,1,:].flatten()), n_states)
-            all_states_weights = np.concatenate([ np.append(gamma[i,:],gamma[i+n_states,:]) for i in range(n_states) ])
-            all_states_features = np.zeros((2*n_states*n_obs, n_states))
-            for i in np.arange(n_states):
-                all_states_features[(i*2*n_obs):((i+1)*2*n_obs), i] = 1
+            # all_states_exposure = np.tile( np.append(total_bb_RD.flatten(), total_bb_RD.flatten()), n_states)
+            # all_states_y = np.tile( np.append(X[:,1,:].flatten(), total_bb_RD.flatten()-X[:,1,:].flatten()), n_states)
+            # all_states_weights = np.concatenate([ np.append(gamma[i,:],gamma[i+n_states,:]) for i in range(n_states) ])
+            # all_states_features = np.zeros((2*n_states*n_obs, n_states))
+            # for i in np.arange(n_states):
+            #     all_states_features[(i*2*n_obs):((i+1)*2*n_obs), i] = 1
+            all_states_exposure = []
+            all_states_y = []
+            all_states_weights = []
+            all_states_features = []
+            for i in np.arange(2*n_states):
+                idx_sort = np.argsort(gamma[i,:])[::-1]
+                tmp = np.cumsum(gamma[i,idx_sort])
+                idx_select = idx_sort[tmp <= tmp[-1] * percent_threshold]
+                all_states_exposure.append( total_bb_RD.flatten()[idx_select] )
+                all_states_y.append( X[:,1,:].flatten()[idx_select] if i < n_states else total_bb_RD.flatten()[idx_select]-X[:,1,:].flatten()[idx_select] )
+                all_states_weights.append( gamma[i,idx_select] )
+                tmp_features = np.zeros((len(idx_select), n_states))
+                tmp_features[:, i % n_states] = 1
+                all_states_features.append( tmp_features )
+            all_states_exposure = np.concatenate(all_states_exposure)
+            all_states_y = np.concatenate(all_states_y)
+            all_states_weights = np.concatenate(all_states_weights)
+            all_states_features = np.concatenate(all_states_features)
             model = Weighted_BetaBinom(all_states_y, all_states_features, weights=all_states_weights, exposure=all_states_exposure)
-            res = model.fit(disp=0, maxiter=500)
+            res = model.fit(disp=0, maxiter=500, xtol=1e-3, ftol=1e-3)
             p_binom = res.params[:-1]
             taus[:] = res.params[-1]
+            if not (start_p_binom is None):
+                res2 = model.fit(disp=0, maxiter=500, start_params=np.append(start_p_binom, [taus[0]]), xtol=1e-3, ftol=1e-3)
+                p_binom = res.params[:-1] if model.nloglikeobs(res.params) < model.nloglikeobs(res2.params) else res2.params[:-1]
+                taus[:] = res.params[-1] if model.nloglikeobs(res.params) < model.nloglikeobs(res2.params) else res2.params[-1]
     return log_mu, alphas, p_binom, taus
 
 
@@ -546,7 +588,7 @@ def run_baum_welch_nb_bb_sitewise(X, lengths, n_states, base_nb_mean, total_bb_R
     taus = np.array([30] * n_states) if init_taus is None else init_taus
     # initialize start probability and emission probability
     log_startprob = np.log( np.ones(n_states) / n_states )
-    t = 0.9
+    t = 1 - 1e-4
     transmat = np.ones((n_states, n_states)) * (1-t) / (n_states-1)
     np.fill_diagonal(transmat, t)
     log_transmat = np.log(transmat)
@@ -560,14 +602,22 @@ def run_baum_welch_nb_bb_sitewise(X, lengths, n_states, base_nb_mean, total_bb_R
         log_xi = compute_posterior_transition_sitewise(log_alpha, log_beta, log_transmat, log_emission)
         # M step
         new_log_startprob = update_startprob_sitewise(lengths, log_gamma)
+        new_log_startprob = new_log_startprob.flatten()
         new_log_transmat = update_transition_sitewise(log_xi, is_diag=is_diag)
+        # if r > 10:
         new_log_mu, new_alphas, new_p_binom, new_taus = update_emission_params_nb_bb_sitewise(X, log_gamma, base_nb_mean, alphas, total_bb_RD, taus, \
+            start_log_mu=log_mu, start_p_binom=p_binom,
             fix_NB_dispersion=fix_NB_dispersion, shared_NB_dispersion=shared_NB_dispersion, \
             fix_BB_dispersion=fix_BB_dispersion, shared_BB_dispersion=shared_BB_dispersion)
+        # else:
+        #     new_log_mu, new_alphas, new_p_binom, new_taus = update_emission_params_nb_bb_sitewise(X, log_gamma, base_nb_mean, alphas, total_bb_RD, taus, \
+        #         fix_NB_dispersion=fix_NB_dispersion, shared_NB_dispersion=shared_NB_dispersion, \
+        #         fix_BB_dispersion=fix_BB_dispersion, shared_BB_dispersion=shared_BB_dispersion)
         # check convergence
         print( np.mean(np.abs( np.exp(new_log_startprob) - np.exp(log_startprob) )), \
             np.mean(np.abs( np.exp(new_log_transmat) - np.exp(log_transmat) )), \
             np.mean(np.abs(new_log_mu - log_mu)) )
+        print( np.vstack([new_log_mu, new_p_binom]).T )
         if np.mean(np.abs( np.exp(new_log_startprob) - np.exp(log_startprob) )) < tol and \
            np.mean(np.abs( np.exp(new_log_transmat) - np.exp(log_transmat) )) < tol and \
            np.mean(np.abs(new_log_mu - log_mu)) < tol:
