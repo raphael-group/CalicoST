@@ -599,7 +599,7 @@ def update_emission_params_bb_sitewise(X_bb, log_gamma, total_bb_RD, taus, \
             for s in range(n_spots):
                 idx_nonzero = np.where(total_bb_RD[:,s] > 0)[0]
                 all_states_exposure = np.tile( np.append(total_bb_RD[idx_nonzero,s], total_bb_RD[idx_nonzero,s]), n_states)
-                all_states_y = np.tile( np.append(X[idx_nonzero,s], total_bb_RD[idx_nonzero,s]-X_bb[idx_nonzero,s]), n_states)
+                all_states_y = np.tile( np.append(X_bb[idx_nonzero,s], total_bb_RD[idx_nonzero,s]-X_bb[idx_nonzero,s]), n_states)
                 all_states_weights = np.concatenate([ np.append(gamma[i,idx_nonzero], gamma[i+n_states,idx_nonzero]) for i in range(n_states) ])
                 all_states_features = np.zeros((2*n_states*len(idx_nonzero), n_states))
                 for i in np.arange(n_states):
