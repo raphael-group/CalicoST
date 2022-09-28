@@ -2,6 +2,8 @@ import numpy as np
 import pandas as pd
 from pathlib import Path
 from tqdm import trange
+import scipy
+import scipy.special
 
 
 def get_position_cM_table(chr_pos_vector):
@@ -181,3 +183,100 @@ def generate_input_from_HATCHet(hatchetdir, output_picklefile, rdrfile="abin/bul
     log_sitewise_transmat = np.log(phase_switch_prob)
 
     return X, lengths, base_nb_mean, total_bb_RD, log_sitewise_transmat
+
+
+def distance_between_p_binom(state_pred1, clone_pred1, p_binom1, state_pred2, clone_pred2, p_binom2):
+    import networkx as nx
+
+    # matching predicted CNV states
+    n_states = len(np.unique(state_pred1))
+    uniq_pred1 = np.sort(np.unique(state_pred1))
+    uniq_pred2 = np.sort(np.unique(state_pred2))
+    G = nx.Graph()
+    G.add_nodes_from([f"A{i}" for i in uniq_pred1], bipartite=0)
+    G.add_nodes_from([f"B{j}" for j in uniq_pred2], bipartite=1)
+    # G.add_weighted_edges_from( [(f"A{i}", f"B{j}", np.sum(np.logical_and(state_pred1==uniq_pred1[i], state_pred2==uniq_pred2[j]))) for i in uniq_pred1 for j in uniq_pred2] )
+    # tmp = nx.max_weight_matching(G)
+    # state_matching = {x[0]:x[1] for x in tmp}
+    # state_matching.update( {x[1]:x[0] for x in tmp} )
+    G.add_weighted_edges_from( [(f"A{i}", f"B{j}", len(state_pred1) - np.sum(np.logical_and(state_pred1==uniq_pred1[i], state_pred2==uniq_pred2[j]))) for i in uniq_pred1 for j in uniq_pred2] )
+    state_matching = nx.bipartite.minimum_weight_full_matching(G)
+
+    # matching predicted clones
+    n_clones = len(np.unique(clone_pred1))
+    uniq_pred1 = np.sort(np.unique(clone_pred1))
+    uniq_pred2 = np.sort(np.unique(clone_pred2))
+    G = nx.Graph()
+    G.add_nodes_from([f"A{i}" for i in uniq_pred1], bipartite=0)
+    G.add_nodes_from([f"B{j}" for j in uniq_pred2], bipartite=1)
+    # G.add_weighted_edges_from( [(f"A{i}", f"B{j}", np.sum(np.logical_and(clone_pred1==uniq_pred1[i], clone_pred2==uniq_pred2[j]))) for i in uniq_pred1 for j in uniq_pred2] )
+    # tmp = nx.max_weight_matching(G)
+    # clone_matching = {x[0]:x[1] for x in tmp}
+    # clone_matching.update( {x[1]:x[0] for x in tmp} )
+    G.add_weighted_edges_from( [(f"A{i}", f"B{j}", len(clone_pred1) - np.sum(np.logical_and(clone_pred1==uniq_pred1[i], clone_pred2==uniq_pred2[j]))) for i in uniq_pred1 for j in uniq_pred2] )
+    clone_matching = nx.bipartite.minimum_weight_full_matching(G)
+
+    # l2 distance between corresponding CNV at corresponding clone
+    # reorder p_binom2 based on state_matching and clone_matching
+    reorder_p_binom2 = p_binom2[:, np.array([ int(clone_matching[f"A{i}"][1:]) for i in range(n_clones)])]
+    reorder_p_binom2 = reorder_p_binom2[np.array([ int(state_matching[f"A{i}"][1:]) for i in range(n_states) ]), :]
+    l2 = 0
+    for i in range(p_binom1.shape[0]):
+        l2 += min( np.sum(np.square(p_binom1[i,:] - reorder_p_binom2[i,:])), np.sum(np.square(p_binom1[i,:] - 1 + reorder_p_binom2[i,:])) )
+    return l2
+
+
+def get_intervals(pred_cnv):
+    intervals = []
+    labs = []
+    s = 0
+    while s < len(pred_cnv):
+        t = np.where(pred_cnv[s:] != pred_cnv[s])[0]
+        if len(t) == 0:
+            intervals.append( (s, len(pred_cnv))  )
+            labs.append( pred_cnv[s] )
+            s = len(pred_cnv)
+        else:
+            t = t[0]
+            intervals.append( (s,s+t) )
+            labs.append( pred_cnv[s] )
+            s = s+t
+    return intervals, labs
+
+
+def postbinning_forvisual(X, base_nb_mean, total_bb_RD, lengths, res, binsize=2):
+    # a list of intervals used in binning for transforming back to non-binned space
+    intervals = []
+    bin_lengths = []
+    # variables for for-loop
+    chrname = 0
+    nextlen = lengths[chrname]
+    s = 0
+    while s < X.shape[0]:
+        t = min(s+binsize, nextlen)
+        intervals.append( [s,t] )
+        s = t
+        if s >= nextlen:
+            if s < X.shape[0]:
+                chrname += 1
+                nextlen += lengths[chrname]
+            bin_lengths.append( len(intervals) )
+    bin_lengths = np.array(bin_lengths)
+    bin_lengths[1:] = bin_lengths[1:] - bin_lengths[:-1]
+
+    # binning based on previous intervals
+    n_states = int(res["log_gamma"].shape[0] / 2)
+    phase_prob = np.exp(scipy.special.logsumexp(res["log_gamma"][:n_states, :], axis=0))
+    bin_X = np.zeros((len(intervals), X.shape[1], X.shape[2]), dtype=int)
+    bin_base_nb_mean = np.zeros((len(intervals), base_nb_mean.shape[1]), dtype=int)
+    bin_total_bb_RD = np.zeros((len(intervals), total_bb_RD.shape[1]), dtype=int)
+    bin_pred_cnv = np.zeros(len(intervals), dtype=int)
+    for i, intvl in enumerate(intervals):
+        s,t = intvl
+        bin_X[i,0,:] = np.sum(X[s:t, 0,:], axis=0)
+        bin_X[i,1,:] = np.sum( phase_prob[s:t].dot(X[s:t, 1,:]) + (1-phase_prob[s:t]).dot(total_bb_RD[s:t,:] - X[s:t,1,:]) )
+        bin_base_nb_mean[i,:] = np.sum(base_nb_mean[s:t,:], axis=0)
+        bin_total_bb_RD[i,:] = np.sum(total_bb_RD[s:t,:], axis=0)
+        bin_pred_cnv[i] = res["pred_cnv"][s]
+    
+    return bin_X, bin_base_nb_mean, bin_total_bb_RD, bin_pred_cnv, bin_lengths, intervals
