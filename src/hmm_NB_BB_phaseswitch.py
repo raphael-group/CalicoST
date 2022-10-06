@@ -157,10 +157,16 @@ def construct_unique_matrix(obs_count, total_count):
             pairs = np.unique( np.vstack([obs_count[:,s], total_count[:,s]]).T.round(decimals=4), axis=0 )
         unique_values.append( pairs )
         pair_index = {(pairs[i,0], pairs[i,1]):i for i in range(pairs.shape[0])}
-        mat = np.zeros((n_obs, len(pairs)), dtype=bool)
+        # mat = np.zeros((n_obs, len(pairs)), dtype=bool)
+        # for i in range(n_obs):
+        #     mat[ i, pair_index[(obs_count[i,s], total_count[i,s].round(decimals=4))] ] = 1
+        mat_row = []
+        mat_col = []
         for i in range(n_obs):
-            mat[ i, pair_index[(obs_count[i,s], total_count[i,s].round(decimals=4))] ] = 1
-        mapping_matrices.append( scipy.sparse.csr_matrix(mat) )
+            tmpidx = pair_index[(obs_count[i,s], total_count[i,s].round(decimals=4))]
+            mat_row += [i] * len(tmpidx)
+            mat_col += list(tmpidx)
+        mapping_matrices.append( scipy.sparse.csr_matrix((np.ones(len(mat_row)), (mat_row, mat_col) )) )
     return unique_values, mapping_matrices
 
 
@@ -188,6 +194,11 @@ def compute_emission_probability_nb_betabinom(X, base_nb_mean, log_mu, alphas, t
 
     taus : array, shape (n_states, n_spots)
         Over-dispersion of Beta Binomial distribution in HMM per state per spot.
+    
+    Returns
+    ----------
+    log_emission : array, shape (2*n_states, n_obs, n_spots)
+        Log emission probability for each gene each spot (or sample) under each state. There is a common bag of states across all spots.
     """
     n_obs = X.shape[0]
     n_comp = X.shape[1]
@@ -1092,15 +1103,23 @@ def viterbi_nb_bb_sitewise(X, lengths, base_nb_mean, log_mu, alphas, total_bb_RD
 
 
 from sklearn.mixture import GaussianMixture
-def initialization_by_gmm(n_states, X, base_nb_mean, total_bb_RD, params, random_state=None):
+def initialization_by_gmm(n_states, X, base_nb_mean, total_bb_RD, params, random_state=None, in_log_space=True):
     # prepare gmm input
+    if in_log_space:
+        X_gmm_rdr = np.vstack([ np.log(X[:,0,s]/base_nb_mean[:,s]) for s in range(X.shape[2]) ]).T
+    else:
+        X_gmm_rdr = np.vstack([ X[:,0,s]/base_nb_mean[:,s] for s in range(X.shape[2]) ]).T
+    X_gmm_baf = np.vstack([ X[:,1,s] / total_bb_RD[:,s] for s in range(X.shape[2]) ]).T
     if ("m" in params) and ("p" in params):
-        X_gmm = np.vstack([np.log(X[:,0,s]/base_nb_mean[:,s]) for s in range(X.shape[2])] + \
-                   [X[:,1,s] / total_bb_RD[:,s] for s in range(X.shape[2])] ).T
+        indexes = np.where(X_gmm_baf[:,0] > 0.5)[0]
+        X_gmm_baf[indexes,:] = 1 - X_gmm_baf[indexes,:]
+        X_gmm = np.hstack([X_gmm_rdr, X_gmm_baf])
     elif "m" in params:
-        X_gmm = np.vstack([ np.log(X[:,0,s]/base_nb_mean[:,s]) for s in range(X.shape[2]) ]).T
+        X_gmm = X_gmm_rdr
     elif "p" in params:
-        X_gmm = np.vstack([ X[:,1,s] / total_bb_RD[:,s] for s in range(X.shape[2]) ]).T
+        indexes = np.where(X_gmm_baf[:,0] > 0.5)[0]
+        X_gmm_baf[indexes,:] = 1 - X_gmm_baf[indexes,:]
+        X_gmm = X_gmm_baf
     X_gmm = X_gmm[np.sum(np.isnan(X_gmm), axis=1) == 0, :]
     # run GMM
     if random_state is None:
@@ -1109,10 +1128,10 @@ def initialization_by_gmm(n_states, X, base_nb_mean, total_bb_RD, params, random
         gmm = GaussianMixture(n_components=n_states, max_iter=1, random_state=random_state).fit(X_gmm)
     # turn gmm fitted parameters to HMM log_mu and p_binom parameters
     if ("m" in params) and ("p" in params):
-        gmm_log_mu = gmm.means_[:,:X.shape[2]]
+        gmm_log_mu = gmm.means_[:,:X.shape[2]] if in_log_space else np.log(gmm.means_[:,:X.shape[2]])
         gmm_p_binom = gmm.means_[:, X.shape[2]:]
     elif "m" in params:
-        gmm_log_mu = gmm.means_
+        gmm_log_mu = gmm.means_ if in_log_space else np.log(gmm.means_[:,:X.shape[2]])
         gmm_p_binom = None
     elif "p" in params:
         gmm_log_mu = None
@@ -1121,34 +1140,17 @@ def initialization_by_gmm(n_states, X, base_nb_mean, total_bb_RD, params, random
 
 
 def pipeline_baum_welch(output_prefix, X, lengths, n_states, base_nb_mean, total_bb_RD, log_sitewise_transmat, params="smp", t=1-1e-6, random_state=0, \
-    fix_NB_dispersion=False, shared_NB_dispersion=True, fix_BB_dispersion=False, shared_BB_dispersion=True, \
-    consider_normal=False, shared_BB_dispersion_normal=True, init_alphas=None, init_taus=None, \
+    in_log_space=True, fix_NB_dispersion=False, shared_NB_dispersion=True, fix_BB_dispersion=False, shared_BB_dispersion=True, \
+    consider_normal=False, shared_BB_dispersion_normal=True, init_log_mu=None, init_p_binom=None, init_alphas=None, init_taus=None, \
     is_diag=True, max_iter=100, tol=1e-4):
     # initialization
     n_spots = X.shape[2]
-    if ("m" in params) and ("p" in params):
-        X_gmm = np.vstack([np.log(X[:,0,s]/base_nb_mean[:,s]) for s in range(n_spots)] + \
-                   [X[:,1,s] / total_bb_RD[:,s] for s in range(n_spots)] ).T
-        X_gmm = X_gmm[ ((np.sum(np.isnan(X_gmm), axis=1) == 0) & (np.sum(np.isinf(X_gmm), axis=1) == 0)), :]
-    elif "m" in params:
-        X_gmm = np.vstack([ np.log(X[:,0,s]/base_nb_mean[:,s]) for s in range(n_spots) ]).T
-        X_gmm = X_gmm[ ((np.sum(np.isnan(X_gmm), axis=1) == 0) & (np.sum(np.isinf(X_gmm), axis=1) == 0)), :]
-    elif "p" in params:
-        X_gmm = np.vstack([ X[:,1,s] / total_bb_RD[:,s] for s in range(n_spots) ]).T
-        X_gmm = X_gmm[ ((np.sum(np.isnan(X_gmm), axis=1) == 0) & (np.sum(np.isinf(X_gmm), axis=1) == 0) & (np.sum(X_gmm==0, axis=1) == 0) & (np.sum(X_gmm==1, axis=1) == 0)), :]
-    gmm = GaussianMixture(n_components=n_states, max_iter=1, random_state=random_state).fit(X_gmm)
-    # initialization parameters for HMM
-    if ("m" in params) and ("p" in params):
-        init_log_mu = gmm.means_[:,:n_spots]
-        init_p_binom = gmm.means_[:, n_spots:]
-    elif "m" in params:
-        init_log_mu = gmm.means_
-        init_p_binom = None
-    elif "p" in params:
-        init_log_mu = None
-        init_p_binom = gmm.means_
-        if consider_normal:
-            init_p_binom[:,0] = 0.5
+    if ((init_log_mu is None) and ("m" in params)) or ((init_p_binom is None) and ("p" in params)):
+        tmp_log_mu, tmp_p_binom = initialization_by_gmm(n_states, X, base_nb_mean, total_bb_RD, params, random_state=random_state, in_log_space=in_log_space)
+        if (init_log_mu is None) and ("m" in params):
+            init_log_mu = tmp_log_mu
+        if (init_p_binom is None) and ("p" in params):
+            init_p_binom = tmp_p_binom
     print(f"init_log_mu = {init_log_mu}")
     print(f"init_p_binom = {init_p_binom}")
     
