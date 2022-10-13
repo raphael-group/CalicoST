@@ -157,15 +157,14 @@ def construct_unique_matrix(obs_count, total_count):
             pairs = np.unique( np.vstack([obs_count[:,s], total_count[:,s]]).T.round(decimals=4), axis=0 )
         unique_values.append( pairs )
         pair_index = {(pairs[i,0], pairs[i,1]):i for i in range(pairs.shape[0])}
-        # mat = np.zeros((n_obs, len(pairs)), dtype=bool)
-        # for i in range(n_obs):
-        #     mat[ i, pair_index[(obs_count[i,s], total_count[i,s].round(decimals=4))] ] = 1
-        mat_row = []
-        mat_col = []
+        mat_row = np.arange(n_obs)
+        mat_col = np.zeros(n_obs, dtype=int)
         for i in range(n_obs):
-            tmpidx = pair_index[(obs_count[i,s], total_count[i,s].round(decimals=4))]
-            mat_row += [i] * len(tmpidx)
-            mat_col += list(tmpidx)
+            if total_count.dtype == int:
+                tmpidx = pair_index[(obs_count[i,s], total_count[i,s])]
+            else:
+                tmpidx = pair_index[(obs_count[i,s], total_count[i,s].round(decimals=4))]
+            mat_col[i] = tmpidx
         mapping_matrices.append( scipy.sparse.csr_matrix((np.ones(len(mat_row)), (mat_row, mat_col) )) )
     return unique_values, mapping_matrices
 
@@ -892,8 +891,8 @@ class hmm_sitewise(object):
         np.fill_diagonal(transmat, self.t)
         log_transmat = np.log(transmat)
         # # a trick to speed up BetaBinom optimization: taking only unique values of (B allele count, total SNP covering read count)
-        # unique_values_nb, mapping_matrices_nb = construct_unique_matrix(X[:,0,:], base_nb_mean)
-        # unique_values_bb, mapping_matrices_bb = construct_unique_matrix(X[:,1,:], total_bb_RD)
+        unique_values_nb, mapping_matrices_nb = construct_unique_matrix(X[:,0,:], base_nb_mean)
+        unique_values_bb, mapping_matrices_bb = construct_unique_matrix(X[:,1,:], total_bb_RD)
         # EM algorithm
         for r in trange(max_iter):
             # E step
@@ -913,20 +912,20 @@ class hmm_sitewise(object):
             else:
                 new_log_transmat = log_transmat
             if "m" in self.params:
-                new_log_mu, new_alphas = update_emission_params_nb_sitewise(X[:,0,:], log_gamma, base_nb_mean, alphas, start_log_mu=log_mu, \
-                    fix_NB_dispersion=fix_NB_dispersion, shared_NB_dispersion=shared_NB_dispersion)
-                # new_log_mu, new_alphas = update_emission_params_nb_sitewise_uniqvalues(unique_values_nb, mapping_matrices_nb, log_gamma, base_nb_mean, alphas, start_log_mu=log_mu, \
+                # new_log_mu, new_alphas = update_emission_params_nb_sitewise(X[:,0,:], log_gamma, base_nb_mean, alphas, start_log_mu=log_mu, \
                 #     fix_NB_dispersion=fix_NB_dispersion, shared_NB_dispersion=shared_NB_dispersion)
+                new_log_mu, new_alphas = update_emission_params_nb_sitewise_uniqvalues(unique_values_nb, mapping_matrices_nb, log_gamma, base_nb_mean, alphas, start_log_mu=log_mu, \
+                    fix_NB_dispersion=fix_NB_dispersion, shared_NB_dispersion=shared_NB_dispersion)
             else:
                 new_log_mu = log_mu
                 new_alphas = alphas
             if "p" in self.params:
-                new_p_binom, new_taus = update_emission_params_bb_sitewise(X[:,1,:], log_gamma, total_bb_RD, taus, start_p_binom=p_binom, \
+                # new_p_binom, new_taus = update_emission_params_bb_sitewise(X[:,1,:], log_gamma, total_bb_RD, taus, start_p_binom=p_binom, \
+                #    fix_BB_dispersion=fix_BB_dispersion, shared_BB_dispersion=shared_BB_dispersion, \
+                #    consider_normal=consider_normal, shared_BB_dispersion_normal=shared_BB_dispersion_normal)
+                new_p_binom, new_taus = update_emission_params_bb_sitewise_uniqvalues(unique_values_bb, mapping_matrices_bb, log_gamma, total_bb_RD, taus, start_p_binom=p_binom, \
                     fix_BB_dispersion=fix_BB_dispersion, shared_BB_dispersion=shared_BB_dispersion, \
                     consider_normal=consider_normal, shared_BB_dispersion_normal=shared_BB_dispersion_normal)
-                # new_p_binom, new_taus = update_emission_params_bb_sitewise_uniqvalues(unique_values_bb, mapping_matrices_bb, log_gamma, total_bb_RD, taus, start_p_binom=p_binom, \
-                #     fix_BB_dispersion=fix_BB_dispersion, shared_BB_dispersion=shared_BB_dispersion, \
-                #     consider_normal=consider_normal, shared_BB_dispersion_normal=shared_BB_dispersion_normal)
             else:
                 new_p_binom = p_binom
                 new_taus = taus
