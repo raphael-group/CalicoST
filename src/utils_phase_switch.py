@@ -41,7 +41,7 @@ def get_position_cM_table(chr_pos_vector):
     return position_cM
 
 
-def compute_phase_switch_probability_position(position_cM, chr_pos_vector, min_prob=1e-20):
+def compute_phase_switch_probability_position(position_cM, chr_pos_vector, nu = 1, min_prob=1e-20):
     """
     Attributes
     ----------
@@ -58,7 +58,7 @@ def compute_phase_switch_probability_position(position_cM, chr_pos_vector, min_p
             continue
         assert cm <= cm_next
         d = cm_next - cm
-        phase_switch_prob[i] = (1 - np.exp(-2 * d)) / 2
+        phase_switch_prob[i] = (1 - np.exp(-2 * nu * d)) / 2
     phase_switch_prob[phase_switch_prob < min_prob] = min_prob
     return phase_switch_prob
 
