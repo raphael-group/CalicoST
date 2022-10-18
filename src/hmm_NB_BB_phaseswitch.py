@@ -157,20 +157,20 @@ def construct_unique_matrix(obs_count, total_count):
             pairs = np.unique( np.vstack([obs_count[:,s], total_count[:,s]]).T.round(decimals=4), axis=0 )
         unique_values.append( pairs )
         pair_index = {(pairs[i,0], pairs[i,1]):i for i in range(pairs.shape[0])}
-        # mat = np.zeros((n_obs, len(pairs)), dtype=bool)
-        # for i in range(n_obs):
-        #     mat[ i, pair_index[(obs_count[i,s], total_count[i,s].round(decimals=4))] ] = 1
-        mat_row = []
-        mat_col = []
+        # construct mapping matrix
+        mat_row = np.arange(n_obs)
+        mat_col = np.zeros(n_obs, dtype=int)
         for i in range(n_obs):
-            tmpidx = pair_index[(obs_count[i,s], total_count[i,s].round(decimals=4))]
-            mat_row += [i] * len(tmpidx)
-            mat_col += list(tmpidx)
+            if total_count.dtype == int:
+                tmpidx = pair_index[(obs_count[i,s], total_count[i,s])]
+            else:
+                tmpidx = pair_index[(obs_count[i,s], total_count[i,s].round(decimals=4))]
+            mat_col[i] = tmpidx
         mapping_matrices.append( scipy.sparse.csr_matrix((np.ones(len(mat_row)), (mat_row, mat_col) )) )
     return unique_values, mapping_matrices
 
 
-def compute_emission_probability_nb_betabinom(X, base_nb_mean, log_mu, alphas, total_bb_RD, p_binom, taus):
+def compute_emission_probability_nb_betabinom(X, base_nb_mean, log_mu, alphas, total_bb_RD, p_binom, taus, relative_rdr_weight=1.0):
     """
     Attributes
     ----------
@@ -214,7 +214,7 @@ def compute_emission_probability_nb_betabinom(X, base_nb_mean, log_mu, alphas, t
                 nb_mean = base_nb_mean[idx_nonzero,s] * np.exp(log_mu[i, s])
                 nb_std = np.sqrt(nb_mean + alphas[i, s] * nb_mean**2)
                 n, p = convert_params(nb_mean, nb_std)
-                log_emission[i, idx_nonzero, s] = scipy.stats.nbinom.logpmf(X[idx_nonzero, 0, s], n, p)
+                log_emission[i, idx_nonzero, s] = relative_rdr_weight * scipy.stats.nbinom.logpmf(X[idx_nonzero, 0, s], n, p)
                 log_emission[i + n_states, idx_nonzero, s] = log_emission[i, idx_nonzero, s]
             # AF from BetaBinom distribution
             idx_nonzero = np.where(total_bb_RD[:,s] > 0)[0]
@@ -222,6 +222,118 @@ def compute_emission_probability_nb_betabinom(X, base_nb_mean, log_mu, alphas, t
                 log_emission[i, idx_nonzero, s] += scipy.stats.betabinom.logpmf(X[idx_nonzero,1,s], total_bb_RD[idx_nonzero,s], p_binom[i, s] * taus[i, s], (1-p_binom[i, s]) * taus[i, s])
                 log_emission[i + n_states, idx_nonzero, s] += scipy.stats.betabinom.logpmf(X[idx_nonzero,1,s], total_bb_RD[idx_nonzero,s], (1-p_binom[i, s]) * taus[i, s], p_binom[i, s] * taus[i, s])
     return log_emission
+
+
+def compute_emission_probability_nb_betabinom_v2(X, base_nb_mean, log_mu, alphas, total_bb_RD, p_binom, taus, relative_rdr_weight=1.0):
+    """
+    Attributes
+    ----------
+    X : array, shape (n_observations, n_components, n_spots)
+        Observed expression UMI count and allele frequency UMI count.
+
+    base_nb_mean : array, shape (n_observations, n_spots)
+        Mean expression under diploid state.
+
+    log_mu : array, shape (n_states, n_spots)
+        Log of read depth change due to CNV. Mean of NB distributions in HMM per state per spot.
+
+    alphas : array, shape (n_states, n_spots)
+        Over-dispersion of NB distributions in HMM per state per spot.
+
+    total_bb_RD : array, shape (n_observations, n_spots)
+        SNP-covering reads for both REF and ALT across genes along genome.
+
+    p_binom : array, shape (n_states, n_spots)
+        BAF due to CNV. Mean of Beta Binomial distribution in HMM per state per spot.
+
+    taus : array, shape (n_states, n_spots)
+        Over-dispersion of Beta Binomial distribution in HMM per state per spot.
+    
+    Returns
+    ----------
+    log_emission : array, shape (2*n_states, n_obs, n_spots)
+        Log emission probability for each gene each spot (or sample) under each state. There is a common bag of states across all spots.
+    """
+    n_obs = X.shape[0]
+    n_comp = X.shape[1]
+    n_spots = X.shape[2]
+    n_states = log_mu.shape[0]
+    # initialize log_emission
+    log_emission_rdr = np.zeros((2 * n_states, n_obs, n_spots))
+    log_emission_baf = np.zeros((2 * n_states, n_obs, n_spots))
+    for i in np.arange(n_states):
+        for s in np.arange(n_spots):
+            # expression from NB distribution
+            idx_nonzero = np.where(base_nb_mean[:,s] > 0)[0]
+            if len(idx_nonzero) > 0:
+                nb_mean = base_nb_mean[idx_nonzero,s] * np.exp(log_mu[i, s])
+                nb_std = np.sqrt(nb_mean + alphas[i, s] * nb_mean**2)
+                n, p = convert_params(nb_mean, nb_std)
+                log_emission_rdr[i, idx_nonzero, s] = relative_rdr_weight * scipy.stats.nbinom.logpmf(X[idx_nonzero, 0, s], n, p)
+                log_emission_rdr[i + n_states, idx_nonzero, s] = log_emission_rdr[i, idx_nonzero, s]
+            # AF from BetaBinom distribution
+            idx_nonzero = np.where(total_bb_RD[:,s] > 0)[0]
+            if len(idx_nonzero) > 0:
+                log_emission_baf[i, idx_nonzero, s] = scipy.stats.betabinom.logpmf(X[idx_nonzero,1,s], total_bb_RD[idx_nonzero,s], p_binom[i, s] * taus[i, s], (1-p_binom[i, s]) * taus[i, s])
+                log_emission_baf[i + n_states, idx_nonzero, s] = scipy.stats.betabinom.logpmf(X[idx_nonzero,1,s], total_bb_RD[idx_nonzero,s], (1-p_binom[i, s]) * taus[i, s], p_binom[i, s] * taus[i, s])
+    return log_emission_rdr, log_emission_baf
+
+
+def compute_emission_probability_nb_betabinom_test(X, base_nb_mean, log_mu, alphas, total_bb_RD, p_binom, taus, scalefactorfeatures, scalefactors, relative_rdr_weight=1.0):
+    """
+    Attributes
+    ----------
+    X : array, shape (n_observations, n_components, n_spots)
+        Observed expression UMI count and allele frequency UMI count.
+
+    base_nb_mean : array, shape (n_observations, n_spots)
+        Mean expression under diploid state.
+
+    log_mu : array, shape (n_states, n_spots)
+        Log of read depth change due to CNV. Mean of NB distributions in HMM per state per spot.
+
+    alphas : array, shape (n_states, n_spots)
+        Over-dispersion of NB distributions in HMM per state per spot.
+
+    total_bb_RD : array, shape (n_observations, n_spots)
+        SNP-covering reads for both REF and ALT across genes along genome.
+
+    p_binom : array, shape (n_states, n_spots)
+        BAF due to CNV. Mean of Beta Binomial distribution in HMM per state per spot.
+
+    taus : array, shape (n_states, n_spots)
+        Over-dispersion of Beta Binomial distribution in HMM per state per spot.
+    
+    Returns
+    ----------
+    log_emission : array, shape (2*n_states, n_obs, n_spots)
+        Log emission probability for each gene each spot (or sample) under each state. There is a common bag of states across all spots.
+    """
+    n_obs = X.shape[0]
+    n_comp = X.shape[1]
+    n_spots = X.shape[2]
+    n_states = log_mu.shape[0]
+    # initialize log_emission
+    log_emission = np.zeros((2 * n_states, n_obs, n_spots))
+    for i in np.arange(n_states):
+        for s in np.arange(n_spots):
+            # expression from NB distribution
+            idx_nonzero = np.where(base_nb_mean[:,s] > 0)[0]
+            if len(idx_nonzero) > 0:
+                nb_mean = base_nb_mean[idx_nonzero,s] * np.exp(log_mu[i, s])
+                if (not scalefactorfeatures is None) and (not scalefactors is None):
+                    nb_mean = base_nb_mean[idx_nonzero,s] * np.exp(log_mu[i, s] + scalefactorfeatures.dot(scalefactors[:,s]))
+                nb_std = np.sqrt(nb_mean + alphas[i, s] * nb_mean**2)
+                n, p = convert_params(nb_mean, nb_std)
+                log_emission[i, idx_nonzero, s] = relative_rdr_weight * scipy.stats.nbinom.logpmf(X[idx_nonzero, 0, s], n, p)
+                log_emission[i + n_states, idx_nonzero, s] = log_emission[i, idx_nonzero, s]
+            # AF from BetaBinom distribution
+            idx_nonzero = np.where(total_bb_RD[:,s] > 0)[0]
+            if len(idx_nonzero) > 0:
+                log_emission[i, idx_nonzero, s] += scipy.stats.betabinom.logpmf(X[idx_nonzero,1,s], total_bb_RD[idx_nonzero,s], p_binom[i, s] * taus[i, s], (1-p_binom[i, s]) * taus[i, s])
+                log_emission[i + n_states, idx_nonzero, s] += scipy.stats.betabinom.logpmf(X[idx_nonzero,1,s], total_bb_RD[idx_nonzero,s], (1-p_binom[i, s]) * taus[i, s], p_binom[i, s] * taus[i, s])
+    return log_emission
+
 
 
 @njit 
@@ -631,6 +743,94 @@ def update_emission_params_nb_sitewise_uniqvalues(unique_values, mapping_matrice
     return new_log_mu, new_alphas
 
 
+
+def update_emission_params_nb_sitewise_test(X_nb, log_gamma, base_nb_mean, alphas, \
+    scalefactors=None, start_log_mu=None, fix_NB_dispersion=False, shared_NB_dispersion=False, scalefactorfeatures=None):
+    """
+    Attributes
+    ----------
+    X_nb : array, shape (n_observations, n_spots)
+        Observed expression UMI count UMI count.
+
+    log_gamma : array, (2*n_states, n_observations)
+        Posterior probability of observing each state at each observation time.
+
+    base_nb_mean : array, shape (n_observations, n_spots)
+        Mean expression under diploid state.
+    """
+    n_spots = X_nb.shape[1]
+    n_states = int(log_gamma.shape[0] / 2)
+    gamma = np.exp(log_gamma)
+    # expression signal by NB distribution
+    if fix_NB_dispersion:
+        new_log_mu = np.zeros((n_states, n_spots))
+        new_alphas = alphas
+        new_scalefactors = None if scalefactorfeatures is None else np.zeros((scalefactorfeatures.shape[1], n_spots))
+        for s in range(n_spots):
+            idx_nonzero = np.where(base_nb_mean[:,s] > 0)[0]
+            all_states_nb_mean = np.tile(base_nb_mean[idx_nonzero,s], n_states)
+            all_states_y = np.tile(X_nb[idx_nonzero,s], n_states)
+            all_states_weights = np.concatenate([gamma[i,idx_nonzero]+gamma[i+n_states,idx_nonzero] for i in range(n_states)])
+            all_states_features = np.zeros((n_states*len(idx_nonzero), n_states))
+            for i in np.arange(n_states):
+                all_states_features[(i*len(idx_nonzero)):((i+1)*len(idx_nonzero)), i] = 1
+            if not (scalefactorfeatures is None):
+                tiled_scalefactorfeatures = np.vstack([ scalefactorfeatures for r in range(n_states) ])
+                all_states_features = np.hstack([tiled_scalefactorfeatures, all_states_features])
+            model = sm.GLM(all_states_y, all_states_features, family=sm.families.NegativeBinomial(alpha=alphas[i,s]), \
+                exposure=all_states_nb_mean, var_weights=all_states_weights)
+            res = model.fit(disp=0, maxiter=1500, xtol=1e-4, ftol=1e-4)
+            new_scalefactors[:,s] = None if scalefactorfeatures is None else res.params[:scalefactorfeatures.shape[1]]
+            new_log_mu[:,s] = res.params if scalefactorfeatures is None else res.params[scalefactorfeatures.shape[1]:]
+            if not (start_log_mu is None):
+                res2 = model.fit(disp=0, maxiter=1500, start_params=np.concatenate([scalefactors[:,s], start_log_mu[:,s]]), xtol=1e-4, ftol=1e-4)
+                if -model.loglike(res.params) > -model.loglike(res2.params):
+                    new_scalefactors[:,s] = None if scalefactorfeatures is None else res2.params[:scalefactorfeatures.shape[1]]
+                    new_log_mu[:, s] = res2.params if scalefactorfeatures is None else res2.params[scalefactorfeatures.shape[1]:]
+    else:
+        new_log_mu = np.zeros((n_states, n_spots))
+        new_alphas = np.zeros((n_states, n_spots))
+        new_scalefactors = None if scalefactorfeatures is None else np.zeros((scalefactorfeatures.shape[1], n_spots))
+        if not shared_NB_dispersion:
+            for s in range(n_spots):
+                idx_nonzero = np.where(base_nb_mean[:,s] > 0)[0]
+                for i in range(n_states):
+                    model = Weighted_NegativeBinomial(X_nb[idx_nonzero,s], \
+                                np.ones(len(idx_nonzero)).reshape(-1,1), \
+                                weights=gamma[i,idx_nonzero]+gamma[i+n_states,idx_nonzero], exposure=base_nb_mean[idx_nonzero,s])
+                    res = model.fit(disp=0, maxiter=1500, xtol=1e-4, ftol=1e-4)
+                    new_log_mu[i, s] = res.params[0]
+                    new_alphas[i, s] = res.params[-1]
+                    if not (start_log_mu is None):
+                        res2 = model.fit(disp=0, maxiter=1500, start_params=np.append([start_log_mu[i, s]], [alphas[i, s]]), xtol=1e-4, ftol=1e-4)
+                        new_log_mu[i, s] = res.params[0] if model.nloglikeobs(res.params) < model.nloglikeobs(res2.params) else res2.params[0]
+                        new_alphas[i, s] = res.params[-1] if model.nloglikeobs(res.params) < model.nloglikeobs(res2.params) else res2.params[-1]
+        else:
+            for s in range(n_spots):
+                idx_nonzero = np.where(base_nb_mean[:,s] > 0)[0]
+                all_states_nb_mean = np.tile(base_nb_mean[idx_nonzero,s], n_states)
+                all_states_y = np.tile(X_nb[idx_nonzero,s], n_states)
+                all_states_weights = np.concatenate([gamma[i,idx_nonzero]+gamma[i+n_states,idx_nonzero] for i in range(n_states)])
+                all_states_features = np.zeros((n_states*len(idx_nonzero), n_states))
+                for i in np.arange(n_states):
+                    all_states_features[(i*len(idx_nonzero)):((i+1)*len(idx_nonzero)), i] = 1
+                if not (scalefactorfeatures is None):
+                    tiled_scalefactorfeatures = np.vstack([ scalefactorfeatures for r in range(n_states) ])
+                    all_states_features = np.hstack([tiled_scalefactorfeatures, all_states_features])
+                model = Weighted_NegativeBinomial(all_states_y, all_states_features, weights=all_states_weights, exposure=all_states_nb_mean)
+                res = model.fit(disp=0, maxiter=1500, xtol=1e-4, ftol=1e-4)
+                new_scalefactors[:,s] = None if scalefactorfeatures is None else res.params[:scalefactorfeatures.shape[1]]
+                new_log_mu[:,s] = res.params[:-1] if scalefactorfeatures is None else res.params[scalefactorfeatures.shape[1]:-1]
+                new_alphas[:,s] = res.params[-1]
+                if not (start_log_mu is None):
+                    res2 = model.fit(disp=0, maxiter=1500, start_params=np.concatenate([scalefactors[:,s], start_log_mu[:,s], [alphas[0,s]]]), xtol=1e-4, ftol=1e-4)
+                    if model.nloglikeobs(res.params) > model.nloglikeobs(res2.params):
+                        new_scalefactors[:,s] = None if scalefactorfeatures is None else res.params[:scalefactorfeatures.shape[1]]
+                        new_log_mu[:,s] = res2.params[:-1] if scalefactorfeatures is None else res2.params[scalefactorfeatures.shape[1]:-1]
+                        new_alphas[:,s] = res2.params[-1]
+    return new_log_mu, new_alphas, new_scalefactors
+
+
 def update_emission_params_bb_sitewise(X_bb, log_gamma, total_bb_RD, taus, \
     start_p_binom=None, fix_BB_dispersion=False, shared_BB_dispersion=False, \
     consider_normal=False, shared_BB_dispersion_normal=False, \
@@ -865,7 +1065,7 @@ class hmm_sitewise(object):
     #
     def run_baum_welch_nb_bb_sitewise(self, X, lengths, n_states, base_nb_mean, total_bb_RD, log_sitewise_transmat, \
         fix_NB_dispersion=False, shared_NB_dispersion=False, fix_BB_dispersion=False, shared_BB_dispersion=False, consider_normal=False, shared_BB_dispersion_normal=True, \
-        is_diag=False, init_log_mu=None, init_p_binom=None, init_alphas=None, init_taus=None, max_iter=100, tol=1e-4):
+        relative_rdr_weight=1.0, is_diag=False, init_log_mu=None, init_p_binom=None, init_alphas=None, init_taus=None, max_iter=100, tol=1e-4):
         '''
         Input
             X: size n_observations * n_components * n_spots.
@@ -884,20 +1084,23 @@ class hmm_sitewise(object):
         log_mu = np.vstack([np.linspace(-0.1, 0.1, n_states) for r in range(n_spots)]).T if init_log_mu is None else init_log_mu
         p_binom = np.vstack([np.linspace(0.05, 0.45, n_states) for r in range(n_spots)]).T if init_p_binom is None else init_p_binom
         # initialize (inverse of) dispersion param in NB and BetaBinom
-        alphas = 0.01 * np.ones((n_states, n_spots)) if init_alphas is None else init_alphas
+        alphas = 0.1 * np.ones((n_states, n_spots)) if init_alphas is None else init_alphas
         taus = 30 * np.ones((n_states, n_spots)) if init_taus is None else init_taus
         # initialize start probability and emission probability
         log_startprob = np.log( np.ones(n_states) / n_states )
-        transmat = np.ones((n_states, n_states)) * (1-self.t) / (n_states-1)
-        np.fill_diagonal(transmat, self.t)
-        log_transmat = np.log(transmat)
+        if n_states > 1:
+            transmat = np.ones((n_states, n_states)) * (1-self.t) / (n_states-1)
+            np.fill_diagonal(transmat, self.t)
+            log_transmat = np.log(transmat)
+        else:
+            log_transmat = np.zeros((1,1))
         # # a trick to speed up BetaBinom optimization: taking only unique values of (B allele count, total SNP covering read count)
-        # unique_values_nb, mapping_matrices_nb = construct_unique_matrix(X[:,0,:], base_nb_mean)
-        # unique_values_bb, mapping_matrices_bb = construct_unique_matrix(X[:,1,:], total_bb_RD)
+        unique_values_nb, mapping_matrices_nb = construct_unique_matrix(X[:,0,:], base_nb_mean)
+        unique_values_bb, mapping_matrices_bb = construct_unique_matrix(X[:,1,:], total_bb_RD)
         # EM algorithm
         for r in trange(max_iter):
             # E step
-            log_emission = compute_emission_probability_nb_betabinom(X, base_nb_mean, log_mu, alphas, total_bb_RD, p_binom, taus)
+            log_emission = compute_emission_probability_nb_betabinom(X, base_nb_mean, log_mu, alphas, total_bb_RD, p_binom, taus, relative_rdr_weight)
             log_alpha = forward_lattice_sitewise(lengths, log_transmat, log_startprob, log_emission, log_sitewise_transmat)
             log_beta = backward_lattice_sitewise(lengths, log_transmat, log_startprob, log_emission, log_sitewise_transmat)
             log_gamma = compute_posterior_obs(log_alpha, log_beta)
@@ -913,8 +1116,110 @@ class hmm_sitewise(object):
             else:
                 new_log_transmat = log_transmat
             if "m" in self.params:
-                new_log_mu, new_alphas = update_emission_params_nb_sitewise(X[:,0,:], log_gamma, base_nb_mean, alphas, start_log_mu=log_mu, \
+                # new_log_mu, new_alphas = update_emission_params_nb_sitewise(X[:,0,:], log_gamma, base_nb_mean, alphas, start_log_mu=log_mu, \
+                #     fix_NB_dispersion=fix_NB_dispersion, shared_NB_dispersion=shared_NB_dispersion)
+                new_log_mu, new_alphas = update_emission_params_nb_sitewise_uniqvalues(unique_values_nb, mapping_matrices_nb, log_gamma, base_nb_mean, alphas, start_log_mu=log_mu, \
                     fix_NB_dispersion=fix_NB_dispersion, shared_NB_dispersion=shared_NB_dispersion)
+            else:
+                new_log_mu = log_mu
+                new_alphas = alphas
+            if "p" in self.params:
+                # new_p_binom, new_taus = update_emission_params_bb_sitewise(X[:,1,:], log_gamma, total_bb_RD, taus, start_p_binom=p_binom, \
+                #     fix_BB_dispersion=fix_BB_dispersion, shared_BB_dispersion=shared_BB_dispersion, \
+                #     consider_normal=consider_normal, shared_BB_dispersion_normal=shared_BB_dispersion_normal)
+                new_p_binom, new_taus = update_emission_params_bb_sitewise_uniqvalues(unique_values_bb, mapping_matrices_bb, log_gamma, total_bb_RD, taus, start_p_binom=p_binom, \
+                    fix_BB_dispersion=fix_BB_dispersion, shared_BB_dispersion=shared_BB_dispersion, \
+                    consider_normal=consider_normal, shared_BB_dispersion_normal=shared_BB_dispersion_normal)
+            else:
+                new_p_binom = p_binom
+                new_taus = taus
+            # check convergence
+            print( np.mean(np.abs( np.exp(new_log_startprob) - np.exp(log_startprob) )), \
+                np.mean(np.abs( np.exp(new_log_transmat) - np.exp(log_transmat) )), \
+                np.mean(np.abs(new_log_mu - log_mu)),\
+                np.mean(np.abs(new_p_binom - p_binom)) )
+            print( np.hstack([new_log_mu, new_p_binom]) )
+            if np.mean(np.abs( np.exp(new_log_transmat) - np.exp(log_transmat) )) < tol and \
+                np.mean(np.abs(new_log_mu - log_mu)) < tol and np.mean(np.abs(new_p_binom - p_binom)) < tol:
+                break
+            log_startprob = new_log_startprob
+            log_transmat = new_log_transmat
+            log_mu = new_log_mu
+            alphas = new_alphas
+            p_binom = new_p_binom
+            taus = new_taus
+        return new_log_mu, new_alphas, new_p_binom, new_taus, new_log_startprob, new_log_transmat
+
+
+
+class hmm_sitewise_test(object):
+    def __init__(self, params="stmp", t=1-1e-4):
+        """
+        Attributes
+        ----------
+        params : str
+            Codes for parameters that need to be updated. The corresponding parameter can only be updated if it is included in this argument. "s" for start probability; "t" for transition probability; "m" for Negative Binomial RDR signal; "p" for Beta Binomial BAF signal.
+
+        t : float
+            Determine initial self transition probability to be 1-t.
+        """
+        self.params = params
+        self.t = t
+    #
+    def run_baum_welch_nb_bb_sitewise(self, X, lengths, n_states, base_nb_mean, total_bb_RD, log_sitewise_transmat, scalefactorfeatures=None, \
+        fix_NB_dispersion=False, shared_NB_dispersion=False, fix_BB_dispersion=False, shared_BB_dispersion=False, consider_normal=False, shared_BB_dispersion_normal=True, \
+        relative_rdr_weight=1.0, is_diag=False, init_log_mu=None, init_p_binom=None, init_alphas=None, init_taus=None, max_iter=100, tol=1e-4):
+        '''
+        Input
+            X: size n_observations * n_components * n_spots.
+            lengths: sum of lengths = n_observations.
+            base_nb_mean: size of n_observations * n_spots.
+            In NB-BetaBinom model, n_components = 2
+        Intermediate
+            log_mu: size of n_states. Log of mean/exposure/base_prob of each HMM state.
+            alpha: size of n_states. Dispersioon parameter of each HMM state.
+        '''
+        n_obs = X.shape[0]
+        n_comp = X.shape[1]
+        n_spots = X.shape[2]
+        assert n_comp == 2
+        # initialize NB logmean shift and BetaBinom prob
+        log_mu = np.vstack([np.linspace(-0.1, 0.1, n_states) for r in range(n_spots)]).T if init_log_mu is None else init_log_mu
+        p_binom = np.vstack([np.linspace(0.05, 0.45, n_states) for r in range(n_spots)]).T if init_p_binom is None else init_p_binom
+        # initialize (inverse of) dispersion param in NB and BetaBinom
+        alphas = 0.1 * np.ones((n_states, n_spots)) if init_alphas is None else init_alphas
+        taus = 30 * np.ones((n_states, n_spots)) if init_taus is None else init_taus
+        # initialize start probability and emission probability
+        log_startprob = np.log( np.ones(n_states) / n_states )
+        transmat = np.ones((n_states, n_states)) * (1-self.t) / (n_states-1)
+        np.fill_diagonal(transmat, self.t)
+        log_transmat = np.log(transmat)
+        # TEST scalefactors
+        scalefactors = None if scalefactorfeatures is None else np.zeros((scalefactorfeatures.shape[1], n_spots))
+        # # a trick to speed up BetaBinom optimization: taking only unique values of (B allele count, total SNP covering read count)
+        # unique_values_nb, mapping_matrices_nb = construct_unique_matrix(X[:,0,:], base_nb_mean)
+        # unique_values_bb, mapping_matrices_bb = construct_unique_matrix(X[:,1,:], total_bb_RD)
+        # EM algorithm
+        for r in trange(max_iter):
+            # E step
+            log_emission = compute_emission_probability_nb_betabinom_test(X, base_nb_mean, log_mu, alphas, total_bb_RD, p_binom, taus, scalefactorfeatures, scalefactors, relative_rdr_weight)
+            log_alpha = forward_lattice_sitewise(lengths, log_transmat, log_startprob, log_emission, log_sitewise_transmat)
+            log_beta = backward_lattice_sitewise(lengths, log_transmat, log_startprob, log_emission, log_sitewise_transmat)
+            log_gamma = compute_posterior_obs(log_alpha, log_beta)
+            log_xi = compute_posterior_transition_sitewise(log_alpha, log_beta, log_transmat, log_emission)
+            # M step
+            if "s" in self.params:
+                new_log_startprob = update_startprob_sitewise(lengths, log_gamma)
+                new_log_startprob = new_log_startprob.flatten()
+            else:
+                new_log_startprob = log_startprob
+            if "t" in self.params:
+                new_log_transmat = update_transition_sitewise(log_xi, is_diag=is_diag)
+            else:
+                new_log_transmat = log_transmat
+            if "m" in self.params:
+                new_log_mu, new_alphas, new_scalefactors = update_emission_params_nb_sitewise_test(X[:,0,:], log_gamma, base_nb_mean, alphas, scalefactors=scalefactors, start_log_mu=log_mu, \
+                    fix_NB_dispersion=fix_NB_dispersion, shared_NB_dispersion=shared_NB_dispersion, scalefactorfeatures=scalefactorfeatures)
                 # new_log_mu, new_alphas = update_emission_params_nb_sitewise_uniqvalues(unique_values_nb, mapping_matrices_nb, log_gamma, base_nb_mean, alphas, start_log_mu=log_mu, \
                 #     fix_NB_dispersion=fix_NB_dispersion, shared_NB_dispersion=shared_NB_dispersion)
             else:
@@ -936,6 +1241,7 @@ class hmm_sitewise(object):
                 np.mean(np.abs(new_log_mu - log_mu)),\
                 np.mean(np.abs(new_p_binom - p_binom)) )
             print( np.hstack([new_log_mu, new_p_binom]) )
+            print(f"scalefactors: {new_scalefactors}")
             if np.mean(np.abs( np.exp(new_log_transmat) - np.exp(log_transmat) )) < tol and \
                 np.mean(np.abs(new_log_mu - log_mu)) < tol and np.mean(np.abs(new_p_binom - p_binom)) < tol:
                 break
@@ -945,7 +1251,8 @@ class hmm_sitewise(object):
             alphas = new_alphas
             p_binom = new_p_binom
             taus = new_taus
-        return new_log_mu, new_alphas, new_p_binom, new_taus, new_log_startprob, new_log_transmat
+            scalefactors = new_scalefactors
+        return new_log_mu, new_alphas, new_p_binom, new_taus, new_log_startprob, new_log_transmat, new_scalefactors
 
 
 def posterior_nb_bb_sitewise(X, lengths, base_nb_mean, log_mu, alphas, total_bb_RD, p_binom, taus, log_startprob, log_transmat, log_sitewise_transmat):
@@ -1103,23 +1410,97 @@ def viterbi_nb_bb_sitewise(X, lengths, base_nb_mean, log_mu, alphas, total_bb_RD
 
 
 from sklearn.mixture import GaussianMixture
-def initialization_by_gmm(n_states, X, base_nb_mean, total_bb_RD, params, random_state=None, in_log_space=True):
-    # prepare gmm input
-    if in_log_space:
-        X_gmm_rdr = np.vstack([ np.log(X[:,0,s]/base_nb_mean[:,s]) for s in range(X.shape[2]) ]).T
-    else:
-        X_gmm_rdr = np.vstack([ X[:,0,s]/base_nb_mean[:,s] for s in range(X.shape[2]) ]).T
-    X_gmm_baf = np.vstack([ X[:,1,s] / total_bb_RD[:,s] for s in range(X.shape[2]) ]).T
+# def initialization_by_gmm(n_states, X, base_nb_mean, total_bb_RD, params, random_state=None, in_log_space=True):
+#     # prepare gmm input
+#     if in_log_space:
+#         X_gmm_rdr = np.vstack([ np.log(X[:,0,s]/base_nb_mean[:,s]) for s in range(X.shape[2]) ]).T
+#     else:
+#         X_gmm_rdr = np.vstack([ X[:,0,s]/base_nb_mean[:,s] for s in range(X.shape[2]) ]).T
+#     X_gmm_baf = np.vstack([ X[:,1,s] / total_bb_RD[:,s] for s in range(X.shape[2]) ]).T
+#     if ("m" in params) and ("p" in params):
+#         indexes = np.where(X_gmm_baf[:,0] > 0.5)[0]
+#         X_gmm_baf[indexes,:] = 1 - X_gmm_baf[indexes,:]
+#         X_gmm = np.hstack([X_gmm_rdr, X_gmm_baf])
+#     elif "m" in params:
+#         X_gmm = X_gmm_rdr
+#     elif "p" in params:
+#         indexes = np.where(X_gmm_baf[:,0] > 0.5)[0]
+#         X_gmm_baf[indexes,:] = 1 - X_gmm_baf[indexes,:]
+#         X_gmm = X_gmm_baf
+#     X_gmm = X_gmm[np.sum(np.isnan(X_gmm), axis=1) == 0, :]
+#     # run GMM
+#     if random_state is None:
+#         gmm = GaussianMixture(n_components=n_states, max_iter=1).fit(X_gmm)
+#     else:
+#         gmm = GaussianMixture(n_components=n_states, max_iter=1, random_state=random_state).fit(X_gmm)
+#     # turn gmm fitted parameters to HMM log_mu and p_binom parameters
+#     if ("m" in params) and ("p" in params):
+#         gmm_log_mu = gmm.means_[:,:X.shape[2]] if in_log_space else np.log(gmm.means_[:,:X.shape[2]])
+#         gmm_p_binom = gmm.means_[:, X.shape[2]:]
+#      elif "m" in params:
+#         gmm_log_mu = gmm.means_ if in_log_space else np.log(gmm.means_[:,:X.shape[2]])
+#         gmm_p_binom = None
+#     elif "p" in params:
+#         gmm_log_mu = None
+#         gmm_p_binom = gmm.means_
+#     return gmm_log_mu, gmm_p_binom
+
+
+def initialization_by_gmm(n_states, X, base_nb_mean, total_bb_RD, params, random_state=None, in_log_space=True, remove_baf_zero=False):
+    # prepare gmm input of RDR and BAF separately
+    X_gmm_rdr = None
+    X_gmm_baf = None
+    if "m" in params:
+        if in_log_space:
+            X_gmm_rdr = np.vstack([ np.log(X[:,0,s]/base_nb_mean[:,s]) for s in range(X.shape[2]) ]).T
+            offset = np.mean(X_gmm_rdr)
+            normalizetomax1 = np.max(X_gmm_rdr[(~np.isnan(X_gmm_rdr)) & (~np.isinf(X_gmm_rdr))]) - np.min(X_gmm_rdr[(~np.isnan(X_gmm_rdr)) & (~np.isinf(X_gmm_rdr))])
+            X_gmm_rdr = (X_gmm_rdr - offset) / normalizetomax1
+        else:
+            X_gmm_rdr = np.vstack([ X[:,0,s]/base_nb_mean[:,s] for s in range(X.shape[2]) ]).T
+            offset = 0
+            normalizetomax1 = np.max(X_gmm_rdr[(~np.isnan(X_gmm_rdr)) & (~np.isinf(X_gmm_rdr))])
+            X_gmm_rdr = (X_gmm_rdr - offset) / normalizetomax1
+    if "p" in params:
+        X_gmm_baf = np.vstack([ X[:,1,s] / total_bb_RD[:,s] for s in range(X.shape[2]) ]).T
+    # whether remove 0 in BAF
+    if ("p" in params) and remove_baf_zero:
+        indexes = np.where(np.min(X_gmm_baf, axis=1) > 0)[0]
+        X_gmm_baf = X_gmm_baf[indexes, :]
+        if "m" in params:
+            X_gmm_rdr = X_gmm_rdr[indexes, :]
+
+    # combine RDR and BAF
     if ("m" in params) and ("p" in params):
         indexes = np.where(X_gmm_baf[:,0] > 0.5)[0]
         X_gmm_baf[indexes,:] = 1 - X_gmm_baf[indexes,:]
+        # only consider the 20% -- 80% RDR values for GMM, replace the out-of-range values by the closest within-range value
+        # quantile20 = [np.percentile(X_gmm_rdr[~np.isnan(X_gmm_rdr[:,k]), k], 20) for k in range(X_gmm_rdr.shape[1])]
+        # quantile80 = [np.percentile(X_gmm_rdr[~np.isnan(X_gmm_rdr[:,k]), k], 80) for k in range(X_gmm_rdr.shape[1])]
+        # for k in range(X_gmm_rdr.shape[1]):
+        #     X_gmm_rdr[X_gmm_rdr[:,k] < quantile20[k], k] = quantile20[k]
+        #     X_gmm_rdr[X_gmm_rdr[:,k] > quantile80[k], k] = quantile80[k]
         X_gmm = np.hstack([X_gmm_rdr, X_gmm_baf])
     elif "m" in params:
+        # only consider the 20% -- 80% RDR values for GMM, replace the out-of-range values by the closest within-range value
+        # quantile20 = [np.percentile(X_gmm_rdr[~np.isnan(X_gmm_rdr[:,k]), k], 20) for k in range(X_gmm_rdr.shape[1])]
+        # quantile80 = [np.percentile(X_gmm_rdr[~np.isnan(X_gmm_rdr[:,k]), k], 80) for k in range(X_gmm_rdr.shape[1])]
+        # for k in range(X_gmm_rdr.shape[1]):
+        #     X_gmm_rdr[X_gmm_rdr[:,k] < quantile20[k], k] = quantile20[k]
+        #     X_gmm_rdr[X_gmm_rdr[:,k] > quantile80[k], k] = quantile80[k]
         X_gmm = X_gmm_rdr
     elif "p" in params:
         indexes = np.where(X_gmm_baf[:,0] > 0.5)[0]
         X_gmm_baf[indexes,:] = 1 - X_gmm_baf[indexes,:]
         X_gmm = X_gmm_baf
+    # deal with NAN
+    for k in range(X_gmm.shape[1]):
+        last_idx_notna = -1
+        for i in range(X_gmm.shape[0]):
+            if last_idx_notna >= 0 and np.isnan(X_gmm[i, k]):
+                X_gmm[i, k] = X_gmm[last_idx_notna, k]
+            elif not np.isnan(X_gmm[i, k]):
+                last_idx_notna = i
     X_gmm = X_gmm[np.sum(np.isnan(X_gmm), axis=1) == 0, :]
     # run GMM
     if random_state is None:
@@ -1128,10 +1509,10 @@ def initialization_by_gmm(n_states, X, base_nb_mean, total_bb_RD, params, random
         gmm = GaussianMixture(n_components=n_states, max_iter=1, random_state=random_state).fit(X_gmm)
     # turn gmm fitted parameters to HMM log_mu and p_binom parameters
     if ("m" in params) and ("p" in params):
-        gmm_log_mu = gmm.means_[:,:X.shape[2]] if in_log_space else np.log(gmm.means_[:,:X.shape[2]])
+        gmm_log_mu = gmm.means_[:,:X.shape[2]] * normalizetomax1 + offset if in_log_space else np.log(gmm.means_[:,:X.shape[2]] * normalizetomax1 + offset)
         gmm_p_binom = gmm.means_[:, X.shape[2]:]
     elif "m" in params:
-        gmm_log_mu = gmm.means_ if in_log_space else np.log(gmm.means_[:,:X.shape[2]])
+        gmm_log_mu = gmm.means_ * normalizetomax1 + offset if in_log_space else np.log(gmm.means_[:,:X.shape[2]] * normalizetomax1 + offset)
         gmm_p_binom = None
     elif "p" in params:
         gmm_log_mu = None
@@ -1140,13 +1521,13 @@ def initialization_by_gmm(n_states, X, base_nb_mean, total_bb_RD, params, random
 
 
 def pipeline_baum_welch(output_prefix, X, lengths, n_states, base_nb_mean, total_bb_RD, log_sitewise_transmat, params="smp", t=1-1e-6, random_state=0, \
-    in_log_space=True, fix_NB_dispersion=False, shared_NB_dispersion=True, fix_BB_dispersion=False, shared_BB_dispersion=True, \
+    in_log_space=True, remove_baf_zero=False, fix_NB_dispersion=False, shared_NB_dispersion=True, fix_BB_dispersion=False, shared_BB_dispersion=True, \
     consider_normal=False, shared_BB_dispersion_normal=True, init_log_mu=None, init_p_binom=None, init_alphas=None, init_taus=None, \
-    is_diag=True, max_iter=100, tol=1e-4):
+    relative_rdr_weight=1.0, is_diag=True, max_iter=100, tol=1e-4):
     # initialization
     n_spots = X.shape[2]
     if ((init_log_mu is None) and ("m" in params)) or ((init_p_binom is None) and ("p" in params)):
-        tmp_log_mu, tmp_p_binom = initialization_by_gmm(n_states, X, base_nb_mean, total_bb_RD, params, random_state=random_state, in_log_space=in_log_space)
+        tmp_log_mu, tmp_p_binom = initialization_by_gmm(n_states, X, base_nb_mean, total_bb_RD, params, random_state=random_state, in_log_space=in_log_space, remove_baf_zero=remove_baf_zero)
         if (init_log_mu is None) and ("m" in params):
             init_log_mu = tmp_log_mu
         if (init_p_binom is None) and ("p" in params):
@@ -1161,7 +1542,7 @@ def pipeline_baum_welch(output_prefix, X, lengths, n_states, base_nb_mean, total
         fix_NB_dispersion=fix_NB_dispersion, shared_NB_dispersion=shared_NB_dispersion, \
         fix_BB_dispersion=fix_BB_dispersion, shared_BB_dispersion=shared_BB_dispersion, \
         consider_normal=consider_normal, shared_BB_dispersion_normal=shared_BB_dispersion_normal, \
-        is_diag=is_diag, init_log_mu=init_log_mu, init_p_binom=init_p_binom, init_alphas=init_alphas, init_taus=init_taus, \
+        relative_rdr_weight=relative_rdr_weight, is_diag=is_diag, init_log_mu=init_log_mu, init_p_binom=init_p_binom, init_alphas=init_alphas, init_taus=init_taus, \
         max_iter=max_iter, tol=tol)
 
     # compute posterior and prediction
@@ -1185,5 +1566,56 @@ def pipeline_baum_welch(output_prefix, X, lengths, n_states, base_nb_mean, total
                 new_log_startprob=new_log_startprob, new_log_transmat=new_log_transmat, log_gamma=log_gamma, pred_cnv=pred_cnv, llf=llf)
     else:
         res = {"new_log_mu":new_log_mu, "new_alphas":new_alphas, "new_p_binom":new_p_binom, "new_taus":new_taus, \
+            "new_log_startprob":new_log_startprob, "new_log_transmat":new_log_transmat, "log_gamma":log_gamma, "pred_cnv":pred_cnv, "llf":llf}
+        return res
+
+
+
+def pipeline_baum_welch_test(output_prefix, X, lengths, n_states, base_nb_mean, total_bb_RD, log_sitewise_transmat, scalefactorfeatures=None, params="smp", t=1-1e-6, random_state=0, \
+    in_log_space=True, remove_baf_zero=False, fix_NB_dispersion=False, shared_NB_dispersion=True, fix_BB_dispersion=False, shared_BB_dispersion=True, \
+    consider_normal=False, shared_BB_dispersion_normal=True, init_log_mu=None, init_p_binom=None, init_alphas=None, init_taus=None, \
+    relative_rdr_weight=1.0, is_diag=True, max_iter=100, tol=1e-4):
+    # initialization
+    n_spots = X.shape[2]
+    if ((init_log_mu is None) and ("m" in params)) or ((init_p_binom is None) and ("p" in params)):
+        tmp_log_mu, tmp_p_binom = initialization_by_gmm(n_states, X, base_nb_mean, total_bb_RD, params, random_state=random_state, in_log_space=in_log_space, remove_baf_zero=remove_baf_zero)
+        if (init_log_mu is None) and ("m" in params):
+            init_log_mu = tmp_log_mu
+        if (init_p_binom is None) and ("p" in params):
+            init_p_binom = tmp_p_binom
+    print(f"init_log_mu = {init_log_mu}")
+    print(f"init_p_binom = {init_p_binom}")
+    
+    # fit HMM-NB-BetaBinom
+    hmmmodel = hmm_sitewise_test(params=params, t=t)
+    new_log_mu, new_alphas, new_p_binom, new_taus, new_log_startprob, new_log_transmat, new_scalefactors = hmmmodel.run_baum_welch_nb_bb_sitewise(X, lengths, \
+        n_states, base_nb_mean, total_bb_RD, log_sitewise_transmat, scalefactorfeatures=scalefactorfeatures, \
+        fix_NB_dispersion=fix_NB_dispersion, shared_NB_dispersion=shared_NB_dispersion, \
+        fix_BB_dispersion=fix_BB_dispersion, shared_BB_dispersion=shared_BB_dispersion, \
+        consider_normal=consider_normal, shared_BB_dispersion_normal=shared_BB_dispersion_normal, \
+        relative_rdr_weight=relative_rdr_weight, is_diag=is_diag, init_log_mu=init_log_mu, init_p_binom=init_p_binom, init_alphas=init_alphas, init_taus=init_taus, \
+        max_iter=max_iter, tol=tol)
+
+    # compute posterior and prediction
+    log_gamma = posterior_nb_bb_sitewise(X, lengths, \
+                                     base_nb_mean, new_log_mu, new_alphas, \
+                                     total_bb_RD, new_p_binom, new_taus, \
+                                     new_log_startprob, new_log_transmat, log_sitewise_transmat)
+    pred = np.argmax(log_gamma, axis=0)
+    pred_cnv = pred % n_states
+    
+    # likelihood
+    log_emission = compute_emission_probability_nb_betabinom(X, base_nb_mean, new_log_mu, new_alphas, total_bb_RD, new_p_binom, new_taus)
+    log_alpha = forward_lattice_sitewise(lengths, new_log_transmat, new_log_startprob, log_emission, log_sitewise_transmat)
+    llf = np.sum(scipy.special.logsumexp(log_alpha[:,lengths-1], axis=0))
+
+    # save results
+    if not output_prefix is None:
+        tmp = np.log10(1 - t)
+        np.savez(f"{output_prefix}_nstates{n_states}_{params}_{tmp:.0f}_seed{random_state}.npz", \
+                new_log_mu=new_log_mu, new_alphas=new_alphas, new_p_binom=new_p_binom, new_taus=new_taus, \
+                new_log_startprob=new_log_startprob, new_log_transmat=new_log_transmat, log_gamma=log_gamma, pred_cnv=pred_cnv, llf=llf)
+    else:
+        res = {"new_log_mu":new_log_mu, "new_alphas":new_alphas, "new_p_binom":new_p_binom, "new_taus":new_taus, "new_scalefactors":new_scalefactors, \
             "new_log_startprob":new_log_startprob, "new_log_transmat":new_log_transmat, "log_gamma":log_gamma, "pred_cnv":pred_cnv, "llf":llf}
         return res
