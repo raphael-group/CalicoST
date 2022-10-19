@@ -13,12 +13,12 @@ def load_data(spaceranger_dir, snp_dir, filtergenelist_file):
     ##### read raw UMI count matrix #####
     adata = sc.read_10x_h5(f"{spaceranger_dir}/filtered_feature_bc_matrix.h5")
     adata.layers["count"] = adata.X.A.astype(int)
-    cell_snp_Aallele = scipy.sparse.load_npz(f"{snp_dir}/round3-arrays/cell_snp_Aallele.npz")
+    cell_snp_Aallele = scipy.sparse.load_npz(f"{snp_dir}/cell_snp_Aallele.npz")
     cell_snp_Aallele = cell_snp_Aallele.A
-    cell_snp_Ballele = scipy.sparse.load_npz(f"{snp_dir}/round3-arrays/cell_snp_Ballele.npz")
+    cell_snp_Ballele = scipy.sparse.load_npz(f"{snp_dir}/cell_snp_Ballele.npz")
     cell_snp_Ballele = cell_snp_Ballele.A
-    snp_gene_list = np.load(f"{snp_dir}/round3-arrays/snp_gene_list.npy", allow_pickle=True)
-    unique_snp_ids = np.load(f"{snp_dir}/round3-arrays/unique_snp_ids.npy", allow_pickle=True)
+    snp_gene_list = np.load(f"{snp_dir}/snp_gene_list.npy", allow_pickle=True)
+    unique_snp_ids = np.load(f"{snp_dir}/unique_snp_ids.npy", allow_pickle=True)
 
     # filter out genes that are expressed in <0.5% cells
     indicator = (np.sum(adata.X > 0, axis=0) >= 0.005 * adata.shape[0]).A.flatten()
