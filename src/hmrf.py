@@ -1,10 +1,11 @@
 import logging
+from turtle import reset
 import numpy as np
 from numba import njit
 import scipy.special
 import scipy.sparse
 from sklearn.mixture import GaussianMixture
-from sklearn.cluster import AgglomerativeClustering
+from sklearn.cluster import KMeans
 from sklearn.metrics import adjusted_rand_score
 from tqdm import trange
 import copy
@@ -12,6 +13,7 @@ from pathlib import Path
 from hmm_NB_BB_phaseswitch import *
 from composite_hmm_NB_BB_phaseswitch import *
 from utils_distribution_fitting import *
+from utils_IO import *
 from simple_sctransform import *
 
 import warnings
@@ -32,6 +34,23 @@ def compute_adjacency_mat(coords, unit_xsquared=9, unit_ysquared=3):
             A[i, indexes] = 1
     A = scipy.sparse.csr_matrix(A)
     return A
+
+
+def compute_adjacency_mat_v2(coords, unit_xsquared=9, unit_ysquared=3, ratio=1):
+    # pairwise distance
+    x_dist = coords[:,0][None,:] - coords[:,0][:,None]
+    y_dist = coords[:,1][None,:] - coords[:,1][:,None]
+    pairwise_squared_dist = x_dist**2 * unit_xsquared + y_dist**2 * unit_ysquared
+    # adjacency
+    A = np.zeros( (coords.shape[0], coords.shape[0]), dtype=np.int8 )
+    for i in range(coords.shape[0]):
+        indexes = np.where(pairwise_squared_dist[i,:] <= ratio * (unit_xsquared + unit_ysquared))[0]
+        indexes = np.array([j for j in indexes if j != i])
+        if len(indexes) > 0:
+            A[i, indexes] = 1
+    A = scipy.sparse.csr_matrix(A)
+    return A
+
 
 def rectangle_initialize_initial_clone(coords, n_clones, random_state=0):
     np.random.seed(random_state)
@@ -55,6 +74,42 @@ def rectangle_initialize_initial_clone(coords, n_clones, random_state=0):
     block_clone_map = {i:block_clone_map[i] for i in range(len(block_clone_map))}
     clone_id = np.array([block_clone_map[i] for i in block_id])
     initial_clone_index = [np.where(clone_id == i)[0] for i in range(n_clones)]
+    return initial_clone_index
+
+
+def infer_initial_phase(single_X, lengths, single_base_nb_mean, single_total_bb_RD, n_states, log_sitewise_transmat, \
+    params, t, random_state, fix_NB_dispersion, shared_NB_dispersion, fix_BB_dispersion, shared_BB_dispersion, max_iter, tol):
+    # pseudobulk HMM for phase_prob
+    res = pipeline_baum_welch(None, np.sum(single_X, axis=2, keepdims=True), lengths, n_states, \
+                              np.sum(single_base_nb_mean, axis=1, keepdims=True), np.sum(single_total_bb_RD, axis=1, keepdims=True), log_sitewise_transmat, params=params, t=t, random_state=random_state, \
+                              fix_NB_dispersion=fix_NB_dispersion, shared_NB_dispersion=shared_NB_dispersion, \
+                              fix_BB_dispersion=fix_BB_dispersion, shared_BB_dispersion=shared_BB_dispersion, consider_normal=False, \
+                              shared_BB_dispersion_normal=True, is_diag=True, \
+                              init_log_mu=None, init_p_binom=None, init_alphas=None, init_taus=None, max_iter=max_iter, tol=tol)
+    phase_prob = np.exp(scipy.special.logsumexp(res["log_gamma"][:n_states, :], axis=0))
+    return phase_prob
+
+
+def data_driven_initialize_initial_clone(single_X, single_total_bb_RD, phase_prob, n_states, n_clones, sorted_chr_pos, coords, random_state):
+    ### arm-level BAF ###
+    # smoothing based on adjacency
+    centromere_file = "/u/congma/ragr-data/datasets/ref-genomes/centromeres/hg38.centromeres.txt"
+    armlengths = get_lengths_by_arm(sorted_chr_pos, centromere_file)
+    adjacency_mat = compute_adjacency_mat_v2(coords, ratio=10)
+    smoothed_X_baf = single_X[:,1,:] @ adjacency_mat
+    smoothed_total_bb_RD = single_total_bb_RD @ adjacency_mat
+    # smoothed BAF
+    chr_level_af = np.zeros((single_X.shape[2], len(armlengths)))
+    for k,le in enumerate(armlengths):
+        s = np.sum(armlengths[:k])
+        t = s + le
+        numer = phase_prob[s:t].dot(smoothed_X_baf[s:t,:]) + (1-phase_prob[s:t]).dot(smoothed_total_bb_RD[s:t,:] - smoothed_X_baf[s:t,:])
+        denom = np.sum(smoothed_total_bb_RD[s:t,:], axis=0)
+        chr_level_af[:,k] = numer / denom
+    chr_level_af[np.isnan(chr_level_af)] = 0.5
+    # Kmeans clustering based on BAF
+    kmeans = KMeans(n_clusters=n_clones, random_state=random_state).fit(chr_level_af)
+    initial_clone_index = [np.where(kmeans.labels_ == i)[0] for i in range(n_clones)]
     return initial_clone_index
 
 
@@ -98,7 +153,6 @@ def hmrf_reassignment(single_X, single_base_nb_mean, single_total_bb_RD, res, pr
     for i in range(N):
         total_llf += np.sum( spatial_weight * np.sum(new_assignment[adjacency_mat[i,:].nonzero()[1]] == new_assignment[i]) )
     return new_assignment, single_llf, total_llf
-
 
 
 def hmrf_reassignment_v2(single_X, single_base_nb_mean, single_total_bb_RD, res, pred, adjacency_mat, prev_assignment, spatial_weight=1.0/6):
@@ -179,6 +233,32 @@ def hmrf_reassignment_posterior(single_X, single_base_nb_mean, single_total_bb_R
     return new_assignment, single_llf, total_llf
 
 
+def test_hmrf_reassignment(single_X, single_base_nb_mean, single_total_bb_RD, res, pred, adjacency_mat, prev_assignment, spatial_weight=1.0/6):
+    N = single_X.shape[2]
+    n_obs = single_X.shape[0]
+    n_clones = res["new_log_mu"].shape[1]
+    n_states = res["new_p_binom"].shape[0]
+    single_llf = np.zeros((N, n_clones))
+    new_assignment = copy.copy(prev_assignment)
+
+    for i in trange(N):
+        idx = adjacency_mat[i,:].nonzero()[1]
+        idx = np.append(idx, np.array([i]))
+        for c in range(n_clones):
+            tmp_log_emission = compute_emission_probability_nb_betabinom( np.sum(single_X[:,:,idx], axis=2, keepdims=True), \
+                                                np.sum(single_base_nb_mean[:,idx], axis=1, keepdims=True), res["new_log_mu"][:,c:(c+1)], res["new_alphas"][:,c:(c+1)], \
+                                                np.sum(single_total_bb_RD[:,idx], axis=1, keepdims=True), res["new_p_binom"][:,c:(c+1)], res["new_taus"][:,c:(c+1)])
+            single_llf[i,c] = np.sum(tmp_log_emission[pred, np.arange(n_obs), 0])
+        w_node = single_llf[i,:]
+        new_assignment[i] = np.argmax( w_node )
+
+    # compute total log likelihood log P(X | Z) + log P(Z)
+    total_llf = np.sum(single_llf[np.arange(N), new_assignment])
+    for i in range(N):
+        total_llf += np.sum( spatial_weight * np.sum(new_assignment[adjacency_mat[i,:].nonzero()[1]] == new_assignment[i]) )
+    return new_assignment, single_llf, total_llf
+
+
 def hmrf_reassignment_concatenate(single_X, single_base_nb_mean, single_total_bb_RD, res, pred, adjacency_mat, prev_assignment, spatial_weight=1.0/6):
     # Note this is the old version without scalefactors
     N = single_X.shape[2]
@@ -244,13 +324,14 @@ def hmrf_reassignment_compositehmm(single_X, single_base_nb_mean, single_total_b
 
 
 def hmrf_pipeline(outdir, single_X, lengths, single_base_nb_mean, single_total_bb_RD, initial_clone_index, \
-    n_states, log_sitewise_transmat, coords=None, max_iter_outer=5, nodepotential="max", params="stmp", t=1-1e-6, random_state=0, init_alphas=None, init_taus=None,\
+    n_states, log_sitewise_transmat, coords=None, adjacency_mat=None, max_iter_outer=5, nodepotential="max", params="stmp", t=1-1e-6, random_state=0, init_alphas=None, init_taus=None,\
     fix_NB_dispersion=False, shared_NB_dispersion=True, fix_BB_dispersion=False, shared_BB_dispersion=True, \
     consider_normal=False, shared_BB_dispersion_normal=True, \
     is_diag=True, max_iter=100, tol=1e-4, unit_xsquared=9, unit_ysquared=3, spatial_weight=1.0/6):
     # spot adjacency matric
-    assert not (coords is None)
-    adjacency_mat = compute_adjacency_mat(coords, unit_xsquared, unit_ysquared)
+    assert not (coords is None and adjacency_mat is None)
+    if adjacency_mat is None:
+        adjacency_mat = compute_adjacency_mat(coords, unit_xsquared, unit_ysquared)
     # pseudobulk
     X, base_nb_mean, total_bb_RD = merge_pseudobulk_by_index(single_X, single_base_nb_mean, single_total_bb_RD, initial_clone_index)
     # initialize HMM parameters by GMM
@@ -288,6 +369,9 @@ def hmrf_pipeline(outdir, single_X, lengths, single_base_nb_mean, single_total_b
             elif nodepotential == "weighted_sum":
                 new_assignment, single_llf, total_llf = hmrf_reassignment_posterior(single_X, single_base_nb_mean, single_total_bb_RD, res, \
                     adjacency_mat, last_assignment, spatial_weight=spatial_weight)
+            elif nodepotential == "test_sum":
+                new_assignment, single_llf, total_llf = test_hmrf_reassignment(single_X, single_base_nb_mean, single_total_bb_RD, res, pred, \
+                    adjacency_mat, last_assignment, spatial_weight=spatial_weight)
             else:
                 raise Exception("Unknown mode for nodepotential!")
             res["prev_assignment"] = last_assignment
@@ -306,11 +390,11 @@ def hmrf_pipeline(outdir, single_X, lengths, single_base_nb_mean, single_total_b
 
         # update last parameter
         if "mp" in params:
-            print("outer iteration {}: difference between parameters = {}, {}".format( r, np.mean(np.abs(last_log_mu-res["new_log_mu"])), np.mean(np.abs(last_p_binom-res["new_p_binom"])) ))
+            print("outer iteration {}: total_llf = {}, difference between parameters = {}, {}".format( r, res["total_llf"], np.mean(np.abs(last_log_mu-res["new_log_mu"])), np.mean(np.abs(last_p_binom-res["new_p_binom"])) ))
         elif "m" in params:
-            print("outer iteration {}: difference between NB parameters = {}".format( r, np.mean(np.abs(last_log_mu-res["new_log_mu"])) ))
+            print("outer iteration {}: total_llf = {}, difference between NB parameters = {}".format( r, res["total_llf"], np.mean(np.abs(last_log_mu-res["new_log_mu"])) ))
         elif "p" in params:
-            print("outer iteration {}: difference between BetaBinom parameters = {}".format( r, np.mean(np.abs(last_p_binom-res["new_p_binom"])) ))
+            print("outer iteration {}: total_llf = {}, difference between BetaBinom parameters = {}".format( r, res["total_llf"], np.mean(np.abs(last_p_binom-res["new_p_binom"])) ))
         print("outer iteration {}: ARI between assignment = {}".format( r, adjusted_rand_score(last_assignment, res["new_assignment"]) ))
         if np.all( last_assignment == res["new_assignment"] ):
             break
