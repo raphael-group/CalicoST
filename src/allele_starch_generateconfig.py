@@ -1,0 +1,201 @@
+import sys
+import numpy as np
+import scipy
+import pandas as pd
+from pathlib import Path
+from sklearn.metrics import adjusted_rand_score
+import scanpy as sc
+import anndata
+import logging
+import copy
+from pathlib import Path
+import subprocess
+from hmm_NB_BB_phaseswitch import *
+from composite_hmm_NB_BB_phaseswitch import *
+from utils_distribution_fitting import *
+from hmrf import *
+from hmrf_normalmixture import *
+from utils_IO import *
+
+
+def read_configuration_file(filename):
+    ##### [Default settings] #####
+    config = {
+        "spaceranger_dir" : None,
+        "snp_dir" : None,
+        "output_dir" : None,
+        # supporting files and preprocessing arguments
+        "hgtable_file" : None,
+        "normalidx_file" : None,
+        "tumorprop_file" : None,
+        "filtergenelist_file" : None,
+        "binsize" : 1,
+        "rdrbinsize" : 1,
+        "bafonly" : True,
+        "logfcthreshold" : 2.5,
+        # phase switch probability
+        "nu" : 1,
+        "logphase_shift" : 1,
+        # HMRF configurations
+        "n_clones" : None,
+        "tumorprop_threshold" : 0.5, 
+        "max_iter_outer" : 20,
+        "nodepotential" : "max", # max or weighted_sum
+        "initialization_method" : "rectangle", # rectangle or datadrive
+        "num_hmrf_initialization_start" : 0, 
+        "num_hmrf_initialization_end" : 10,
+        # HMM configurations
+        "n_states" : None,
+        "params" : None,
+        "t" : None,
+        "fix_NB_dispersion" : False,
+        "shared_NB_dispersion" : True,
+        "fix_BB_dispersion" : False,
+        "shared_BB_dispersion" : True,
+        "max_iter" : 30,
+        "tol" : 1e-3,
+        "spatial_weight" : 2.0,
+        "gmm_random_state" : 0,
+        "relative_rdr_weight" : 1.0
+    }
+
+    argument_type = {
+        "spaceranger_dir" : "str",
+        "snp_dir" : "str",
+        "output_dir" : "str",
+        # supporting files and preprocessing arguments
+        "hgtable_file" : "str",
+        "normalidx_file" : "str",
+        "tumorprop_file" : "str",
+        "filtergenelist_file" : "str",
+        "binsize" : "int",
+        "rdrbinsize" : "int",
+        "bafonly" : "bool",
+        "logfcthreshold" : "float",
+        # phase switch probability
+        "nu" : "float",
+        "logphase_shift" : "float",
+        # HMRF configurations
+        "n_clones" : "int",
+        "tumorprop_threshold" : "float", 
+        "max_iter_outer" : "int",
+        "nodepotential" : "str",
+        "initialization_method" : "str",
+        "num_hmrf_initialization_start" : "int", 
+        "num_hmrf_initialization_end" : "int",
+        # HMM configurations
+        "n_states" : "int",
+        "params" : "str",
+        "t" : "eval",
+        "fix_NB_dispersion" : "bool",
+        "shared_NB_dispersion" : "bool",
+        "fix_BB_dispersion" : "bool",
+        "shared_BB_dispersion" : "bool",
+        "max_iter" : "int",
+        "tol" : "float",
+        "spatial_weight" : "float",
+        "gmm_random_state" : "int",
+        "relative_rdr_weight" : "float"
+    }
+
+    ##### [ read configuration file to update settings ] #####
+    with open(filename, 'r') as fp:
+        for line in fp:
+            if line.strip() == "" or line[0] == "#":
+                continue
+            strs = [x.replace(" ", "") for x in line.strip().split(":") if x != ""]
+            assert strs[0] in config.keys(), f"{strs[0]} is not a valid configuration parameter! Configuration parameters are: {list(config.keys())}"
+            if strs[1].upper() == "NONE":
+                config[strs[0]] = None
+            elif argument_type[strs[0]] == "str":
+                config[strs[0]] = strs[1]
+            elif argument_type[strs[0]] == "int":
+                config[strs[0]] = int(strs[1])
+            elif argument_type[strs[0]] == "float":
+                config[strs[0]] = float(strs[1])
+            elif argument_type[strs[0]] == "eval":
+                config[strs[0]] = eval(strs[1])
+            elif argument_type[strs[0]] == "bool":
+                config[strs[0]] = (strs[1].upper() == "TRUE")
+    # assertions
+    assert not config["spaceranger_dir"] is None, "No spaceranger directory!"
+    assert not config["snp_dir"] is None, "No SNP directory!"
+    assert not config["output_dir"] is None, "No output directory!"
+
+    return config
+
+
+def write_config_file(outputfilename, config):
+    list_argument_io = ["spaceranger_dir",
+        "snp_dir",
+        "output_dir"]
+    list_argument_sup = ["hgtable_file",
+        "normalidx_file",
+        "tumorprop_file",
+        "filtergenelist_file",
+        "binsize",
+        "rdrbinsize",
+        "bafonly",
+        "logfcthreshold"]
+    list_argument_phase = ["nu",
+        "logphase_shift"]
+    list_argument_hmrf = ["n_clones",
+        "tumorprop_threshold",
+        "max_iter_outer",
+        "nodepotential",
+        "initialization_method",
+        "num_hmrf_initialization_start", 
+        "num_hmrf_initialization_end"]
+    list_argument_hmm = ["n_states",
+        "params",
+        "t",
+        "fix_NB_dispersion",
+        "shared_NB_dispersion",
+        "fix_BB_dispersion",
+        "shared_BB_dispersion",
+        "max_iter",
+        "tol",
+        "spatial_weight",
+        "gmm_random_state",
+        "relative_rdr_weight"]
+    with open(outputfilename, 'w') as fp:
+        #
+        for k in list_argument_io:
+            fp.write(f"{k} : {config[k]}\n")
+        #
+        fp.write("\n")
+        fp.write("# supporting files and preprocessing arguments\n")
+        for k in list_argument_sup:
+            fp.write(f"{k} : {config[k]}\n")
+        #
+        fp.write("\n")
+        fp.write("# phase switch probability\n")
+        for k in list_argument_phase:
+            fp.write(f"{k} : {config[k]}\n")
+        #
+        fp.write("\n")
+        fp.write("# HMRF configurations\n")
+        for k in list_argument_hmrf:
+            fp.write(f"{k} : {config[k]}\n")
+        #
+        fp.write("\n")
+        fp.write("# HMM configurations\n")
+        for k in list_argument_hmm:
+            fp.write(f"{k} : {config[k]}\n")
+
+
+def main(argv):
+    template_configuration_file = argv[1]
+    outputdir = argv[2]
+    hmrf_seed_s = int(argv[3])
+    hmrf_seed_t = int(argv[4])
+    config = read_configuration_file(template_configuration_file)
+    for r in range(hmrf_seed_s, hmrf_seed_t):
+        config["num_hmrf_initialization_start"] = r
+        config["num_hmrf_initialization_end"] = r+1
+        write_config_file(f"{outputdir}/configfile{r}", config)
+    
+
+if __name__ == "__main__":
+    if len(sys.argv) > 1:
+        main(sys.argv)
