@@ -32,7 +32,6 @@ def read_configuration_file(filename):
         "binsize" : 1,
         "rdrbinsize" : 1,
         "bafonly" : True,
-        "logfcthreshold" : 2.5,
         # phase switch probability
         "nu" : 1,
         "logphase_shift" : 1,
@@ -55,8 +54,7 @@ def read_configuration_file(filename):
         "max_iter" : 30,
         "tol" : 1e-3,
         "spatial_weight" : 2.0,
-        "gmm_random_state" : 0,
-        "relative_rdr_weight" : 1.0
+        "gmm_random_state" : 0
     }
 
     argument_type = {
@@ -71,7 +69,6 @@ def read_configuration_file(filename):
         "binsize" : "int",
         "rdrbinsize" : "int",
         "bafonly" : "bool",
-        "logfcthreshold" : "float",
         # phase switch probability
         "nu" : "float",
         "logphase_shift" : "float",
@@ -94,8 +91,7 @@ def read_configuration_file(filename):
         "max_iter" : "int",
         "tol" : "float",
         "spatial_weight" : "float",
-        "gmm_random_state" : "int",
-        "relative_rdr_weight" : "float"
+        "gmm_random_state" : "int"
     }
 
     ##### [ read configuration file to update settings ] #####
@@ -135,8 +131,7 @@ def write_config_file(outputfilename, config):
         "filtergenelist_file",
         "binsize",
         "rdrbinsize",
-        "bafonly",
-        "logfcthreshold"]
+        "bafonly"]
     list_argument_phase = ["nu",
         "logphase_shift"]
     list_argument_hmrf = ["n_clones",
@@ -156,8 +151,7 @@ def write_config_file(outputfilename, config):
         "max_iter",
         "tol",
         "spatial_weight",
-        "gmm_random_state",
-        "relative_rdr_weight"]
+        "gmm_random_state"]
     with open(outputfilename, 'w') as fp:
         #
         for k in list_argument_io:

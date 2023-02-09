@@ -26,11 +26,11 @@ def read_joint_configuration_file(filename):
         # supporting files and preprocessing arguments
         "hgtable_file" : None,
         "normalidx_file" : None,
+        "tumorprop_file" : None,
         "filtergenelist_file" : None,
         "binsize" : 1,
         "rdrbinsize" : 1,
         "bafonly" : True,
-        "logfcthreshold" : 2.5,
         # phase switch probability
         "nu" : 1,
         "logphase_shift" : 1,
@@ -52,8 +52,7 @@ def read_joint_configuration_file(filename):
         "max_iter" : 30,
         "tol" : 1e-3,
         "spatial_weight" : 2.0,
-        "gmm_random_state" : 0,
-        "relative_rdr_weight" : 1.0
+        "gmm_random_state" : 0
     }
 
     argument_type = {
@@ -63,11 +62,11 @@ def read_joint_configuration_file(filename):
         # supporting files and preprocessing arguments
         "hgtable_file" : "str",
         "normalidx_file" : "str",
+        "tumorprop_file" : "str",
         "filtergenelist_file" : "str",
         "binsize" : "int",
         "rdrbinsize" : "int",
         "bafonly" : "bool",
-        "logfcthreshold" : "float",
         # phase switch probability
         "nu" : "float",
         "logphase_shift" : "float",
@@ -89,8 +88,7 @@ def read_joint_configuration_file(filename):
         "max_iter" : "int",
         "tol" : "float",
         "spatial_weight" : "float",
-        "gmm_random_state" : "int",
-        "relative_rdr_weight" : "float"
+        "gmm_random_state" : "int"
     }
 
     ##### [ read configuration file to update settings ] #####
@@ -126,11 +124,11 @@ def write_joint_config_file(outputfilename, config):
         "output_dir"]
     list_argument_sup = ["hgtable_file",
         "normalidx_file",
+        "tumorprop_file",
         "filtergenelist_file",
         "binsize",
         "rdrbinsize",
-        "bafonly",
-        "logfcthreshold"]
+        "bafonly"]
     list_argument_phase = ["nu",
         "logphase_shift"]
     list_argument_hmrf = ["n_clones",
@@ -149,8 +147,7 @@ def write_joint_config_file(outputfilename, config):
         "max_iter",
         "tol",
         "spatial_weight",
-        "gmm_random_state",
-        "relative_rdr_weight"]
+        "gmm_random_state"]
     with open(outputfilename, 'w') as fp:
         #
         for k in list_argument_io:

@@ -6,13 +6,14 @@ import pandas as pd
 from pathlib import Path
 from sklearn.metrics import adjusted_rand_score
 from sklearn.neighbors import LocalOutlierFactor
+from sklearn.cluster import KMeans
 import scanpy as sc
 import anndata
 from utils_phase_switch import *
 import subprocess
 
 
-def load_data(spaceranger_dir, snp_dir, filtergenelist_file, normalidx_file, filter_logfcthreshold):
+def load_data(spaceranger_dir, snp_dir, filtergenelist_file, normalidx_file):
     ##### read raw UMI count matrix #####
     if Path(f"{spaceranger_dir}/filtered_feature_bc_matrix.h5").exists():
         adata = sc.read_10x_h5(f"{spaceranger_dir}/filtered_feature_bc_matrix.h5")
@@ -77,21 +78,11 @@ def load_data(spaceranger_dir, snp_dir, filtergenelist_file, normalidx_file, fil
         adata.obs["tumor_annotation"] = "tumor"
         adata.obs["tumor_annotation"][adata.obs.index.isin(normal_barcodes)] = "normal"
         print( adata.obs["tumor_annotation"].value_counts() )
-        # # remove genes with large fold change
-        # sc.pp.normalize_total(adata, target_sum=5000)
-        # sc.pp.log1p(adata)
-        # sc.tl.rank_genes_groups(adata, 'tumor_annotation', reference="normal", method='wilcoxon')
-        # tumor_fc = np.array([x[0] for x in adata.uns['rank_genes_groups']['logfoldchanges']])
-        # tumor_genes = np.array([x[0] for x in adata.uns['rank_genes_groups']['names']])
-        # adata.var = adata.var.join( pd.DataFrame({"logfoldchanges":tumor_fc}, index=tumor_genes) )
-        # print(f"Filter out {np.sum(np.abs(tumor_fc) > filter_logfcthreshold)} genes with absolute logFC between tumor and normal > {filter_logfcthreshold}")
-        # adata = adata[:, (np.abs(adata.var["logfoldchanges"]) <= filter_logfcthreshold)]
-        # print(adata)
     
     return adata, cell_snp_Aallele, cell_snp_Ballele, snp_gene_list, unique_snp_ids
 
 
-def load_joint_data(input_filelist, snp_dir, filtergenelist_file, normalidx_file, filter_logfcthreshold):
+def load_joint_data(input_filelist, snp_dir, filtergenelist_file, normalidx_file):
     ##### read meta sample info #####
     df_meta = pd.read_csv(input_filelist, sep="\t", header=None, names=["bam", "sample_id", "spaceranger_dir"])
     df_barcode = pd.read_csv(f"{snp_dir}/barcodes.txt", header=None, names=["combined_barcode"])
@@ -175,16 +166,6 @@ def load_joint_data(input_filelist, snp_dir, filtergenelist_file, normalidx_file
         adata.obs["tumor_annotation"] = "tumor"
         adata.obs["tumor_annotation"][adata.obs.index.isin(normal_barcodes)] = "normal"
         print( adata.obs["tumor_annotation"].value_counts() )
-        # # remove genes with large fold change
-        # sc.pp.normalize_total(adata, target_sum=5000)
-        # sc.pp.log1p(adata)
-        # sc.tl.rank_genes_groups(adata, 'tumor_annotation', reference="normal", method='wilcoxon')
-        # tumor_fc = np.array([x[0] for x in adata.uns['rank_genes_groups']['logfoldchanges']])
-        # tumor_genes = np.array([x[0] for x in adata.uns['rank_genes_groups']['names']])
-        # adata.var = adata.var.join( pd.DataFrame({"logfoldchanges":tumor_fc}, index=tumor_genes) )
-        # print(f"Filter out {np.sum(np.abs(tumor_fc) > filter_logfcthreshold)} genes with absolute logFC between tumor and normal > {filter_logfcthreshold}")
-        # adata = adata[:, (np.abs(adata.var["logfoldchanges"]) <= filter_logfcthreshold)]
-        # print(adata)
 
     return adata, cell_snp_Aallele, cell_snp_Ballele, snp_gene_list, unique_snp_ids
 
@@ -362,6 +343,7 @@ def convert_to_hmm_input_v2(adata, cell_snp_Aallele, cell_snp_Ballele, snp_gene_
     single_X[idx_snps, 1, :] = cell_snp_Aallele.T
     single_total_bb_RD[idx_snps, :] = (cell_snp_Aallele + cell_snp_Ballele).T
     # RDR
+    x_gene_list = [""] * len(sorted_chr_pos) #!
     combined_snp_gene_list = [snp_gene_list[map_unique_snp_ids[map_id[x]]] if map_id[x] in map_unique_snp_ids else map_id[x] for i,x in enumerate(sorted_chr_pos)]
     rdridx_X = []
     rdridx_gene = []
@@ -370,6 +352,7 @@ def convert_to_hmm_input_v2(adata, cell_snp_Aallele, cell_snp_Ballele, snp_gene_
             if i == 0 or g != combined_snp_gene_list[i-1]:
                 rdridx_X.append(i)
                 rdridx_gene.append( gene_mapper[g] )
+                x_gene_list[i] = g #!
     rdridx_X = np.array(rdridx_X)
     rdridx_gene = np.array(rdridx_gene)
     single_X[rdridx_X,0,:] = adata.layers["count"][:, rdridx_gene].T
@@ -386,18 +369,20 @@ def convert_to_hmm_input_v2(adata, cell_snp_Aallele, cell_snp_Ballele, snp_gene_
     bin_single_base_nb_mean = np.zeros((int(single_base_nb_mean.shape[0] / tmpbinsize), single_base_nb_mean.shape[1]))
     bin_single_total_bb_RD = np.zeros((int(single_total_bb_RD.shape[0] / tmpbinsize), single_total_bb_RD.shape[1]), dtype=int)
     bin_sorted_chr_pos = []
-    x_gene_list = []
+    bin_x_gene_list = []
     for i in range(bin_single_X.shape[0]):
         t = i*tmpbinsize+tmpbinsize if i + 1 < bin_single_X.shape[0] else single_X.shape[0]
         bin_single_X[i,:,:] = np.sum(single_X[(i*tmpbinsize):t, :, :], axis=0)
         bin_single_base_nb_mean[i,:] = np.sum(single_base_nb_mean[(i*tmpbinsize):t, :], axis=0)
         bin_single_total_bb_RD[i,:] = np.sum(single_total_bb_RD[(i*tmpbinsize):t, :], axis=0)
         bin_sorted_chr_pos.append( sorted_chr_pos[(i*tmpbinsize)] )
-        x_gene_list.append( " ".join(list(set( combined_snp_gene_list[(i*tmpbinsize):t] ))) )
+        this_genes = [g for g in x_gene_list[(i*tmpbinsize):t] if g != ""]
+        bin_x_gene_list.append( " ".join(this_genes) )
     single_X = bin_single_X
     single_base_nb_mean = bin_single_base_nb_mean
     single_total_bb_RD = bin_single_total_bb_RD
     sorted_chr_pos = bin_sorted_chr_pos
+    x_gene_list = bin_x_gene_list
 
     # phase switch probability from genetic distance
     sorted_chr = np.array([x[0] for x in sorted_chr_pos])
@@ -472,7 +457,7 @@ def convert_to_hmm_input_slidedna(cell_snp_Aallele, cell_snp_Ballele, unique_snp
 #             bin_single_total_bb_RD.append( np.sum(single_total_bb_RD[s:t, :], axis=0) )
 #             bin_sorted_chr_pos.append( sorted_chr_pos[s] )
 #             # this_genes = sum([ x_gene_list[i].split(" ") for i in range(s,t) ], [])
-#             bin_x_gene_list.append( " ".join(list(set(this_genes))) )
+#             bin_x_gene_list.append( " ".join(this_genes) )
 #             s = t
 #         cumlen += le
 #     single_X = np.stack([ np.vstack([bin_single_X_rdr[i], bin_single_X_baf[i]]) for i in range(len(bin_single_X_rdr)) ])
@@ -514,7 +499,8 @@ def perform_binning(lengths, single_X, single_base_nb_mean, single_total_bb_RD, 
             # initial bin with certain number of SNPs
             t = min(s + binsize, cumlen + le)
             # expand binsize by minimum number of genes
-            this_genes = set( sum([ x_gene_list[i].split(" ") for i in range(s,t) ], []) )
+            this_genes = sum([ x_gene_list[i].split(" ") for i in range(s,t) ], [])
+            this_genes = [z for z in this_genes if z!=""]
             # while (t < cumlen + le) and (len(this_genes) < min_genes_perbin):
             #     t += 1
             #     this_genes = this_genes | set(x_gene_list[t].split(" "))
@@ -526,7 +512,7 @@ def perform_binning(lengths, single_X, single_base_nb_mean, single_total_bb_RD, 
             bin_single_total_bb_RD.append( np.sum(single_total_bb_RD[s:t, :], axis=0) )
             bin_sorted_chr_pos.append( sorted_chr_pos[s] )
             # this_genes = sum([ x_gene_list[i].split(" ") for i in range(s,t) ], [])
-            bin_x_gene_list.append( " ".join(list(set(this_genes))) )
+            bin_x_gene_list.append( " ".join(this_genes) )
             s = t
         cumlen += le
     single_X = np.stack([ np.vstack([bin_single_X_rdr[i], bin_single_X_baf[i]]) for i in range(len(bin_single_X_rdr)) ])
@@ -551,6 +537,52 @@ def perform_binning(lengths, single_X, single_base_nb_mean, single_total_bb_RD, 
         single_base_nb_mean[(i*rdrbinsize+1):(i*rdrbinsize+rdrbinsize), :] = 0
 
     return lengths, single_X, single_base_nb_mean, single_total_bb_RD, log_sitewise_transmat, sorted_chr_pos, x_gene_list
+
+
+def filter_de_genes(adata, x_gene_list, logfcthreshold=4, quantile_threshold=80):
+    assert "normal_candidate" in adata.obs
+    # clone = np.array(["normal"] * adata.shape[0])
+    # clone[~adata.obs["normal_candidate"]] = "tumor"
+    tmpadata = adata.copy()
+    # tmpadata.obs["clone"] = clone
+    #
+    map_gene_adatavar = {}
+    map_gene_umi = {}
+    for i,x in enumerate(adata.var.index):
+        map_gene_adatavar[x] = i
+        map_gene_umi[x] = np.sum(adata.layers["count"][:,i])
+    #
+    umi_threshold = np.percentile( np.sum(adata.layers["count"], axis=0), quantile_threshold )
+    #
+    sc.pp.filter_cells(tmpadata, min_genes=200)
+    sc.pp.filter_genes(tmpadata, min_cells=10)
+    #sc.pp.filter_genes(tmpadata, min_counts=200)
+    sc.pp.normalize_total(tmpadata, target_sum=1e4)
+    sc.pp.log1p(tmpadata)
+    # new added
+    sc.pp.pca(tmpadata, n_comps=4)
+    kmeans = KMeans(n_clusters=2, random_state=0).fit(tmpadata.X)
+    kmeans_labels = kmeans.predict(tmpadata.X)
+    idx_kmeans_label = np.argmax(np.bincount( kmeans_labels[tmpadata.obs["normal_candidate"]], minlength=2 ))
+    clone = np.array(["normal"] * tmpadata.shape[0])
+    clone[ (kmeans_labels != idx_kmeans_label) & (~tmpadata.obs["normal_candidate"]) ] = "tumor"
+    tmpadata.obs["clone"] = clone
+    # end added
+    sc.tl.rank_genes_groups(tmpadata, 'clone', groups=["tumor"], reference="normal", method='wilcoxon')
+    genenames = np.array([ x[0] for x in tmpadata.uns["rank_genes_groups"]["names"] ])
+    logfc = np.array([ x[0] for x in tmpadata.uns["rank_genes_groups"]["logfoldchanges"] ])
+    geneumis = np.array([ map_gene_umi[x] for x in genenames])
+    # filtered_out_set = set(list(genenames[ np.abs(logfc) > logfcthreshold ]))
+    filtered_out_set = set(list(genenames[ (np.abs(logfc) > logfcthreshold) & (geneumis > umi_threshold) ]))
+    print(f"Filter out {len(filtered_out_set)} DE genes")
+    #
+    new_single_X_rdr = np.zeros((len(x_gene_list), adata.shape[0]))
+    for i,x in enumerate(x_gene_list):
+        g_list = [z for z in x.split() if z != ""]
+        idx_genes = np.array([ map_gene_adatavar[g] for g in g_list if (not g in filtered_out_set) and (g in map_gene_adatavar)])
+        if len(idx_genes) > 0:
+            new_single_X_rdr[i, :] = np.sum(adata.layers["count"][:, idx_genes], axis=1)
+    return new_single_X_rdr
 
 
 def get_lengths_by_arm(sorted_chr_pos, centromere_file):

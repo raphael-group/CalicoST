@@ -206,7 +206,7 @@ def merge_pseudobulk_by_index(single_X, single_base_nb_mean, single_total_bb_RD,
     return X, base_nb_mean, total_bb_RD
 
 
-def hmrf_reassignment(single_X, single_base_nb_mean, single_total_bb_RD, res, pred, adjacency_mat, prev_assignment, relative_rdr_weight, spatial_weight=1.0/6):
+def hmrf_reassignment(single_X, single_base_nb_mean, single_total_bb_RD, res, pred, adjacency_mat, prev_assignment, spatial_weight=1.0/6):
     N = single_X.shape[2]
     n_obs = single_X.shape[0]
     n_clones = res["new_log_mu"].shape[1]
@@ -218,7 +218,7 @@ def hmrf_reassignment(single_X, single_base_nb_mean, single_total_bb_RD, res, pr
         for c in range(n_clones):
             tmp_log_emission_rdr, tmp_log_emission_baf = compute_emission_probability_nb_betabinom_v2(single_X[:,:,i:(i+1)], \
                                                 single_base_nb_mean[:,i:(i+1)], res["new_log_mu"][:,c:(c+1)], res["new_alphas"][:,c:(c+1)], \
-                                                single_total_bb_RD[:,i:(i+1)], res["new_p_binom"][:,c:(c+1)], res["new_taus"][:,c:(c+1)], relative_rdr_weight)
+                                                single_total_bb_RD[:,i:(i+1)], res["new_p_binom"][:,c:(c+1)], res["new_taus"][:,c:(c+1)])
             if np.sum(single_base_nb_mean[:,i:(i+1)] > 0) > 0 and np.sum(single_total_bb_RD[:,i:(i+1)] > 0) > 0:
                 ratio_nonzeros = 1.0 * np.sum(single_total_bb_RD[:,i:(i+1)] > 0) / np.sum(single_base_nb_mean[:,i:(i+1)] > 0)
                 single_llf[i,c] = ratio_nonzeros * np.sum(tmp_log_emission_rdr[pred, np.arange(n_obs), 0]) + np.sum(tmp_log_emission_baf[pred, np.arange(n_obs), 0])
@@ -237,7 +237,7 @@ def hmrf_reassignment(single_X, single_base_nb_mean, single_total_bb_RD, res, pr
     return new_assignment, single_llf, total_llf
 
 
-def hmrf_reassignment_posterior(single_X, single_base_nb_mean, single_total_bb_RD, res, adjacency_mat, prev_assignment, relative_rdr_weight, spatial_weight=1.0/6):
+def hmrf_reassignment_posterior(single_X, single_base_nb_mean, single_total_bb_RD, res, adjacency_mat, prev_assignment, spatial_weight=1.0/6):
     N = single_X.shape[2]
     n_obs = single_X.shape[0]
     n_clones = res["new_log_mu"].shape[1]
@@ -249,7 +249,7 @@ def hmrf_reassignment_posterior(single_X, single_base_nb_mean, single_total_bb_R
         for c in range(n_clones):
             tmp_log_emission_rdr, tmp_log_emission_baf = compute_emission_probability_nb_betabinom_v2(single_X[:,:,i:(i+1)], \
                                                 single_base_nb_mean[:,i:(i+1)], res["new_log_mu"][:,c:(c+1)], res["new_alphas"][:,c:(c+1)], \
-                                                single_total_bb_RD[:,i:(i+1)], res["new_p_binom"][:,c:(c+1)], res["new_taus"][:,c:(c+1)], relative_rdr_weight)
+                                                single_total_bb_RD[:,i:(i+1)], res["new_p_binom"][:,c:(c+1)], res["new_taus"][:,c:(c+1)])
             if np.sum(single_base_nb_mean[:,i:(i+1)] > 0) > 0 and np.sum(single_total_bb_RD[:,i:(i+1)] > 0) > 0:
                 ratio_nonzeros = 1.0 * np.sum(single_total_bb_RD[:,i:(i+1)] > 0) / np.sum(single_base_nb_mean[:,i:(i+1)] > 0)
                 single_llf[i,c] = ratio_nonzeros * np.sum( scipy.special.logsumexp(tmp_log_emission_rdr[:,:, 0] + res["log_gamma"], axis=0) ) + np.sum( scipy.special.logsumexp(tmp_log_emission_baf[:,:, 0] + res["log_gamma"], axis=0) )
@@ -268,7 +268,7 @@ def hmrf_reassignment_posterior(single_X, single_base_nb_mean, single_total_bb_R
     return new_assignment, single_llf, total_llf
 
 
-def aggr_hmrf_reassignment(single_X, single_base_nb_mean, single_total_bb_RD, res, pred, smooth_mat, adjacency_mat, prev_assignment, relative_rdr_weight, spatial_weight=1.0/6):
+def aggr_hmrf_reassignment(single_X, single_base_nb_mean, single_total_bb_RD, res, pred, smooth_mat, adjacency_mat, prev_assignment, spatial_weight=1.0/6):
     N = single_X.shape[2]
     n_obs = single_X.shape[0]
     n_clones = res["new_log_mu"].shape[1]
@@ -282,7 +282,7 @@ def aggr_hmrf_reassignment(single_X, single_base_nb_mean, single_total_bb_RD, re
         for c in range(n_clones):
             tmp_log_emission_rdr, tmp_log_emission_baf = compute_emission_probability_nb_betabinom_v2( np.sum(single_X[:,:,idx], axis=2, keepdims=True), \
                                                 np.sum(single_base_nb_mean[:,idx], axis=1, keepdims=True), res["new_log_mu"][:,c:(c+1)], res["new_alphas"][:,c:(c+1)], \
-                                                np.sum(single_total_bb_RD[:,idx], axis=1, keepdims=True), res["new_p_binom"][:,c:(c+1)], res["new_taus"][:,c:(c+1)], relative_rdr_weight)
+                                                np.sum(single_total_bb_RD[:,idx], axis=1, keepdims=True), res["new_p_binom"][:,c:(c+1)], res["new_taus"][:,c:(c+1)])
             if np.sum(single_base_nb_mean[:,idx] > 0) > 0 and np.sum(single_total_bb_RD[:,idx] > 0) > 0:
                 ratio_nonzeros = 1.0 * np.sum(single_total_bb_RD[:,idx] > 0) / np.sum(single_base_nb_mean[:,idx] > 0)
                 single_llf[i,c] = ratio_nonzeros * np.sum(tmp_log_emission_rdr[pred, np.arange(n_obs), 0]) + np.sum(tmp_log_emission_baf[pred, np.arange(n_obs), 0])
@@ -302,7 +302,7 @@ def aggr_hmrf_reassignment(single_X, single_base_nb_mean, single_total_bb_RD, re
     return new_assignment, single_llf, total_llf
 
 
-def hmrf_reassignment_concatenate(single_X, single_base_nb_mean, single_total_bb_RD, res, pred, adjacency_mat, prev_assignment, relative_rdr_weight, spatial_weight=1.0/6):
+def hmrf_reassignment_concatenate(single_X, single_base_nb_mean, single_total_bb_RD, res, pred, adjacency_mat, prev_assignment, spatial_weight=1.0/6):
     N = single_X.shape[2]
     n_obs = single_X.shape[0]
     n_clones = int(len(pred) / n_obs)
@@ -313,7 +313,7 @@ def hmrf_reassignment_concatenate(single_X, single_base_nb_mean, single_total_bb
     for i in trange(N):
         tmp_log_emission_rdr, tmp_log_emission_baf = compute_emission_probability_nb_betabinom_v2(single_X[:,:,i:(i+1)], \
                                             single_base_nb_mean[:,i:(i+1)], res["new_log_mu"], res["new_alphas"], \
-                                            single_total_bb_RD[:,i:(i+1)], res["new_p_binom"], res["new_taus"], relative_rdr_weight)
+                                            single_total_bb_RD[:,i:(i+1)], res["new_p_binom"], res["new_taus"])
         for c in range(n_clones):
             this_pred = pred[(c*n_obs):(c*n_obs+n_obs)]
             if np.sum(single_base_nb_mean[:,i:(i+1)] > 0) > 0 and np.sum(single_total_bb_RD[:,i:(i+1)] > 0) > 0:
@@ -334,7 +334,7 @@ def hmrf_reassignment_concatenate(single_X, single_base_nb_mean, single_total_bb
     return new_assignment, single_llf, total_llf
 
 
-def hmrf_reassignment_posterior_concatenate(single_X, single_base_nb_mean, single_total_bb_RD, res, adjacency_mat, prev_assignment, relative_rdr_weight, spatial_weight=1.0/6):
+def hmrf_reassignment_posterior_concatenate(single_X, single_base_nb_mean, single_total_bb_RD, res, adjacency_mat, prev_assignment, spatial_weight=1.0/6):
     N = single_X.shape[2]
     n_obs = single_X.shape[0]
     n_clones = np.max(prev_assignment) + 1
@@ -345,7 +345,7 @@ def hmrf_reassignment_posterior_concatenate(single_X, single_base_nb_mean, singl
     for i in trange(N):
         tmp_log_emission_rdr, tmp_log_emission_baf = compute_emission_probability_nb_betabinom_v2(single_X[:,:,i:(i+1)], \
                                             single_base_nb_mean[:,i:(i+1)], res["new_log_mu"], res["new_alphas"], \
-                                            single_total_bb_RD[:,i:(i+1)], res["new_p_binom"], res["new_taus"], relative_rdr_weight)
+                                            single_total_bb_RD[:,i:(i+1)], res["new_p_binom"], res["new_taus"])
         for c in range(n_clones):
             if np.sum(single_base_nb_mean[:,i:(i+1)] > 0) > 0 and np.sum(single_total_bb_RD[:,i:(i+1)] > 0) > 0:
                 ratio_nonzeros = 1.0 * np.sum(single_total_bb_RD[:,i:(i+1)] > 0) / np.sum(single_base_nb_mean[:,i:(i+1)] > 0)
@@ -367,7 +367,7 @@ def hmrf_reassignment_posterior_concatenate(single_X, single_base_nb_mean, singl
     return new_assignment, single_llf, total_llf
 
 
-def aggr_hmrf_reassignment_concatenate(single_X, single_base_nb_mean, single_total_bb_RD, res, pred, smooth_mat, adjacency_mat, prev_assignment, relative_rdr_weight, spatial_weight=1.0/6):
+def aggr_hmrf_reassignment_concatenate(single_X, single_base_nb_mean, single_total_bb_RD, res, pred, smooth_mat, adjacency_mat, prev_assignment, spatial_weight=1.0/6):
     N = single_X.shape[2]
     n_obs = single_X.shape[0]
     n_clones = int(len(pred) / n_obs)
@@ -380,7 +380,7 @@ def aggr_hmrf_reassignment_concatenate(single_X, single_base_nb_mean, single_tot
         # idx = np.append(idx, np.array([i]))
         tmp_log_emission_rdr, tmp_log_emission_baf = compute_emission_probability_nb_betabinom_v2( np.sum(single_X[:,:,idx], axis=2, keepdims=True), \
                                             np.sum(single_base_nb_mean[:,idx], axis=1, keepdims=True), res["new_log_mu"], res["new_alphas"], \
-                                            np.sum(single_total_bb_RD[:,idx], axis=1, keepdims=True), res["new_p_binom"], res["new_taus"], relative_rdr_weight)
+                                            np.sum(single_total_bb_RD[:,idx], axis=1, keepdims=True), res["new_p_binom"], res["new_taus"])
         for c in range(n_clones):
             this_pred = pred[(c*n_obs):(c*n_obs+n_obs)]
             if np.sum(single_base_nb_mean[:,idx] > 0) > 0 and np.sum(single_total_bb_RD[:,idx] > 0) > 0:
@@ -436,7 +436,7 @@ def hmrf_log_likelihood(nodepotential, single_X, single_base_nb_mean, single_tot
     return total_llf
 
 
-def hmrf_reassignment_compositehmm(single_X, single_base_nb_mean, single_total_bb_RD, res, pred, adjacency_mat, prev_assignment, relative_rdr_weight, spatial_weight):
+def hmrf_reassignment_compositehmm(single_X, single_base_nb_mean, single_total_bb_RD, res, pred, adjacency_mat, prev_assignment, spatial_weight):
     # basic dimension info
     N = single_X.shape[2]
     n_obs = single_X.shape[0]
@@ -453,7 +453,7 @@ def hmrf_reassignment_compositehmm(single_X, single_base_nb_mean, single_total_b
         # log emission probability of each composite state, matrix size (2*n_composite_states, n_obs)
         tmp_log_emission = compute_emission_probability_nb_betabinom_composite(single_X[:,:,i:(i+1)], res["state_tuples"], \
             single_base_nb_mean[:,i:(i+1)], res["new_log_mu"], res["new_alphas"], single_total_bb_RD[:,i:(i+1)], \
-            res["new_p_binom"], res["new_taus"], res["new_scalefactors"], relative_rdr_weight)
+            res["new_p_binom"], res["new_taus"], res["new_scalefactors"])
         for c in range(n_clones):
             single_llf[i,c] = np.sum(tmp_log_emission[pred[(c*n_obs):(c*n_obs+n_obs)], np.arange(n_obs)])
         # node potential
@@ -525,116 +525,6 @@ def similarity_components_rdrbaf(baf_profiles, rdr_profiles, res, topk=10, bafth
     return merging_groups, merged_res
 
 
-def similarity_components_baf_neymanpearson(X, base_nb_mean, total_bb_RD, res, sil_threshold=0, topk=10):
-    n_obs = X.shape[0]
-    n_states = res["new_p_binom"].shape[0]
-    n_clones = len(np.unique(res["new_assignment"]))
-    G = nx.Graph()
-    G.add_nodes_from( np.arange(n_clones) )
-    #
-    def eval_neymanpearson(log_emission_baf_c1, pred_c1, log_emission_baf_c2, pred_c2, bidx, n_states, res, p):
-        # Pearson residual vectors under the corresponding state
-        llf_original = np.append(log_emission_baf_c1[pred_c1[bidx], bidx], log_emission_baf_c2[pred_c2[bidx], bidx]).reshape(-1,1)
-        # Pearson residual vectors under the switched state
-        if (res["new_p_binom"][p[0],0] > 0.5) == (res["new_p_binom"][p[1],0] > 0.5):
-            switch_pred_c1 = n_states * (pred_c1 >= n_states) + (pred_c2 % n_states)
-            switch_pred_c2 = n_states * (pred_c2 >= n_states) + (pred_c1 % n_states)
-        else:
-            switch_pred_c1 = n_states * (pred_c1 < n_states) + (pred_c2 % n_states)
-            switch_pred_c2 = n_states * (pred_c2 < n_states) + (pred_c1 % n_states)
-        llf_switch = np.append(log_emission_baf_c1[switch_pred_c1[bidx], bidx], log_emission_baf_c2[switch_pred_c2[bidx], bidx]).reshape(-1,1)
-        # silhouette score
-        return np.mean(llf_original) - np.mean(llf_switch)
-    #
-    log_emission_rdr, log_emission_baf = compute_emission_probability_nb_betabinom_v2(np.vstack([X[:,0,:].flatten("F"), X[:,1,:].flatten("F")]).T.reshape(-1,2,1), \
-        base_nb_mean.flatten("F").reshape(-1,1), res["new_log_mu"], res["new_alphas"], \
-        total_bb_RD.flatten("F").reshape(-1,1), res["new_p_binom"], res["new_taus"])
-    log_emission_rdr = log_emission_rdr.reshape((log_emission_rdr.shape[0], n_obs, n_clones), order="F")
-    log_emission_baf = log_emission_baf.reshape((log_emission_baf.shape[0], n_obs, n_clones), order="F")
-    reshaped_pred = np.argmax(res["log_gamma"], axis=0).reshape((X.shape[2],-1))
-    reshaped_pred_cnv = reshaped_pred % n_states
-    for c1 in range(n_clones):
-        for c2 in range(n_clones):
-            unmergeable_bincount = 0
-            unique_pair_states = [x for x in np.unique(reshaped_pred_cnv[np.array([c1,c2]), :], axis=1).T if x[0] != x[1]]
-            for p in unique_pair_states:
-                bidx = np.where( (reshaped_pred_cnv[c1,:]==p[0]) & (reshaped_pred_cnv[c2,:]==p[1]) )[0]
-                t_neymanpearson = eval_neymanpearson(log_emission_baf[:,:,c1], reshaped_pred[c1,:], log_emission_baf[:,:,c2], reshaped_pred[c2,:], bidx, n_states, res, p)
-                print(p, len(bidx), t_neymanpearson)
-                if t_neymanpearson > sil_threshold:
-                    unmergeable_bincount += len(bidx)
-            if unmergeable_bincount < topk:
-                G.add_edge(c1, c2)
-    merging_groups = [cc for cc in nx.connected_components(G)]
-    merging_groups.sort(key = lambda x:np.min(x))
-    # clone assignment after merging
-    map_clone_id = {}
-    for i,x in enumerate(merging_groups):
-        for z in x:
-            map_clone_id[z] = i
-    new_assignment = np.array([map_clone_id[x] for x in res["new_assignment"]])
-    merged_res = copy.copy(res)
-    merged_res["new_assignment"] = new_assignment
-    merged_res["total_llf"] = np.NAN
-    return NotImplemented
-
-
-def similarity_components_rdrbaf_neymanpearson(X, base_nb_mean, total_bb_RD, res, sil_threshold=0.1, topk=10):
-    n_obs = X.shape[0]
-    n_states = res["new_p_binom"].shape[0]
-    n_clones = len(np.unique(res["new_assignment"]))
-    G = nx.Graph()
-    G.add_nodes_from( np.arange(n_clones) )
-    #
-    def eval_neymanpearson(log_emission_rdr_c1, log_emission_baf_c1, pred_c1, log_emission_rdr_c2, log_emission_baf_c2, pred_c2, bidx, n_states, res, p):
-        # Pearson residual vectors under the corresponding state
-        llf_original = np.append(log_emission_rdr_c1[pred_c1[bidx], bidx] + log_emission_baf_c1[pred_c1[bidx], bidx], \
-            log_emission_rdr_c2[pred_c2[bidx], bidx] + log_emission_baf_c2[pred_c2[bidx], bidx]).reshape(-1,1)
-        # Pearson residual vectors under the switched state
-        if (res["new_p_binom"][p[0],0] > 0.5) == (res["new_p_binom"][p[1],0] > 0.5):
-            switch_pred_c1 = n_states * (pred_c1 >= n_states) + (pred_c2 % n_states)
-            switch_pred_c2 = n_states * (pred_c2 >= n_states) + (pred_c1 % n_states)
-        else:
-            switch_pred_c1 = n_states * (pred_c1 < n_states) + (pred_c2 % n_states)
-            switch_pred_c2 = n_states * (pred_c2 < n_states) + (pred_c1 % n_states)
-        llf_switch = np.append(log_emission_rdr_c1[switch_pred_c1[bidx], bidx] + log_emission_baf_c1[switch_pred_c1[bidx], bidx], \
-            log_emission_rdr_c2[switch_pred_c2[bidx], bidx] + log_emission_baf_c2[switch_pred_c2[bidx], bidx]).reshape(-1,1)
-        # silhouette score
-        return np.mean(llf_original) - np.mean(llf_switch)
-    #
-    log_emission_rdr, log_emission_baf = compute_emission_probability_nb_betabinom_v2(np.vstack([X[:,0,:].flatten("F"), X[:,1,:].flatten("F")]).T.reshape(-1,2,1), \
-        base_nb_mean.flatten("F").reshape(-1,1), res["new_log_mu"], res["new_alphas"], \
-        total_bb_RD.flatten("F").reshape(-1,1), res["new_p_binom"], res["new_taus"])
-    log_emission_rdr = log_emission_rdr.reshape((log_emission_rdr.shape[0], n_obs, n_clones), order="F")
-    log_emission_baf = log_emission_baf.reshape((log_emission_baf.shape[0], n_obs, n_clones), order="F")
-    reshaped_pred = np.argmax(res["log_gamma"], axis=0).reshape((X.shape[2],-1))
-    reshaped_pred_cnv = reshaped_pred % n_states
-    for c1 in range(n_clones):
-        for c2 in range(n_clones):
-            unmergeable_bincount = 0
-            unique_pair_states = [x for x in np.unique(reshaped_pred_cnv[np.array([c1,c2]), :], axis=1).T if x[0] != x[1]]
-            for p in unique_pair_states:
-                bidx = np.where( (reshaped_pred_cnv[c1,:]==p[0]) & (reshaped_pred_cnv[c2,:]==p[1]) )[0]
-                t_neymanpearson = eval_neymanpearson(log_emission_rdr[:,:,c1], log_emission_baf[:,:,c1], reshaped_pred[c1,:], log_emission_rdr[:,:,c2], log_emission_baf[:,:,c2], reshaped_pred[c2,:], bidx, n_states, res, p)
-                print(p, len(bidx), t_neymanpearson)
-                if t_neymanpearson > sil_threshold:
-                    unmergeable_bincount += len(bidx)
-            if unmergeable_bincount < topk:
-                G.add_edge(c1, c2)
-    merging_groups = [cc for cc in nx.connected_components(G)]
-    merging_groups.sort(key = lambda x:np.min(x))
-    # clone assignment after merging
-    map_clone_id = {}
-    for i,x in enumerate(merging_groups):
-        for z in x:
-            map_clone_id[z] = i
-    new_assignment = np.array([map_clone_id[x] for x in res["new_assignment"]])
-    merged_res = copy.copy(res)
-    merged_res["new_assignment"] = new_assignment
-    merged_res["total_llf"] = np.NAN
-    return merged_res
-
-
 def merge_by_minspots(assignment, res, min_spots_thresholds=50, single_tumor_prop=None, threshold=0.5):
     n_clones = len(np.unique(assignment))
     new_assignment = copy.copy(assignment)
@@ -660,188 +550,10 @@ def merge_by_minspots(assignment, res, min_spots_thresholds=50, single_tumor_pro
     return merging_groups, merged_res
 
 
-# def bic_merge_modelselection_concatenate(single_X, lengths, single_base_nb_mean, single_total_bb_RD, log_sitewise_transmat, smooth_mat, adjacency_mat, \
-#     res, params, t, fix_NB_dispersion, shared_NB_dispersion, fix_BB_dispersion, shared_BB_dispersion, max_iter, tol, relative_rdr_weight, spatial_weight):
-#     """
-#     Checking whether the "closest" two clones should be merged under BIC. The degrees of freedom in BIC include number of hidden states across all clones (either original clone partition or after merging).
-
-#     Attributes
-#     ----------
-#     single_X : array, shape (n_observations, n_components, n_spots)
-#         Observed expression UMI count and allele frequency UMI count per single spot.
-
-#     single_base_nb_mean : array, shape (n_observations, n_spots)
-#         Mean expression under diploid state.
-
-#     single_total_bb_RD : array, array, shape (n_observations, n_spots)
-#         SNP-covering reads for both REF and ALT across genes along genome.
-
-#     res : dictionary
-#         HMM parameters including "new_log_mu", "new_alphas", "new_p_binom", "new_taus", etc.
-
-#     smooth_mat, adjacency_mat : sparse matrix, shape (n_spots, n_spots)
-#         Matrix to indicate which spots to pool for enhancing signal, and which spots to consider for HMRF edge potential.
-
-#     prev_assignment : array, shape (n_spots,)
-#         Clone assignment of last iteration.
-
-#     Returns
-#     ----------
-#     merge_performed : boolean
-#         Indicator for whether merging is performed under BIC criteria. For more details on BIC of HMRF.
-#         See https://www.proquest.com/docview/304538216?pq-origsite=gscholar&fromopenview=true p75 and https://ieeexplore.ieee.org/document/1227985 equation (20).
-
-#     original_bic : float
-#         BIC under the original model
-
-#     merged_bic :float
-#         BIC under the merged model
-
-#     merged_res : None or dictonary
-#         Dictonary will include keys 'new_log_mu', 'new_alphas', 'new_p_binom', 'new_taus', 'new_log_startprob', 'new_log_transmat', 'log_gamma', 'pred_cnv', 'llf', 'prev_assignment', 'new_assignment', 'total_llf'.    
-#     """
-#     N = single_X.shape[2]
-#     n_obs = single_X.shape[0]
-#     n_clones = int(len(res["pred_cnv"]) / n_obs)
-#     n_states = res["new_p_binom"].shape[0]
-#     original_bic = -2 * res["total_llf"] + (n_clones * n_obs + n_states * 2) * np.log(single_X.shape[0] * single_X.shape[2])
-#     #
-#     # determine the "closest" two clones
-#     baf_profiles = np.array([ res["new_p_binom"][res["pred_cnv"][(c*n_obs):(c*n_obs+n_obs)], 0] for c in range(n_clones) ])
-#     pdistances = scipy.spatial.distance.squareform( scipy.spatial.distance.pdist(baf_profiles) )
-#     np.fill_diagonal(pdistances, np.max(pdistances)+1)
-#     closest_clones = np.unravel_index(np.argmin(pdistances), pdistances.shape)
-#     #
-#     # re-estimating parameters under the merged clone pseudobulk
-#     tmpmap_clone_label = {c:c if c <= max(closest_clones) else c-1 for c in range(n_clones)}
-#     tmpmap_clone_label[max(closest_clones)] = min(closest_clones)
-#     tmpprev_assignment = np.array([ tmpmap_clone_label[x] for x in res["new_assignment"] ])
-#     tmpclone_index = [np.where(tmpprev_assignment == c)[0] for c in range(len(tmpmap_clone_label) - 1)]
-#     # re-assigning spots to clones under re-estimated parameters and tmpprev_assignment
-#     tmpX, tmpbase_nb_mean, tmptotal_bb_RD = merge_pseudobulk_by_index(single_X, single_base_nb_mean, single_total_bb_RD, tmpclone_index)
-#     tmpres = pipeline_baum_welch(None, np.vstack([tmpX[:,0,:].flatten("F"), tmpX[:,1,:].flatten("F")]).T.reshape(-1,2,1), np.tile(lengths, tmpX.shape[2]), n_states, \
-#         tmpbase_nb_mean.flatten("F").reshape(-1,1), tmptotal_bb_RD.flatten("F").reshape(-1,1),  np.tile(log_sitewise_transmat, tmpX.shape[2]), params=params, t=t, random_state=0, \
-#         fix_NB_dispersion=True, shared_NB_dispersion=True, fix_BB_dispersion=True, shared_BB_dispersion=True, \
-#         init_log_mu=res["new_log_mu"], init_p_binom=res["new_p_binom"], init_alphas=res["new_alphas"], init_taus=res["new_taus"], \
-#         is_diag=True, relative_rdr_weight=relative_rdr_weight, max_iter=max_iter, tol=tol)
-#     # re-assigning spots to clones under re-estimated parameters and tmpprev_assignment
-#     tmppred = np.argmax(tmpres["log_gamma"], axis=0)
-#     tmpnew_assignment, _, tmptotal_llf = aggr_hmrf_reassignment_concatenate(single_X, single_base_nb_mean, single_total_bb_RD, tmpres, tmppred, \
-#         smooth_mat, adjacency_mat, tmpprev_assignment, relative_rdr_weight, spatial_weight=spatial_weight)
-#     # compute merged bic
-#     merged_bic = -2 * tmptotal_llf + ((n_clones - 1) * n_obs + n_states * 2) * np.log(single_X.shape[0] * single_X.shape[2])
-#     #
-#     # decide whether to merge clone
-#     if merged_bic < original_bic:
-#         merge_performed = True
-#         merged_res = {'new_log_mu':tmpres["new_log_mu"], 'new_alphas':tmpres["new_alphas"], 'new_p_binom':tmpres["new_p_binom"], 'new_taus':tmpres["new_taus"], 'new_log_startprob':tmpres["new_log_startprob"], \
-#             'new_log_transmat':tmpres["new_log_transmat"], 'log_gamma':tmpres["log_gamma"], 'pred_cnv':tmppred%n_states, 'llf':tmpres["llf"], 'prev_assignment':tmpprev_assignment, 'new_assignment':tmpnew_assignment, 'total_llf':tmptotal_llf}
-#     else:
-#         merge_performed = False
-#         merged_res = None
-#     return merge_performed, merged_res, original_bic, merged_bic
-
-
-# def silhouette_merge_modelselection_concatenate(single_X, single_base_nb_mean, single_total_bb_RD, res, smooth_mat=None):
-#     """
-#     Checking whether the "closest" two clones should be merged under BIC. The degrees of freedom in BIC include number of hidden states across all clones (either original clone partition or after merging).
-
-#     Attributes
-#     ----------
-#     single_X : array, shape (n_observations, n_components, n_spots)
-#         Observed expression UMI count and allele frequency UMI count per single spot.
-
-#     single_base_nb_mean : array, shape (n_observations, n_spots)
-#         Mean expression under diploid state.
-
-#     single_total_bb_RD : array, array, shape (n_observations, n_spots)
-#         SNP-covering reads for both REF and ALT across genes along genome.
-
-#     res : dictionary
-#         HMM parameters including "new_log_mu", "new_alphas", "new_p_binom", "new_taus", etc.
-
-#     smooth_mat, adjacency_mat : sparse matrix, shape (n_spots, n_spots)
-#         Matrix to indicate which spots to pool for enhancing signal, and which spots to consider for HMRF edge potential.
-
-#     prev_assignment : array, shape (n_spots,)
-#         Clone assignment of last iteration.
-
-#     Returns
-#     ----------
-#     merge_performed : boolean
-#         Indicator for whether merging is performed under BIC criteria. For more details on BIC of HMRF.
-#         See https://www.proquest.com/docview/304538216?pq-origsite=gscholar&fromopenview=true p75 and https://ieeexplore.ieee.org/document/1227985 equation (20).
-
-#     original_bic : float
-#         BIC under the original model
-
-#     merged_bic :float
-#         BIC under the merged model
-
-#     merged_res : None or dictonary
-#         Dictonary will include keys 'new_log_mu', 'new_alphas', 'new_p_binom', 'new_taus', 'new_log_startprob', 'new_log_transmat', 'log_gamma', 'pred_cnv', 'llf', 'prev_assignment', 'new_assignment', 'total_llf'.    
-#     """
-#     N = single_X.shape[2]
-#     n_obs = single_X.shape[0]
-#     n_clones = int(len(res["pred_cnv"]) / n_obs)
-#     n_states = res["new_p_binom"].shape[0]
-#     # convert concatenated HMM states to matrix of (n_obs, n_clones)
-#     pred_mat = np.zeros((n_obs, n_clones), dtype=int)
-#     for c in range(n_clones):
-#         pred_mat[:, c] = res["pred_cnv"][(c*n_obs):(c*n_obs+n_obs)]
-#     # unique composite states
-#     uniq_pred_mat = np.unique(pred_mat, axis=0)
-
-#     # enhance count signal by smooth_mat
-#     if not smooth_mat is None:
-#         tmpsingle_X = np.zeros(single_X.shape)
-#         tmpsingle_X[:,0,:] = single_X[:,0,:] @ smooth_mat
-#         tmpsingle_X[:,1,:] = single_X[:,1,:] @ smooth_mat
-#         tmpsingle_base_nb_mean = single_base_nb_mean @ smooth_mat
-#         tmpsingle_total_bb_RD = single_total_bb_RD @ smooth_mat
-#         # keep only non-overlapping windows
-#         idx_nonoverlapping = []
-#         idx_overlap = set()
-#         for i in range(N):
-#             if not (i in idx_overlap):
-#                 idx_nonoverlapping.append(i)
-#                 idx_overlap = idx_overlap | set(list( smooth_mat[i,:].nonzero()[1] ))
-#         idx_nonoverlapping = np.array(idx_nonoverlapping)
-#         tmpsingle_X = tmpsingle_X[:, :, idx_nonoverlapping]
-#         tmpsingle_base_nb_mean = tmpsingle_base_nb_mean[:, idx_nonoverlapping]
-#         tmpsingle_total_bb_RD = tmpsingle_total_bb_RD[:, idx_nonoverlapping]
-#         tmpnew_assignment = res["new_assignment"][idx_nonoverlapping]
-#     else:
-#         idx_nonoverlapping = np.arange(N)
-
-#     # aggregate counts for each composite state for each spot
-#     n_composite_states = uniq_pred_mat.shape[0]
-#     per_state_counts = np.zeros((n_composite_states, len(idx_nonoverlapping)))
-#     per_state_nb_mean = np.zeros((n_composite_states, len(idx_nonoverlapping)))
-#     per_state_Ballele = np.zeros((n_composite_states, len(idx_nonoverlapping)))
-#     per_state_total = np.zeros((n_composite_states, len(idx_nonoverlapping)))
-#     for i,statevec in enumerate(uniq_pred_mat):
-#         idx = np.where( np.sum(uniq_pred_mat - statevec.reshape(1,-1), axis=1) == n_clones )[0]
-#         per_state_counts[i,:] = np.sum(tmpsingle_X[idx,0,:], axis=0)
-#         per_state_nb_mean[i,:] = np.sum(tmpsingle_base_nb_mean[idx,:], axis=0)
-#         for c in range(n_clones):
-#             idx_spots = np.where(tmpnew_assignment == c)[0]
-#             s = c * n_obs
-#             this_phase = (np.argmax(res["log_gamma"][:, s+idx], axis=0) < n_states)
-#             per_state_Ballele[i, idx_spots] = this_phase.dot(tmpsingle_X[idx, 1, :][:, idx_spots]) + (1-this_phase).dot(tmpsingle_total_bb_RD[idx,:][:,idx_spots] - tmpsingle_X[idx, 1, :][:, idx_spots])
-#         per_state_total[i,:] = np.sum(tmpsingle_total_bb_RD[idx,:], axis=0)
-    
-#     # silhouette score
-#     X = np.vstack([np.log1p(1.0 * per_state_counts / per_state_nb_mean), 1.0 * per_state_Ballele / per_state_total]).T
-#     X[np.isnan(X)] = 0
-#     score = silhouette_score(X, labels=tmpnew_assignment)
-#     return score
-
-
 def hmrf_pipeline(outdir, single_X, lengths, single_base_nb_mean, single_total_bb_RD, initial_clone_index, \
     n_states, log_sitewise_transmat, coords=None, smooth_mat=None, adjacency_mat=None, max_iter_outer=5, nodepotential="max", params="stmp", t=1-1e-6, random_state=0, \
     init_log_mu=None, init_p_binom=None, init_alphas=None, init_taus=None,\
-    fix_NB_dispersion=False, shared_NB_dispersion=True, fix_BB_dispersion=False, shared_BB_dispersion=True, relative_rdr_weight=0.3, \
+    fix_NB_dispersion=False, shared_NB_dispersion=True, fix_BB_dispersion=False, shared_BB_dispersion=True, \
     is_diag=True, max_iter=100, tol=1e-4, unit_xsquared=9, unit_ysquared=3, spatial_weight=1.0/6):
     # spot adjacency matric
     assert not (coords is None and adjacency_mat is None)
@@ -875,19 +587,18 @@ def hmrf_pipeline(outdir, single_X, lengths, single_base_nb_mean, single_total_b
                               base_nb_mean, total_bb_RD, log_sitewise_transmat, params=params, t=t, random_state=random_state, \
                               fix_NB_dispersion=fix_NB_dispersion, shared_NB_dispersion=shared_NB_dispersion, \
                               fix_BB_dispersion=fix_BB_dispersion, shared_BB_dispersion=shared_BB_dispersion, \
-                              relative_rdr_weight=relative_rdr_weight, is_diag=is_diag, \
-                              init_log_mu=last_log_mu, init_p_binom=last_p_binom, init_alphas=last_alphas, init_taus=last_taus, max_iter=max_iter, tol=tol)
+                              is_diag=is_diag, init_log_mu=last_log_mu, init_p_binom=last_p_binom, init_alphas=last_alphas, init_taus=last_taus, max_iter=max_iter, tol=tol)
             pred = np.argmax(res["log_gamma"], axis=0)
             # clone assignmment
             if nodepotential == "max":
                 new_assignment, single_llf, total_llf = aggr_hmrf_reassignment(single_X, single_base_nb_mean, single_total_bb_RD, res, pred, \
-                    smooth_mat, adjacency_mat, last_assignment, relative_rdr_weight, spatial_weight=spatial_weight)
+                    smooth_mat, adjacency_mat, last_assignment, spatial_weight=spatial_weight)
             elif nodepotential == "weighted_sum":
                 new_assignment, single_llf, total_llf = hmrf_reassignment_posterior(single_X, single_base_nb_mean, single_total_bb_RD, res, \
-                    adjacency_mat, last_assignment, relative_rdr_weight, spatial_weight=spatial_weight)
+                    adjacency_mat, last_assignment, spatial_weight=spatial_weight)
             # elif nodepotential == "test_sum":
             #     new_assignment, single_llf, total_llf = aggr_hmrf_reassignment(single_X, single_base_nb_mean, single_total_bb_RD, res, pred, \
-            #         smooth_mat, adjacency_mat, last_assignment, relative_rdr_weight, spatial_weight=spatial_weight)
+            #         smooth_mat, adjacency_mat, last_assignment, spatial_weight=spatial_weight)
             else:
                 raise Exception("Unknown mode for nodepotential!")
             res["prev_assignment"] = last_assignment
@@ -925,8 +636,7 @@ def hmrf_concatenate_pipeline(outdir, prefix, single_X, lengths, single_base_nb_
     coords=None, smooth_mat=None, adjacency_mat=None, max_iter_outer=5, nodepotential="max", params="stmp", t=1-1e-6, random_state=0, \
     init_log_mu=None, init_p_binom=None, init_alphas=None, init_taus=None,\
     fix_NB_dispersion=False, shared_NB_dispersion=True, fix_BB_dispersion=False, shared_BB_dispersion=True, \
-    relative_rdr_weight=1.0, is_diag=True, \
-    max_iter=100, tol=1e-4, unit_xsquared=9, unit_ysquared=3, spatial_weight=1.0/6):
+    is_diag=True, max_iter=100, tol=1e-4, unit_xsquared=9, unit_ysquared=3, spatial_weight=1.0/6):
     # spot adjacency matric
     assert not (coords is None and adjacency_mat is None)
     if adjacency_mat is None:
@@ -968,19 +678,18 @@ def hmrf_concatenate_pipeline(outdir, prefix, single_X, lengths, single_base_nb_
             res = pipeline_baum_welch(None, np.vstack([X[:,0,:].flatten("F"), X[:,1,:].flatten("F")]).T.reshape(-1,2,1), np.tile(lengths, X.shape[2]), n_states, \
                             base_nb_mean.flatten("F").reshape(-1,1), total_bb_RD.flatten("F").reshape(-1,1),  np.tile(log_sitewise_transmat, X.shape[2]), params=params, t=t, random_state=random_state, \
                             fix_NB_dispersion=fix_NB_dispersion, shared_NB_dispersion=shared_NB_dispersion, fix_BB_dispersion=fix_BB_dispersion, shared_BB_dispersion=shared_BB_dispersion, \
-                            is_diag=is_diag, relative_rdr_weight=relative_rdr_weight, \
-                            init_log_mu=last_log_mu, init_p_binom=last_p_binom, init_alphas=last_alphas, init_taus=last_taus, max_iter=max_iter, tol=tol)
+                            is_diag=is_diag, init_log_mu=last_log_mu, init_p_binom=last_p_binom, init_alphas=last_alphas, init_taus=last_taus, max_iter=max_iter, tol=tol)
             pred = np.argmax(res["log_gamma"], axis=0)
             # clone assignmment
             if nodepotential == "max":
                 new_assignment, single_llf, total_llf = aggr_hmrf_reassignment_concatenate(single_X, single_base_nb_mean, single_total_bb_RD, res, pred, \
-                    smooth_mat, adjacency_mat, last_assignment, relative_rdr_weight, spatial_weight=spatial_weight)
+                    smooth_mat, adjacency_mat, last_assignment, spatial_weight=spatial_weight)
             elif nodepotential == "weighted_sum":
                 new_assignment, single_llf, total_llf = hmrf_reassignment_posterior_concatenate(single_X, single_base_nb_mean, single_total_bb_RD, res, \
-                    adjacency_mat, last_assignment, relative_rdr_weight, spatial_weight=spatial_weight)
+                    adjacency_mat, last_assignment, spatial_weight=spatial_weight)
             # elif nodepotential == "test_sum":
             #     new_assignment, single_llf, total_llf = aggr_hmrf_reassignment_concatenate(single_X, single_base_nb_mean, single_total_bb_RD, res, pred, \
-            #         smooth_mat, adjacency_mat, last_assignment, relative_rdr_weight, spatial_weight=spatial_weight)
+            #         smooth_mat, adjacency_mat, last_assignment, spatial_weight=spatial_weight)
             else:
                 raise Exception("Unknown mode for nodepotential!")
             res["prev_assignment"] = last_assignment
@@ -1009,7 +718,7 @@ def hmrf_concatenate_pipeline(outdir, prefix, single_X, lengths, single_base_nb_
             print("outer iteration {}: difference between BetaBinom parameters = {}".format( r, np.mean(np.abs(last_p_binom-res["new_p_binom"])) ))
         print("outer iteration {}: ARI between assignment = {}".format( r, adjusted_rand_score(last_assignment, res["new_assignment"]) ))
         # if np.all( last_assignment == res["new_assignment"] ):
-        if adjusted_rand_score(last_assignment, res["new_assignment"]) > 0.99:
+        if adjusted_rand_score(last_assignment, res["new_assignment"]) > 0.99 or len(np.unique(res["new_assignment"])) == 1:
             break
         last_log_mu = res["new_log_mu"]
         last_p_binom = res["new_p_binom"]

@@ -243,7 +243,7 @@ def hmrf_pipeline_mix(outdir, single_X, lengths, single_base_nb_mean, single_tot
         last_assignment = res["new_assignment"]
 
 
-def hmrfmix_reassignment_concatenate(single_X, single_base_nb_mean, single_total_bb_RD, single_tumor_prop, res, pred, adjacency_mat, prev_assignment, relative_rdr_weight, spatial_weight):
+def hmrfmix_reassignment_concatenate(single_X, single_base_nb_mean, single_total_bb_RD, single_tumor_prop, res, pred, adjacency_mat, prev_assignment, spatial_weight):
     N = single_X.shape[2]
     n_obs = single_X.shape[0]
     n_clones = int(len(pred) / n_obs)
@@ -275,7 +275,7 @@ def hmrfmix_reassignment_concatenate(single_X, single_base_nb_mean, single_total
     return new_assignment, single_llf, total_llf
 
 
-# def hmrfmix_reassignment_concatenate(single_X, single_base_nb_mean, single_total_bb_RD, single_tumor_prop, res, pred, adjacency_mat, prev_assignment, relative_rdr_weight, spatial_weight, threshold=0.5):
+# def hmrfmix_reassignment_concatenate(single_X, single_base_nb_mean, single_total_bb_RD, single_tumor_prop, res, pred, adjacency_mat, prev_assignment, spatial_weight, threshold=0.5):
 #     N = single_X.shape[2]
 #     n_obs = single_X.shape[0]
 #     n_clones = int(len(pred) / n_obs)
@@ -328,7 +328,7 @@ def hmrfmix_reassignment_concatenate(single_X, single_base_nb_mean, single_total
 #     return new_assignment, single_llf, total_llf
 
 
-def hmrfmix_reassignment_posterior_concatenate(single_X, single_base_nb_mean, single_total_bb_RD, single_tumor_prop, res, adjacency_mat, prev_assignment, relative_rdr_weight, spatial_weight):
+def hmrfmix_reassignment_posterior_concatenate(single_X, single_base_nb_mean, single_total_bb_RD, single_tumor_prop, res, adjacency_mat, prev_assignment, spatial_weight):
     N = single_X.shape[2]
     n_obs = single_X.shape[0]
     n_clones = np.max(prev_assignment) + 1
@@ -361,7 +361,7 @@ def hmrfmix_reassignment_posterior_concatenate(single_X, single_base_nb_mean, si
     return new_assignment, single_llf, total_llf
 
 
-def aggr_hmrfmix_reassignment_concatenate(single_X, single_base_nb_mean, single_total_bb_RD, single_tumor_prop, res, pred, smooth_mat, adjacency_mat, prev_assignment, relative_rdr_weight, spatial_weight):
+def aggr_hmrfmix_reassignment_concatenate(single_X, single_base_nb_mean, single_total_bb_RD, single_tumor_prop, res, pred, smooth_mat, adjacency_mat, prev_assignment, spatial_weight):
     N = single_X.shape[2]
     n_obs = single_X.shape[0]
     n_clones = int(len(pred) / n_obs)
@@ -399,8 +399,7 @@ def hmrfmix_concatenate_pipeline(outdir, prefix, single_X, lengths, single_base_
     coords=None, smooth_mat=None, adjacency_mat=None, max_iter_outer=5, nodepotential="max", params="stmp", t=1-1e-6, random_state=0, \
     init_log_mu=None, init_p_binom=None, init_alphas=None, init_taus=None,\
     fix_NB_dispersion=False, shared_NB_dispersion=True, fix_BB_dispersion=False, shared_BB_dispersion=True, \
-    relative_rdr_weight=1.0, is_diag=True, \
-    max_iter=100, tol=1e-4, unit_xsquared=9, unit_ysquared=3, spatial_weight=1.0/6):
+    is_diag=True, max_iter=100, tol=1e-4, unit_xsquared=9, unit_ysquared=3, spatial_weight=1.0/6):
     # spot adjacency matric
     assert not (coords is None and adjacency_mat is None)
     if adjacency_mat is None:
@@ -442,19 +441,18 @@ def hmrfmix_concatenate_pipeline(outdir, prefix, single_X, lengths, single_base_
             res = pipeline_baum_welch(None, np.vstack([X[:,0,:].flatten("F"), X[:,1,:].flatten("F")]).T.reshape(-1,2,1), np.tile(lengths, X.shape[2]), n_states, \
                             base_nb_mean.flatten("F").reshape(-1,1), total_bb_RD.flatten("F").reshape(-1,1),  np.tile(log_sitewise_transmat, X.shape[2]), tumor_prop, params=params, t=t, random_state=random_state, \
                             fix_NB_dispersion=fix_NB_dispersion, shared_NB_dispersion=shared_NB_dispersion, fix_BB_dispersion=fix_BB_dispersion, shared_BB_dispersion=shared_BB_dispersion, \
-                            is_diag=is_diag, relative_rdr_weight=relative_rdr_weight, \
-                            init_log_mu=last_log_mu, init_p_binom=last_p_binom, init_alphas=last_alphas, init_taus=last_taus, max_iter=max_iter, tol=tol)
+                            is_diag=is_diag, init_log_mu=last_log_mu, init_p_binom=last_p_binom, init_alphas=last_alphas, init_taus=last_taus, max_iter=max_iter, tol=tol)
             pred = np.argmax(res["log_gamma"], axis=0)
             # clone assignmment
             if nodepotential == "max":
                 new_assignment, single_llf, total_llf = aggr_hmrfmix_reassignment_concatenate(single_X, single_base_nb_mean, single_total_bb_RD, single_tumor_prop, res, pred, \
-                    smooth_mat, adjacency_mat, last_assignment, relative_rdr_weight, spatial_weight=spatial_weight)
+                    smooth_mat, adjacency_mat, last_assignment, spatial_weight=spatial_weight)
             elif nodepotential == "weighted_sum":
                 new_assignment, single_llf, total_llf = hmrfmix_reassignment_posterior_concatenate(single_X, single_base_nb_mean, single_total_bb_RD, single_tumor_prop, res, \
-                    adjacency_mat, last_assignment, relative_rdr_weight, spatial_weight=spatial_weight)
+                    adjacency_mat, last_assignment, spatial_weight=spatial_weight)
             # elif nodepotential == "test_sum":
             #     new_assignment, single_llf, total_llf = aggr_hmrfmix_reassignment_concatenate(single_X, single_base_nb_mean, single_total_bb_RD, single_tumor_prop, res, pred, \
-            #         smooth_mat, adjacency_mat, last_assignment, relative_rdr_weight, spatial_weight=spatial_weight)
+            #         smooth_mat, adjacency_mat, last_assignment, spatial_weight=spatial_weight)
             else:
                 raise Exception("Unknown mode for nodepotential!")
             res["prev_assignment"] = last_assignment

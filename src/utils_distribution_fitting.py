@@ -14,6 +14,11 @@ from sklearn.utils import check_random_state
 import statsmodels
 import statsmodels.api as sm
 from statsmodels.base.model import GenericLikelihoodModel
+import os
+
+os.environ["MKL_NUM_THREADS"] = "1"
+os.environ["OPENBLAS_NUM_THREADS"] = "1"
+os.environ["OMP_NUM_THREADS"] = "1"
 
 
 def convert_params(mean, std):
@@ -28,11 +33,13 @@ def convert_params(mean, std):
 
 
 class Weighted_NegativeBinomial(GenericLikelihoodModel):
-    def __init__(self, endog, exog, weights, exposure, seed=0, **kwds):
+    def __init__(self, endog, exog, weights, exposure, seed=0, penalty=0, **kwds):
         super(Weighted_NegativeBinomial, self).__init__(endog, exog, **kwds)
         self.weights = weights
         self.exposure = exposure
         self.seed = seed
+        self.penalty = penalty
+        self.penalty_rv = scipy.stats.norm(loc=0, scale=np.sqrt(np.log(2)) / 3)
     #
     def nloglikeobs(self, params):
         nb_mean = np.exp(self.exog @ params[:-1]) * self.exposure
@@ -40,6 +47,7 @@ class Weighted_NegativeBinomial(GenericLikelihoodModel):
         n, p = convert_params(nb_mean, nb_std)
         llf = scipy.stats.nbinom.logpmf(self.endog, n, p)
         neg_sum_llf = -llf.dot(self.weights)
+        neg_sum_llf -= self.penalty * np.sum(self.penalty_rv.logpdf(params[:-1]))
         return neg_sum_llf
     #
     def fit(self, start_params=None, maxiter=10000, maxfun=5000, **kwds):
@@ -56,12 +64,14 @@ class Weighted_NegativeBinomial(GenericLikelihoodModel):
 
 
 class Weighted_NegativeBinomial_mix(GenericLikelihoodModel):
-    def __init__(self, endog, exog, weights, exposure, tumor_prop, seed=0, **kwds):
+    def __init__(self, endog, exog, weights, exposure, tumor_prop, seed=0, penalty=0, **kwds):
         super(Weighted_NegativeBinomial_mix, self).__init__(endog, exog, **kwds)
         self.weights = weights
         self.exposure = exposure
         self.seed = seed
         self.tumor_prop = tumor_prop
+        self.penalty = penalty
+        self.penalty_rv = scipy.stats.norm(loc=0, scale=np.sqrt(np.log(2)) / 3)
     #
     def nloglikeobs(self, params):
         nb_mean = self.exposure * (self.tumor_prop * np.exp(self.exog @ params[:-1]) + 1 - self.tumor_prop)
@@ -69,6 +79,7 @@ class Weighted_NegativeBinomial_mix(GenericLikelihoodModel):
         n, p = convert_params(nb_mean, nb_std)
         llf = scipy.stats.nbinom.logpmf(self.endog, n, p)
         neg_sum_llf = -llf.dot(self.weights)
+        neg_sum_llf -= self.penalty * np.sum(self.penalty_rv.logpdf(params[:-1]))
         return neg_sum_llf
     #
     def fit(self, start_params=None, maxiter=10000, maxfun=5000, **kwds):
