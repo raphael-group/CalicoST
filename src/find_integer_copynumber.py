@@ -1,11 +1,12 @@
 # from cProfile import label
 import numpy as np
 import pandas as pd
+import scipy
 # import gurobipy as gp
 # from gurobipy import GRB
 import copy
 
-def hill_climbing_integer_copynumber_oneclone(new_log_mu, base_nb_mean, new_p_binom, pred_cnv, max_allele_copy=4):
+def old_hill_climbing_integer_copynumber_oneclone(new_log_mu, base_nb_mean, new_p_binom, pred_cnv, max_allele_copy=4):
     n_states = len(new_log_mu)
     lambd = base_nb_mean / np.sum(base_nb_mean)
     weight_per_state = np.array([ np.sum(lambd[pred_cnv == s]) for s in range(n_states)])
@@ -18,8 +19,8 @@ def hill_climbing_integer_copynumber_oneclone(new_log_mu, base_nb_mean, new_p_bi
         frac_rdr = np.sum(params, axis=1) / denom
         frac_baf = params[:,0] / np.sum(params, axis=1)
         points_per_state = np.bincount(pred_cnv, minlength=params.shape[0] )
-        # return np.square(mu - frac_rdr).dot(points_per_state) + 5 * np.square(new_p_binom - frac_baf).dot(points_per_state) + 0.1 * np.maximum(0, np.sum(params, axis=1) - 2*ploidy-1).dot(points_per_state)
-        return np.abs(mu - frac_rdr).dot(points_per_state) + 5 * np.abs(new_p_binom - frac_baf).dot(points_per_state) + 0.1 * np.maximum(0, np.sum(params, axis=1) - 2*ploidy-1).dot(points_per_state)
+        neg_llf_expon = -scipy.stats.expon.logpdf(points_per_state, loc=0, scale=len(pred_cnv) / 50)
+        return np.abs(mu - frac_rdr).dot(points_per_state) + 5 * np.abs(new_p_binom - frac_baf).dot(points_per_state) + 5 * np.maximum(0, np.sum(params, axis=1) - 2*ploidy-1).dot(neg_llf_expon)
     def hill_climb(initial_params, ploidy, max_iter=10):
         best_obj = f(initial_params, ploidy)
         params = copy.copy(initial_params)
@@ -56,6 +57,63 @@ def hill_climbing_integer_copynumber_oneclone(new_log_mu, base_nb_mean, new_p_bi
     return best_integer_copies, best_obj
 
 
+def hill_climbing_integer_copynumber_oneclone(new_log_mu, base_nb_mean, new_p_binom, pred_cnv, max_allele_copy=4):
+    n_states = len(new_log_mu)
+    lambd = base_nb_mean / np.sum(base_nb_mean)
+    weight_per_state = np.array([ np.sum(lambd[pred_cnv == s]) for s in range(n_states)])
+    mu = np.exp(new_log_mu)
+    def f(params, ploidy):
+        # params of size (n_states, 2)
+        if np.any( np.sum(params, axis=1) == 0 ):
+            return len(pred_cnv) * 1e6
+        denom = weight_per_state.dot( np.sum(params, axis=1) )
+        frac_rdr = np.sum(params, axis=1) / denom
+        frac_baf = params[:,0] / np.sum(params, axis=1)
+        points_per_state = np.bincount(pred_cnv, minlength=params.shape[0] )
+        neg_llf_expon = -scipy.stats.expon.logpdf(points_per_state, loc=0, scale=len(pred_cnv) / 50)
+        return np.abs(mu - frac_rdr).dot(points_per_state) + 5 * np.abs(new_p_binom - frac_baf).dot(points_per_state) #+ 5 * np.maximum(0, np.sum(params, axis=1) - ploidy-1).dot(neg_llf_expon)
+    def hill_climb(initial_params, ploidy, idx_med, max_iter=10):
+        best_obj = f(initial_params, ploidy)
+        params = copy.copy(initial_params)
+        increased = True
+        for counter in range(max_iter):
+            increased = False
+            for k in range(params.shape[0]):
+                this_best_obj = best_obj
+                this_best_k = copy.copy(params[k,:])
+                for candi in candidates:
+                    if k == idx_med and np.sum(candi) != ploidy:
+                        continue
+                    params[k,:] = candi
+                    obj = f(params, ploidy)
+                    if obj < this_best_obj:
+                        print(k, candi, obj, this_best_obj, ploidy+1, 0.1 * np.maximum(0, np.sum(params[k,:]) - ploidy-1) * np.sum(pred_cnv==k))
+                        this_best_obj = obj
+                        this_best_k = candi
+                increased = (increased | (this_best_obj < best_obj))
+                params[k,:] = this_best_k
+                best_obj = this_best_obj
+            if not increased:
+                break
+        return params, best_obj
+    # candidate integer copy states
+    candidates = np.array([ [i,j] for i in range(max_allele_copy + 1) for j in range(max_allele_copy) if not (i == 0 and j == 0)])
+    # find the best copy number states starting from various ploidy
+    best_obj = np.inf
+    best_integer_copies = np.zeros((n_states, 2), dtype=int)
+    # fix the genomic bin with the median new_log_mu to have exactly ploidy genomes
+    bidx_med = np.argsort(new_log_mu[pred_cnv])[ int(len(pred_cnv)/2) ]
+    idx_med = pred_cnv[bidx_med]
+    for ploidy in range(1, 5):
+        initial_params = np.ones((n_states, 2), dtype=int) * int(ploidy / 2)
+        initial_params[:, 1] = ploidy - initial_params[:, 0]
+        params, obj = hill_climb(initial_params, ploidy, idx_med)
+        if obj < best_obj:
+            best_obj = obj
+            best_integer_copies = copy.copy(params)
+    return best_integer_copies, best_obj
+
+
 def get_genelevel_cnv_oneclone(A_copy, B_copy, x_gene_list):
     map_gene_bin = {}
     for i,x in enumerate(x_gene_list):
@@ -69,6 +127,20 @@ def get_genelevel_cnv_oneclone(A_copy, B_copy, x_gene_list):
         gene_level_copies[i, 0] = A_copy[idx]
         gene_level_copies[i, 1] = B_copy[idx]
     return pd.DataFrame({"A":gene_level_copies[:,0], "B":gene_level_copies[:,1]}, index=gene_list)
+
+
+def convert_copy_to_states(A_copy, B_copy):
+    tmp = A_copy + B_copy
+    tmp = tmp[~np.isnan(tmp)]
+    base_ploidy = np.median(tmp)
+    coarse_states = np.array(["neutral"] * A_copy.shape[0])
+    coarse_states[ (A_copy + B_copy < base_ploidy) & (A_copy != B_copy) ] = "del"
+    coarse_states[ (A_copy + B_copy < base_ploidy) & (A_copy == B_copy) ] = "bdel"
+    coarse_states[ (A_copy + B_copy > base_ploidy) & (A_copy != B_copy) ] = "amp"
+    coarse_states[ (A_copy + B_copy > base_ploidy) & (A_copy == B_copy) ] = "bamp"
+    coarse_states[ (A_copy + B_copy == base_ploidy) & (A_copy != B_copy) ] = "loh"
+    coarse_states[coarse_states == "neutral"] = "neu"
+    return coarse_states
 
 
 """
