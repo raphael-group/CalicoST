@@ -1370,7 +1370,7 @@ def initialization_by_gmm(n_states, X, base_nb_mean, total_bb_RD, params, random
     if "m" in params:
         if in_log_space:
             X_gmm_rdr = np.vstack([ np.log(X[:,0,s]/base_nb_mean[:,s]) for s in range(X.shape[2]) ]).T
-            offset = np.mean(X_gmm_rdr)
+            offset = np.mean(X_gmm_rdr[(~np.isnan(X_gmm_rdr)) & (~np.isinf(X_gmm_rdr))])
             normalizetomax1 = np.max(X_gmm_rdr[(~np.isnan(X_gmm_rdr)) & (~np.isinf(X_gmm_rdr))]) - np.min(X_gmm_rdr[(~np.isnan(X_gmm_rdr)) & (~np.isinf(X_gmm_rdr))])
             X_gmm_rdr = (X_gmm_rdr - offset) / normalizetomax1
         else:
