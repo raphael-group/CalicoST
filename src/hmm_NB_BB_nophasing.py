@@ -10,10 +10,8 @@ from tqdm import trange
 import statsmodels.api as sm
 from statsmodels.base.model import GenericLikelihoodModel
 import copy
-from utils_hmm import *
 from utils_distribution_fitting import *
-from hmm_NB_BB_nophasing import *
-from hmm_NB_BB_sharedcells import *
+from utils_hmm import *
 import networkx as nx
 
 
@@ -45,7 +43,7 @@ def compute_posterior_obs(log_alpha, log_beta):
 
 
 @njit
-def compute_posterior_transition_sitewise(log_alpha, log_beta, log_transmat, log_emission):
+def compute_posterior_transition_nophasing(log_alpha, log_beta, log_transmat, log_emission):
     '''
     Input
         log_alpha: output from forward_lattice_gaussian. size n_states * n_observations. alpha[j, t] = P(o_1, ... o_t, q_t = j | lambda).
@@ -58,14 +56,14 @@ def compute_posterior_transition_sitewise(log_alpha, log_beta, log_transmat, log
     n_states = int(log_alpha.shape[0] / 2)
     n_obs = log_alpha.shape[1]
     # initialize log_xi
-    log_xi = np.zeros((2*n_states, 2*n_states, n_obs-1))
+    log_xi = np.zeros((n_states, n_states, n_obs-1))
     # compute log_xi
-    for i in np.arange(2*n_states):
-        for j in np.arange(2*n_states):
+    for i in np.arange(n_states):
+        for j in np.arange(n_states):
             for t in np.arange(n_obs-1):
                 # ??? Theoretically, joint distribution across spots under iid is the prod (or sum) of individual (log) probabilities. 
                 # But adding too many spots may lead to a higher weight of the emission rather then transition prob.
-                log_xi[i, j, t] = log_alpha[i, t] + log_transmat[i - n_states * int(i/n_states), j - n_states * int(j/n_states)] + np.sum(log_emission[j, t+1, :]) + log_beta[j, t+1]
+                log_xi[i, j, t] = log_alpha[i, t] + log_transmat[i, j] + np.sum(log_emission[j, t+1, :]) + log_beta[j, t+1]
     # normalize
     for t in np.arange(n_obs-1):
         log_xi[:, :, t] -= mylogsumexp(log_xi[:, :, t])
@@ -75,16 +73,17 @@ def compute_posterior_transition_sitewise(log_alpha, log_beta, log_transmat, log
 ############################################################
 # M step related
 ############################################################
+
 @njit
-def update_startprob_sitewise(lengths, log_gamma):
+def update_startprob_nophasing(lengths, log_gamma):
     '''
     Input
         lengths: sum of lengths = n_observations.
-        log_gamma: size 2 * n_states * n_observations. gamma[i,t] = P(q_t = i | O, lambda).
+        log_gamma: size n_states * n_observations. gamma[i,t] = P(q_t = i | O, lambda).
     Output
         log_startprob: n_states. Start probability after loog transformation.
     '''
-    n_states = int(log_gamma.shape[0] / 2)
+    n_states = log_gamma.shape[0]
     n_obs = log_gamma.shape[1]
     assert np.sum(lengths) == n_obs, "Sum of lengths must be equal to the second dimension of log_gamma!"
     # indices of the start of sequences, given that the length of each sequence is in lengths
@@ -96,31 +95,27 @@ def update_startprob_sitewise(lengths, log_gamma):
     indices_start = np.array(indices_start)
     # initialize log_startprob
     log_startprob = np.zeros(n_states)
-    # compute log_startprob of 2 * n_states
+    # compute log_startprob of n_states
     log_startprob = mylogsumexp_ax_keep(log_gamma[:, indices_start], axis=1)
-    # merge (CNV state, phase A) and (CNV state, phase B)
-    log_startprob = log_startprob.flatten().reshape(2,-1)
-    log_startprob = mylogsumexp_ax_keep(log_startprob, axis=0)
     # normalize such that startprob sums to 1
     log_startprob -= mylogsumexp(log_startprob)
     return log_startprob
 
 
-def update_transition_sitewise(log_xi, is_diag=False):
+def update_transition_nophasing(log_xi, is_diag=False):
     '''
     Input
-        log_xi: size (2*n_states) * (2*n_states) * n_observations. xi[i,j,t] = P(q_t=i, q_{t+1}=j | O, lambda)
+        log_xi: size (n_states) * (n_states) * n_observations. xi[i,j,t] = P(q_t=i, q_{t+1}=j | O, lambda)
     Output
         log_transmat: n_states * n_states. Transition probability after log transformation.
     '''
-    n_states = int(log_xi.shape[0] / 2)
+    n_states = log_xi.shape[0]
     n_obs = log_xi.shape[2]
     # initialize log_transmat
     log_transmat = np.zeros((n_states, n_states))
     for i in np.arange(n_states):
         for j in np.arange(n_states):
-            log_transmat[i, j] = scipy.special.logsumexp( np.concatenate([log_xi[i, j, :], log_xi[i+n_states, j, :], \
-                log_xi[i, j+n_states, :], log_xi[i + n_states, j + n_states, :]]) )
+            log_transmat[i, j] = scipy.special.logsumexp( log_xi[i, j, :] )
     # row normalize log_transmat
     if not is_diag:
         for i in np.arange(n_states):
@@ -136,22 +131,22 @@ def update_transition_sitewise(log_xi, is_diag=False):
     return log_transmat
 
 
-def update_emission_params_nb_sitewise_uniqvalues(unique_values, mapping_matrices, log_gamma, base_nb_mean, alphas, \
-    start_log_mu=None, fix_NB_dispersion=False, shared_NB_dispersion=False, min_log_rdr=-2, max_log_rdr=2, min_estep_weight=0.1):
+def update_emission_params_nb_nophasing_uniqvalues(unique_values, mapping_matrices, log_gamma, alphas, \
+    start_log_mu=None, fix_NB_dispersion=False, shared_NB_dispersion=False, min_log_rdr=-2, max_log_rdr=2):
     """
     Attributes
     ----------
     X : array, shape (n_observations, n_components, n_spots)
         Observed expression UMI count and allele frequency UMI count.
 
-    log_gamma : array, (2*n_states, n_observations)
+    log_gamma : array, (n_states, n_observations)
         Posterior probability of observing each state at each observation time.
 
     base_nb_mean : array, shape (n_observations, n_spots)
         Mean expression under diploid state.
     """
     n_spots = len(unique_values)
-    n_states = int(log_gamma.shape[0] / 2)
+    n_states = log_gamma.shape[0]
     gamma = np.exp(log_gamma)
     # initialization
     new_log_mu = copy.copy(start_log_mu) if not start_log_mu is None else np.zeros((n_states, n_spots))
@@ -165,7 +160,7 @@ def update_emission_params_nb_sitewise_uniqvalues(unique_values, mapping_matrice
             for i in range(n_states):
                 model = sm.GLM(unique_values[s][idx_nonzero,0], np.ones(len(idx_nonzero)).reshape(-1,1), \
                             family=sm.families.NegativeBinomial(alpha=alphas[i,s]), \
-                            exposure=unique_values[s][idx_nonzero,1], var_weights=tmp[i,idx_nonzero]+tmp[i+n_states,idx_nonzero])
+                            exposure=unique_values[s][idx_nonzero,1], var_weights=tmp[i,idx_nonzero])
                 res = model.fit(disp=0, maxiter=1500, xtol=1e-4, ftol=1e-4)
                 new_log_mu[i, s] = res.params[0]
                 if not (start_log_mu is None):
@@ -179,7 +174,7 @@ def update_emission_params_nb_sitewise_uniqvalues(unique_values, mapping_matrice
                 for i in range(n_states):
                     model = Weighted_NegativeBinomial(unique_values[s][idx_nonzero,0], \
                                 np.ones(len(idx_nonzero)).reshape(-1,1), \
-                                weights=tmp[i,idx_nonzero]+tmp[i+n_states,idx_nonzero], \
+                                weights=tmp[i,idx_nonzero], \
                                 exposure=unique_values[s][idx_nonzero,1], \
                                 penalty=0)
                     res = model.fit(disp=0, maxiter=1500, xtol=1e-4, ftol=1e-4)
@@ -200,12 +195,12 @@ def update_emission_params_nb_sitewise_uniqvalues(unique_values, mapping_matrice
                 this_exposure = np.tile(unique_values[s][idx_nonzero,1], n_states)
                 this_y = np.tile(unique_values[s][idx_nonzero,0], n_states)
                 tmp = (scipy.sparse.csr_matrix(gamma) @ mapping_matrices[s]).A
-                this_weights = np.concatenate([ tmp[i,idx_nonzero] + tmp[i+n_states,idx_nonzero] for i in range(n_states) ])
+                this_weights = np.concatenate([ tmp[i,idx_nonzero] for i in range(n_states) ])
                 this_features = np.zeros((n_states*len(idx_nonzero), n_states))
                 for i in np.arange(n_states):
                     this_features[(i*len(idx_nonzero)):((i+1)*len(idx_nonzero)), i] = 1
                 # only optimize for states where at least 1 SNP belongs to
-                idx_state_posweight = np.array([ i for i in range(this_features.shape[1]) if np.sum(this_weights[this_features[:,i]==1]) >= min_estep_weight ])
+                idx_state_posweight = np.array([ i for i in range(this_features.shape[1]) if np.sum(this_weights[this_features[:,i]==1]) >= 0.1 ])
                 idx_row_posweight = np.concatenate([ np.where(this_features[:,k]==1)[0] for k in idx_state_posweight ])
                 y.append( this_y[idx_row_posweight] )
                 exposure.append( this_exposure[idx_row_posweight] )
@@ -238,7 +233,7 @@ def update_emission_params_nb_sitewise_uniqvalues(unique_values, mapping_matrice
     return new_log_mu, new_alphas
 
 
-def update_emission_params_nb_sitewise_uniqvalues_mix(unique_values, mapping_matrices, log_gamma, base_nb_mean, alphas, tumor_prop, \
+def update_emission_params_nb_nophasing_uniqvalues_mix(unique_values, mapping_matrices, log_gamma, alphas, tumor_prop, \
     start_log_mu=None, fix_NB_dispersion=False, shared_NB_dispersion=False, min_log_rdr=-2, max_log_rdr=2):
     """
     Attributes
@@ -246,14 +241,14 @@ def update_emission_params_nb_sitewise_uniqvalues_mix(unique_values, mapping_mat
     X : array, shape (n_observations, n_components, n_spots)
         Observed expression UMI count and allele frequency UMI count.
 
-    log_gamma : array, (2*n_states, n_observations)
+    log_gamma : array, (n_states, n_observations)
         Posterior probability of observing each state at each observation time.
 
     base_nb_mean : array, shape (n_observations, n_spots)
         Mean expression under diploid state.
     """
     n_spots = len(unique_values)
-    n_states = int(log_gamma.shape[0] / 2)
+    n_states = log_gamma.shape[0]
     gamma = np.exp(log_gamma)
     # initialization
     new_log_mu = copy.copy(start_log_mu) if not start_log_mu is None else np.zeros((n_states, n_spots))
@@ -267,7 +262,7 @@ def update_emission_params_nb_sitewise_uniqvalues_mix(unique_values, mapping_mat
             for i in range(n_states):
                 model = sm.GLM(unique_values[s][idx_nonzero,0], np.ones(len(idx_nonzero)).reshape(-1,1), \
                             family=sm.families.NegativeBinomial(alpha=alphas[i,s]), \
-                            exposure=unique_values[s][idx_nonzero,1], var_weights=tmp[i,idx_nonzero]+tmp[i+n_states,idx_nonzero])
+                            exposure=unique_values[s][idx_nonzero,1], var_weights=tmp[i,idx_nonzero])
                 res = model.fit(disp=0, maxiter=1500, xtol=1e-4, ftol=1e-4)
                 new_log_mu[i, s] = res.params[0]
                 if not (start_log_mu is None):
@@ -282,7 +277,7 @@ def update_emission_params_nb_sitewise_uniqvalues_mix(unique_values, mapping_mat
                     this_tp = (mapping_matrices[s].T @ tumor_prop[:,s])[idx_nonzero] / (mapping_matrices[s].T @ np.ones(tumor_prop.shape[0]))[idx_nonzero]
                     model = Weighted_NegativeBinomial_mix(unique_values[s][idx_nonzero,0], \
                                 np.ones(len(idx_nonzero)).reshape(-1,1), \
-                                weights=tmp[i,idx_nonzero]+tmp[i+n_states,idx_nonzero], exposure=unique_values[s][idx_nonzero,1], \
+                                weights=tmp[i,idx_nonzero], exposure=unique_values[s][idx_nonzero,1], \
                                 tumor_prop=this_tp)
                                 # tumor_prop=tumor_prop[s], penalty=0)
                     res = model.fit(disp=0, maxiter=1500, xtol=1e-4, ftol=1e-4)
@@ -305,8 +300,8 @@ def update_emission_params_nb_sitewise_uniqvalues_mix(unique_values, mapping_mat
                 this_y = np.tile(unique_values[s][idx_nonzero,0], n_states)
                 tmp = (scipy.sparse.csr_matrix(gamma) @ mapping_matrices[s]).A
                 this_tp = np.tile( (mapping_matrices[s].T @ tumor_prop[:,s])[idx_nonzero] / (mapping_matrices[s].T @ np.ones(tumor_prop.shape[0]))[idx_nonzero], n_states)
-                assert np.all(this_tp < 1+1e-4)
-                this_weights = np.concatenate([ tmp[i,idx_nonzero] + tmp[i+n_states,idx_nonzero] for i in range(n_states) ])
+                assert np.all(this_tp < 1 + 1e-4)
+                this_weights = np.concatenate([ tmp[i,idx_nonzero] for i in range(n_states) ])
                 this_features = np.zeros((n_states*len(idx_nonzero), n_states))
                 for i in np.arange(n_states):
                     this_features[(i*len(idx_nonzero)):((i+1)*len(idx_nonzero)), i] = 1
@@ -347,7 +342,7 @@ def update_emission_params_nb_sitewise_uniqvalues_mix(unique_values, mapping_mat
     return new_log_mu, new_alphas
 
 
-def update_emission_params_bb_sitewise_uniqvalues(unique_values, mapping_matrices, log_gamma, total_bb_RD, taus, \
+def update_emission_params_bb_nophasing_uniqvalues(unique_values, mapping_matrices, log_gamma, taus, \
     start_p_binom=None, fix_BB_dispersion=False, shared_BB_dispersion=False, \
     percent_threshold=0.99, min_binom_prob=0.01, max_binom_prob=0.99):
     """
@@ -356,14 +351,14 @@ def update_emission_params_bb_sitewise_uniqvalues(unique_values, mapping_matrice
     X : array, shape (n_observations, n_components, n_spots)
         Observed expression UMI count and allele frequency UMI count.
 
-    log_gamma : array, (2*n_states, n_observations)
+    log_gamma : array, (n_states, n_observations)
         Posterior probability of observing each state at each observation time.
 
     total_bb_RD : array, shape (n_observations, n_spots)
         SNP-covering reads for both REF and ALT across genes along genome.
     """
     n_spots = len(unique_values)
-    n_states = int(log_gamma.shape[0] / 2)
+    n_states = log_gamma.shape[0]
     gamma = np.exp(log_gamma)
     # initialization
     new_p_binom = copy.copy(start_p_binom) if not start_p_binom is None else np.ones((n_states, n_spots)) * 0.5
@@ -374,12 +369,12 @@ def update_emission_params_bb_sitewise_uniqvalues(unique_values, mapping_matrice
             idx_nonzero = np.where(unique_values[s][:,1] > 0)[0]
             for i in range(n_states):
                 # only optimize for BAF only when the posterior probability >= 0.1 (at least 1 SNP is under this state)
-                if np.sum(tmp[i,idx_nonzero]) + np.sum(tmp[i+n_states,idx_nonzero]) >= 0.1:
-                    model = Weighted_BetaBinom_fixdispersion(np.append(unique_values[s][idx_nonzero,0], unique_values[s][idx_nonzero,1]-unique_values[s][idx_nonzero,0]), \
-                        np.ones(2*len(idx_nonzero)).reshape(-1,1), \
+                if np.sum(tmp[i,idx_nonzero]) >= 0.1:
+                    model = Weighted_BetaBinom_fixdispersion(unique_values[s][idx_nonzero,0], \
+                        np.ones(len(idx_nonzero)).reshape(-1,1), \
                         taus[i,s], \
-                        weights=np.append(tmp[i,idx_nonzero], tmp[i+n_states,idx_nonzero]), \
-                        exposure=np.append(unique_values[s][idx_nonzero,1], unique_values[s][idx_nonzero,1]) )
+                        weights=tmp[i,idx_nonzero], \
+                        exposure=unique_values[s][idx_nonzero,1] )
                     res = model.fit(disp=0, maxiter=1500, xtol=1e-4, ftol=1e-4)
                     new_p_binom[i, s] = res.params[0]
                     if not (start_p_binom is None):
@@ -392,11 +387,11 @@ def update_emission_params_bb_sitewise_uniqvalues(unique_values, mapping_matrice
                 idx_nonzero = np.where(unique_values[s][:,1] > 0)[0]
                 for i in range(n_states):
                     # only optimize for BAF only when the posterior probability >= 0.1 (at least 1 SNP is under this state)
-                    if np.sum(tmp[i,idx_nonzero]) + np.sum(tmp[i+n_states,idx_nonzero]) >= 0.1:
-                        model = Weighted_BetaBinom(np.append(unique_values[s][idx_nonzero,0], unique_values[s][idx_nonzero,1]-unique_values[s][idx_nonzero,0]), \
-                            np.ones(2*len(idx_nonzero)).reshape(-1,1), \
-                            weights=np.append(tmp[i,idx_nonzero], tmp[i+n_states,idx_nonzero]), \
-                            exposure=np.append(unique_values[s][idx_nonzero,1], unique_values[s][idx_nonzero,1]) )
+                    if np.sum(tmp[i,idx_nonzero]) >= 0.1:
+                        model = Weighted_BetaBinom(unique_values[s][idx_nonzero,0], \
+                            np.ones(len(idx_nonzero)).reshape(-1,1), \
+                            weights=tmp[i,idx_nonzero], \
+                            exposure=unique_values[s][idx_nonzero,1] )
                         res = model.fit(disp=0, maxiter=1500, xtol=1e-4, ftol=1e-4)
                         new_p_binom[i, s] = res.params[0]
                         new_taus[i, s] = res.params[-1]
@@ -412,13 +407,13 @@ def update_emission_params_bb_sitewise_uniqvalues(unique_values, mapping_matrice
             state_posweights = []
             for s in np.arange(len(unique_values)):
                 idx_nonzero = np.where(unique_values[s][:,1] > 0)[0]
-                this_exposure = np.tile( np.append(unique_values[s][idx_nonzero,1], unique_values[s][idx_nonzero,1]), n_states)
-                this_y = np.tile( np.append(unique_values[s][idx_nonzero,0], unique_values[s][idx_nonzero,1]-unique_values[s][idx_nonzero,0]), n_states)
+                this_exposure = np.tile( unique_values[s][idx_nonzero,1], n_states)
+                this_y = np.tile( unique_values[s][idx_nonzero,0], n_states)
                 tmp = (scipy.sparse.csr_matrix(gamma) @ mapping_matrices[s]).A
-                this_weights = np.concatenate([ np.append(tmp[i,idx_nonzero], tmp[i+n_states,idx_nonzero]) for i in range(n_states) ])
-                this_features = np.zeros((2*n_states*len(idx_nonzero), n_states))
+                this_weights = np.concatenate([ tmp[i,idx_nonzero] for i in range(n_states) ])
+                this_features = np.zeros((n_states*len(idx_nonzero), n_states))
                 for i in np.arange(n_states):
-                    this_features[(i*2*len(idx_nonzero)):((i+1)*2*len(idx_nonzero)), i] = 1
+                    this_features[(i*len(idx_nonzero)):((i+1)*len(idx_nonzero)), i] = 1
                 # only optimize for states where at least 1 SNP belongs to
                 idx_state_posweight = np.array([ i for i in range(this_features.shape[1]) if np.sum(this_weights[this_features[:,i]==1]) >= 0.1 ])
                 idx_row_posweight = np.concatenate([ np.where(this_features[:,k]==1)[0] for k in idx_state_posweight ])
@@ -448,12 +443,13 @@ def update_emission_params_bb_sitewise_uniqvalues(unique_values, mapping_matrice
                         new_p_binom[idx_state_posweight, s] = res2.params[l1:l2]
                     if res2.params[-1] > 0:
                         new_taus[:,:] = res2.params[-1]
+
     new_p_binom[new_p_binom < min_binom_prob] = min_binom_prob
     new_p_binom[new_p_binom > max_binom_prob] = max_binom_prob
     return new_p_binom, new_taus
 
 
-def update_emission_params_bb_sitewise_uniqvalues_mix(unique_values, mapping_matrices, log_gamma, total_bb_RD, taus, tumor_prop, \
+def update_emission_params_bb_nophasing_uniqvalues_mix(unique_values, mapping_matrices, log_gamma, taus, tumor_prop, \
     start_p_binom=None, fix_BB_dispersion=False, shared_BB_dispersion=False, \
     percent_threshold=0.99, min_binom_prob=0.01, max_binom_prob=0.99):
     """
@@ -462,14 +458,14 @@ def update_emission_params_bb_sitewise_uniqvalues_mix(unique_values, mapping_mat
     X : array, shape (n_observations, n_components, n_spots)
         Observed expression UMI count and allele frequency UMI count.
 
-    log_gamma : array, (2*n_states, n_observations)
+    log_gamma : array, (n_states, n_observations)
         Posterior probability of observing each state at each observation time.
 
     total_bb_RD : array, shape (n_observations, n_spots)
         SNP-covering reads for both REF and ALT across genes along genome.
     """
     n_spots = len(unique_values)
-    n_states = int(log_gamma.shape[0] / 2)
+    n_states = log_gamma.shape[0]
     gamma = np.exp(log_gamma)
     # initialization
     new_p_binom = copy.copy(start_p_binom) if not start_p_binom is None else np.ones((n_states, n_spots)) * 0.5
@@ -480,14 +476,14 @@ def update_emission_params_bb_sitewise_uniqvalues_mix(unique_values, mapping_mat
             idx_nonzero = np.where(unique_values[s][:,1] > 0)[0]
             for i in range(n_states):
                 # only optimize for BAF only when the posterior probability >= 0.1 (at least 1 SNP is under this state)
-                if np.sum(tmp[i,idx_nonzero]) + np.sum(tmp[i+n_states,idx_nonzero]) >= 0.1:
+                if np.sum(tmp[i,idx_nonzero]) >= 0.1:
                     this_tp = (mapping_matrices[s].T @ tumor_prop[:,s])[idx_nonzero] / (mapping_matrices[s].T @ np.ones(tumor_prop.shape[0]))[idx_nonzero]
-                    assert np.all(this_tp < 1+1e-4)
-                    model = Weighted_BetaBinom_fixdispersion_mix(np.append(unique_values[s][idx_nonzero,0], unique_values[s][idx_nonzero,1]-unique_values[s][idx_nonzero,0]), \
-                        np.ones(2*len(idx_nonzero)).reshape(-1,1), \
+                    assert np.all(this_tp < 1 + 1e-4)
+                    model = Weighted_BetaBinom_fixdispersion_mix(unique_values[s][idx_nonzero,0], \
+                        np.ones(len(idx_nonzero)).reshape(-1,1), \
                         taus[i,s], \
-                        weights=np.append(tmp[i,idx_nonzero], tmp[i+n_states,idx_nonzero]), \
-                        exposure=np.append(unique_values[s][idx_nonzero,1], unique_values[s][idx_nonzero,1]), \
+                        weights=tmp[i,idx_nonzero], \
+                        exposure=unique_values[s][idx_nonzero,1], \
                         tumor_prop=this_tp)
                         # tumor_prop=tumor_prop[s] )
                     res = model.fit(disp=0, maxiter=1500, xtol=1e-4, ftol=1e-4)
@@ -502,15 +498,15 @@ def update_emission_params_bb_sitewise_uniqvalues_mix(unique_values, mapping_mat
                 idx_nonzero = np.where(unique_values[s][:,1] > 0)[0]
                 for i in range(n_states):
                     # only optimize for BAF only when the posterior probability >= 0.1 (at least 1 SNP is under this state)
-                    if np.sum(tmp[i,idx_nonzero]) + np.sum(tmp[i+n_states,idx_nonzero]) >= 0.1:
+                    if np.sum(tmp[i,idx_nonzero]) >= 0.1:
                         this_tp = (mapping_matrices[s].T @ tumor_prop[:,s])[idx_nonzero] / (mapping_matrices[s].T @ np.ones(tumor_prop.shape[0]))[idx_nonzero]
-                        assert np.all(this_tp < 1+1e-4)
-                        model = Weighted_BetaBinom_mix(np.append(unique_values[s][idx_nonzero,0], unique_values[s][idx_nonzero,1]-unique_values[s][idx_nonzero,0]), \
-                            np.ones(2*len(idx_nonzero)).reshape(-1,1), \
-                            weights=np.append(tmp[i,idx_nonzero], tmp[i+n_states,idx_nonzero]), \
-                            exposure=np.append(unique_values[s][idx_nonzero,1], unique_values[s][idx_nonzero,1]),\
+                        assert np.all(this_tp < 1 + 1e-4)
+                        model = Weighted_BetaBinom_mix(unique_values[s][idx_nonzero,0], \
+                            np.ones(len(idx_nonzero)).reshape(-1,1), \
+                            weights=tmp[i,idx_nonzero], \
+                            exposure=unique_values[s][idx_nonzero,1], \
                             tumor_prop=this_tp)
-                            # tumor_prop=tumor_prop )
+                            # tumor_prop=tumor_prop[s] )
                         res = model.fit(disp=0, maxiter=1500, xtol=1e-4, ftol=1e-4)
                         new_p_binom[i, s] = res.params[0]
                         new_taus[i, s] = res.params[-1]
@@ -527,15 +523,15 @@ def update_emission_params_bb_sitewise_uniqvalues_mix(unique_values, mapping_mat
             tp = []
             for s in np.arange(n_spots):
                 idx_nonzero = np.where(unique_values[s][:,1] > 0)[0]
-                this_exposure = np.tile( np.append(unique_values[s][idx_nonzero,1], unique_values[s][idx_nonzero,1]), n_states)
-                this_y = np.tile( np.append(unique_values[s][idx_nonzero,0], unique_values[s][idx_nonzero,1]-unique_values[s][idx_nonzero,0]), n_states)
+                this_exposure = np.tile( unique_values[s][idx_nonzero,1], n_states)
+                this_y = np.tile( unique_values[s][idx_nonzero,0], n_states)
                 tmp = (scipy.sparse.csr_matrix(gamma) @ mapping_matrices[s]).A
                 this_tp = np.tile( (mapping_matrices[s].T @ tumor_prop[:,s])[idx_nonzero] / (mapping_matrices[s].T @ np.ones(tumor_prop.shape[0]))[idx_nonzero], n_states)
-                assert np.all(this_tp < 1+1e-4)
-                this_weights = np.concatenate([ np.append(tmp[i,idx_nonzero], tmp[i+n_states,idx_nonzero]) for i in range(n_states) ])
-                this_features = np.zeros((2*n_states*len(idx_nonzero), n_states))
+                assert np.all(this_tp < 1 + 1e-4)
+                this_weights = np.concatenate([ tmp[i,idx_nonzero] for i in range(n_states) ])
+                this_features = np.zeros((n_states*len(idx_nonzero), n_states))
                 for i in np.arange(n_states):
-                    this_features[(i*2*len(idx_nonzero)):((i+1)*2*len(idx_nonzero)), i] = 1
+                    this_features[(i*len(idx_nonzero)):((i+1)*len(idx_nonzero)), i] = 1
                 # only optimize for states where at least 1 SNP belongs to
                 idx_state_posweight = np.array([ i for i in range(this_features.shape[1]) if np.sum(this_weights[this_features[:,i]==1]) >= 0.1 ])
                 idx_row_posweight = np.concatenate([ np.where(this_features[:,k]==1)[0] for k in idx_state_posweight ])
@@ -577,7 +573,7 @@ def update_emission_params_bb_sitewise_uniqvalues_mix(unique_values, mapping_mat
 # whole inference
 ############################################################
 
-class hmm_sitewise(object):
+class hmm_nophasing(object):
     def __init__(self, params="stmp", t=1-1e-4):
         """
         Attributes
@@ -619,7 +615,7 @@ class hmm_sitewise(object):
         
         Returns
         ----------
-        log_emission : array, shape (2*n_states, n_obs, n_spots)
+        log_emission : array, shape (n_states, n_obs, n_spots)
             Log emission probability for each gene each spot (or sample) under each state. There is a common bag of states across all spots.
         """
         n_obs = X.shape[0]
@@ -627,8 +623,8 @@ class hmm_sitewise(object):
         n_spots = X.shape[2]
         n_states = log_mu.shape[0]
         # initialize log_emission
-        log_emission_rdr = np.zeros((2 * n_states, n_obs, n_spots))
-        log_emission_baf = np.zeros((2 * n_states, n_obs, n_spots))
+        log_emission_rdr = np.zeros((n_states, n_obs, n_spots))
+        log_emission_baf = np.zeros((n_states, n_obs, n_spots))
         for i in np.arange(n_states):
             for s in np.arange(n_spots):
                 # expression from NB distribution
@@ -638,12 +634,10 @@ class hmm_sitewise(object):
                     nb_std = np.sqrt(nb_mean + alphas[i, s] * nb_mean**2)
                     n, p = convert_params(nb_mean, nb_std)
                     log_emission_rdr[i, idx_nonzero_rdr, s] = scipy.stats.nbinom.logpmf(X[idx_nonzero_rdr, 0, s], n, p)
-                    log_emission_rdr[i + n_states, idx_nonzero_rdr, s] = log_emission_rdr[i, idx_nonzero_rdr, s]
                 # AF from BetaBinom distribution
                 idx_nonzero_baf = np.where(total_bb_RD[:,s] > 0)[0]
                 if len(idx_nonzero_baf) > 0:
                     log_emission_baf[i, idx_nonzero_baf, s] = scipy.stats.betabinom.logpmf(X[idx_nonzero_baf,1,s], total_bb_RD[idx_nonzero_baf,s], p_binom[i, s] * taus[i, s], (1-p_binom[i, s]) * taus[i, s])
-                    log_emission_baf[i + n_states, idx_nonzero_baf, s] = scipy.stats.betabinom.logpmf(X[idx_nonzero_baf,1,s], total_bb_RD[idx_nonzero_baf,s], (1-p_binom[i, s]) * taus[i, s], p_binom[i, s] * taus[i, s])
         return log_emission_rdr, log_emission_baf
     #
     @staticmethod
@@ -674,7 +668,7 @@ class hmm_sitewise(object):
         
         Returns
         ----------
-        log_emission : array, shape (2*n_states, n_obs, n_spots)
+        log_emission : array, shape (n_states, n_obs, n_spots)
             Log emission probability for each gene each spot (or sample) under each state. There is a common bag of states across all spots.
         """
         n_obs = X.shape[0]
@@ -682,87 +676,80 @@ class hmm_sitewise(object):
         n_spots = X.shape[2]
         n_states = log_mu.shape[0]
         # initialize log_emission
-        log_emission_rdr = np.zeros((2 * n_states, n_obs, n_spots))
-        log_emission_baf = np.zeros((2 * n_states, n_obs, n_spots))
+        log_emission_rdr = np.zeros((n_states, n_obs, n_spots))
+        log_emission_baf = np.zeros((n_states, n_obs, n_spots))
         for i in np.arange(n_states):
             for s in np.arange(n_spots):
                 # expression from NB distribution
                 idx_nonzero_rdr = np.where(base_nb_mean[:,s] > 0)[0]
                 if len(idx_nonzero_rdr) > 0:
+                    # nb_mean = base_nb_mean[idx_nonzero_rdr,s] * (tumor_prop[s] * np.exp(log_mu[i, s]) + 1 - tumor_prop[s])
                     nb_mean = base_nb_mean[idx_nonzero_rdr,s] * (tumor_prop[idx_nonzero_rdr,s] * np.exp(log_mu[i, s]) + 1 - tumor_prop[idx_nonzero_rdr,s])
                     nb_std = np.sqrt(nb_mean + alphas[i, s] * nb_mean**2)
                     n, p = convert_params(nb_mean, nb_std)
                     log_emission_rdr[i, idx_nonzero_rdr, s] = scipy.stats.nbinom.logpmf(X[idx_nonzero_rdr, 0, s], n, p)
-                    log_emission_rdr[i + n_states, idx_nonzero_rdr, s] = log_emission_rdr[i, idx_nonzero_rdr, s]
                 # AF from BetaBinom distribution
                 idx_nonzero_baf = np.where(total_bb_RD[:,s] > 0)[0]
                 if len(idx_nonzero_baf) > 0:
+                    # mix_p_A = p_binom[i, s] * tumor_prop[s] + 0.5 * (1 - tumor_prop[s])
+                    # mix_p_B = (1 - p_binom[i, s]) * tumor_prop[s] + 0.5 * (1 - tumor_prop[s])
                     mix_p_A = p_binom[i, s] * tumor_prop[idx_nonzero_baf,s] + 0.5 * (1 - tumor_prop[idx_nonzero_baf,s])
                     mix_p_B = (1 - p_binom[i, s]) * tumor_prop[idx_nonzero_baf,s] + 0.5 * (1 - tumor_prop[idx_nonzero_baf,s])
                     log_emission_baf[i, idx_nonzero_baf, s] += scipy.stats.betabinom.logpmf(X[idx_nonzero_baf,1,s], total_bb_RD[idx_nonzero_baf,s], mix_p_A * taus[i, s], mix_p_B * taus[i, s])
-                    log_emission_baf[i + n_states, idx_nonzero_baf, s] += scipy.stats.betabinom.logpmf(X[idx_nonzero_baf,1,s], total_bb_RD[idx_nonzero_baf,s], mix_p_B * taus[i, s], mix_p_A * taus[i, s])
         return log_emission_rdr, log_emission_baf
     #
     @staticmethod
     @njit 
     def forward_lattice(lengths, log_transmat, log_startprob, log_emission, log_sitewise_transmat):
         '''
-        Note that n_states is the CNV states, and there are 2 * n_states of paired states for (CNV, phasing) pairs.
+        Note that n_states is the CNV states, and there are n_states of paired states for (CNV, phasing) pairs.
         Input
             lengths: sum of lengths = n_observations.
             log_transmat: n_states * n_states. Transition probability after log transformation.
             log_startprob: n_states. Start probability after log transformation.
-            log_emission: 2*n_states * n_observations * n_spots. Log probability.
-            log_sitewise_transmat: n_observations, the log transition probability of phase switch.
+            log_emission: n_states * n_observations * n_spots. Log probability.
         Output
-            log_alpha: size 2n_states * n_observations. log alpha[j, t] = log P(o_1, ... o_t, q_t = j | lambda).
+            log_alpha: size n_states * n_observations. log alpha[j, t] = log P(o_1, ... o_t, q_t = j | lambda).
         '''
         n_obs = log_emission.shape[1]
-        n_states = int(np.ceil(log_emission.shape[0] / 2))
+        n_states = log_emission.shape[0]
         assert np.sum(lengths) == n_obs, "Sum of lengths must be equal to the first dimension of X!"
         assert len(log_startprob) == n_states, "Length of startprob_ must be equal to the first dimension of log_transmat!"
-        log_sitewise_self_transmat = np.log(1 - np.exp(log_sitewise_transmat))
         # initialize log_alpha
         log_alpha = np.zeros((log_emission.shape[0], n_obs))
         buf = np.zeros(log_emission.shape[0])
         cumlen = 0
         for le in lengths:
             # start prob
-            combined_log_startprob = np.log(0.5) + np.append(log_startprob,log_startprob)
             # ??? Theoretically, joint distribution across spots under iid is the prod (or sum) of individual (log) probabilities. 
             # But adding too many spots may lead to a higher weight of the emission rather then transition prob.
-            log_alpha[:, cumlen] = combined_log_startprob + np_sum_ax_squeeze(log_emission[:, cumlen, :], axis=1)
+            log_alpha[:, cumlen] = log_startprob + np_sum_ax_squeeze(log_emission[:, cumlen, :], axis=1)
             for t in np.arange(1, le):
-                phases_switch_mat = np.array([[log_sitewise_self_transmat[cumlen + t-1], log_sitewise_transmat[cumlen + t-1]], [log_sitewise_transmat[cumlen + t-1], log_sitewise_self_transmat[cumlen + t-1] ]])
-                combined_transmat = np.kron( np.exp(phases_switch_mat), np.exp(log_transmat) )
-                combined_transmat = np.log(combined_transmat)
                 for j in np.arange(log_emission.shape[0]):
                     for i in np.arange(log_emission.shape[0]):
-                        buf[i] = log_alpha[i, (cumlen + t - 1)] + combined_transmat[i, j]
+                        buf[i] = log_alpha[i, (cumlen + t - 1)] + log_transmat[i, j]
                     log_alpha[j, (cumlen + t)] = mylogsumexp(buf) + np.sum(log_emission[j, (cumlen + t), :])
             cumlen += le
         return log_alpha
     #
     @staticmethod
-    @njit
+    @njit 
     def backward_lattice(lengths, log_transmat, log_startprob, log_emission, log_sitewise_transmat):
         '''
-        Note that n_states is the CNV states, and there are 2 * n_states of paired states for (CNV, phasing) pairs.
+        Note that n_states is the CNV states, and there are n_states of paired states for (CNV, phasing) pairs.
         Input
             X: size n_observations * n_components * n_spots.
             lengths: sum of lengths = n_observations.
             log_transmat: n_states * n_states. Transition probability after log transformation.
             log_startprob: n_states. Start probability after log transformation.
-            log_emission: 2*n_states * n_observations * n_spots. Log probability.
-            log_sitewise_transmat: n_observations, the log transition probability of phase switch.
+            log_emission: n_states * n_observations * n_spots. Log probability.
         Output
             log_beta: size 2*n_states * n_observations. log beta[i, t] = log P(o_{t+1}, ..., o_T | q_t = i, lambda).
         '''
         n_obs = log_emission.shape[1]
-        n_states = int(np.ceil(log_emission.shape[0] / 2))
+        n_states = log_emission.shape[0]
         assert np.sum(lengths) == n_obs, "Sum of lengths must be equal to the first dimension of X!"
         assert len(log_startprob) == n_states, "Length of startprob_ must be equal to the first dimension of log_transmat!"
-        log_sitewise_self_transmat = np.log(1 - np.exp(log_sitewise_transmat))
         # initialize log_beta
         log_beta = np.zeros((log_emission.shape[0], n_obs))
         buf = np.zeros(log_emission.shape[0])
@@ -773,17 +760,15 @@ class hmm_sitewise(object):
             # But adding too many spots may lead to a higher weight of the emission rather then transition prob.
             log_beta[:, (cumlen + le - 1)] = 0
             for t in np.arange(le-2, -1, -1):
-                phases_switch_mat = np.array([[log_sitewise_self_transmat[cumlen + t], log_sitewise_transmat[cumlen + t]], [log_sitewise_transmat[cumlen + t], log_sitewise_self_transmat[cumlen + t] ]])
-                combined_transmat = np.kron( np.exp(phases_switch_mat), np.exp(log_transmat) )
-                combined_transmat = np.log(combined_transmat)
                 for i in np.arange(log_emission.shape[0]):
                     for j in np.arange(log_emission.shape[0]):
-                        buf[j] = log_beta[j, (cumlen + t + 1)] + combined_transmat[i, j] + np.sum(log_emission[j, (cumlen + t + 1), :])
+                        buf[j] = log_beta[j, (cumlen + t + 1)] + log_transmat[i, j] + np.sum(log_emission[j, (cumlen + t + 1), :])
                     log_beta[i, (cumlen + t)] = mylogsumexp(buf)
             cumlen += le
         return log_beta
+
     #
-    def run_baum_welch_nb_bb(self, X, lengths, n_states, base_nb_mean, total_bb_RD, log_sitewise_transmat, tumor_prop=None, \
+    def run_baum_welch_nb_bb(self, X, lengths, n_states, base_nb_mean, total_bb_RD, log_sitewise_transmat=None, tumor_prop=None, \
         fix_NB_dispersion=False, shared_NB_dispersion=False, fix_BB_dispersion=False, shared_BB_dispersion=False, \
         is_diag=False, init_log_mu=None, init_p_binom=None, init_alphas=None, init_taus=None, max_iter=100, tol=1e-4):
         '''
@@ -821,43 +806,41 @@ class hmm_sitewise(object):
         for r in trange(max_iter):
             # E step
             if tumor_prop is None:
-                log_emission_rdr, log_emission_baf = hmm_sitewise.compute_emission_probability_nb_betabinom(X, base_nb_mean, log_mu, alphas, total_bb_RD, p_binom, taus)
+                log_emission_rdr, log_emission_baf = hmm_nophasing.compute_emission_probability_nb_betabinom(X, base_nb_mean, log_mu, alphas, total_bb_RD, p_binom, taus)
                 log_emission = log_emission_rdr + log_emission_baf
             else:
-                log_emission_rdr, log_emission_baf = hmm_sitewise.compute_emission_probability_nb_betabinom_mix(X, base_nb_mean, log_mu, alphas, total_bb_RD, p_binom, taus, tumor_prop)
+                log_emission_rdr, log_emission_baf = hmm_nophasing.compute_emission_probability_nb_betabinom_mix(X, base_nb_mean, log_mu, alphas, total_bb_RD, p_binom, taus, tumor_prop)
                 log_emission = log_emission_rdr + log_emission_baf
-            log_alpha = hmm_sitewise.forward_lattice(lengths, log_transmat, log_startprob, log_emission, log_sitewise_transmat)
-            log_beta = hmm_sitewise.backward_lattice(lengths, log_transmat, log_startprob, log_emission, log_sitewise_transmat)
+            log_alpha = hmm_nophasing.forward_lattice(lengths, log_transmat, log_startprob, log_emission, log_sitewise_transmat)
+            log_beta = hmm_nophasing.backward_lattice(lengths, log_transmat, log_startprob, log_emission, log_sitewise_transmat)
             log_gamma = compute_posterior_obs(log_alpha, log_beta)
-            log_xi = compute_posterior_transition_sitewise(log_alpha, log_beta, log_transmat, log_emission)
+            log_xi = compute_posterior_transition_nophasing(log_alpha, log_beta, log_transmat, log_emission)
             # M step
             if "s" in self.params:
-                new_log_startprob = update_startprob_sitewise(lengths, log_gamma)
+                new_log_startprob = update_startprob_nophasing(lengths, log_gamma)
                 new_log_startprob = new_log_startprob.flatten()
             else:
                 new_log_startprob = log_startprob
             if "t" in self.params:
-                new_log_transmat = update_transition_sitewise(log_xi, is_diag=is_diag)
+                new_log_transmat = update_transition_nophasing(log_xi, is_diag=is_diag)
             else:
                 new_log_transmat = log_transmat
             if "m" in self.params:
-                # new_log_mu, new_alphas = update_emission_params_nb_sitewise(X[:,0,:], log_gamma, base_nb_mean, alphas, start_log_mu=log_mu, \
-                #     fix_NB_dispersion=fix_NB_dispersion, shared_NB_dispersion=shared_NB_dispersion)
                 if tumor_prop is None:
-                    new_log_mu, new_alphas = update_emission_params_nb_sitewise_uniqvalues(unique_values_nb, mapping_matrices_nb, log_gamma, base_nb_mean, alphas, start_log_mu=log_mu, \
+                    new_log_mu, new_alphas = update_emission_params_nb_nophasing_uniqvalues(unique_values_nb, mapping_matrices_nb, log_gamma, alphas, start_log_mu=log_mu, \
                         fix_NB_dispersion=fix_NB_dispersion, shared_NB_dispersion=shared_NB_dispersion)
                 else:
-                    new_log_mu, new_alphas = update_emission_params_nb_sitewise_uniqvalues_mix(unique_values_nb, mapping_matrices_nb, log_gamma, base_nb_mean, alphas, tumor_prop, start_log_mu=log_mu, \
+                    new_log_mu, new_alphas = update_emission_params_nb_nophasing_uniqvalues_mix(unique_values_nb, mapping_matrices_nb, log_gamma, alphas, tumor_prop, start_log_mu=log_mu, \
                         fix_NB_dispersion=fix_NB_dispersion, shared_NB_dispersion=shared_NB_dispersion)
             else:
                 new_log_mu = log_mu
                 new_alphas = alphas
             if "p" in self.params:
                 if tumor_prop is None:
-                    new_p_binom, new_taus = update_emission_params_bb_sitewise_uniqvalues(unique_values_bb, mapping_matrices_bb, log_gamma, total_bb_RD, taus, start_p_binom=p_binom, \
+                    new_p_binom, new_taus = update_emission_params_bb_nophasing_uniqvalues(unique_values_bb, mapping_matrices_bb, log_gamma, taus, start_p_binom=p_binom, \
                         fix_BB_dispersion=fix_BB_dispersion, shared_BB_dispersion=shared_BB_dispersion)
                 else:
-                    new_p_binom, new_taus = update_emission_params_bb_sitewise_uniqvalues_mix(unique_values_bb, mapping_matrices_bb, log_gamma, total_bb_RD, taus, tumor_prop, start_p_binom=p_binom, \
+                    new_p_binom, new_taus = update_emission_params_bb_nophasing_uniqvalues_mix(unique_values_bb, mapping_matrices_bb, log_gamma, taus, tumor_prop, start_p_binom=p_binom, \
                         fix_BB_dispersion=fix_BB_dispersion, shared_BB_dispersion=shared_BB_dispersion)
             else:
                 new_p_binom = p_binom
@@ -880,446 +863,3 @@ class hmm_sitewise(object):
         return new_log_mu, new_alphas, new_p_binom, new_taus, new_log_startprob, new_log_transmat
 
 
-def posterior_nb_bb_sitewise(X, lengths, base_nb_mean, log_mu, alphas, total_bb_RD, p_binom, taus, log_startprob, log_transmat, log_sitewise_transmat):
-    """
-    Attributes
-    ----------
-    X : array, shape (n_observations, n_components, n_spots)
-        Observed expression UMI count and allele frequency UMI count.
-
-    lengths : array, shape (n_chromosomes,)
-        Number genes (or bins) per chromosome, the sum of this vector should be equal to n_observations.
-
-    base_nb_mean : array, shape (n_observations, n_spots)
-        Mean expression under diploid state.
-
-    log_mu : array, shape (n_states, n_spots)
-        Log read depth shift of each CNV states.
-
-    alphas : array, shape (n_states, n_spots)
-        Inverse of dispersion in NB distribution of each state.
-
-    total_bb_RD : array, shape (n_observations, n_spots)
-        SNP-covering reads for both REF and ALT across genes along genome.
-
-    p_binom : array, shape (n_states, n_spots)
-        MAF of each CNV states.
-
-    taus : array, shape (n_states, n_spots)
-        Inverse of dispersion of Beta-Binomial distribution of each state.
-
-    log_startprob : array, shape (n_states,)
-        Log of start probability.
-
-    log_transmat : array, shape (n_states, n_states)
-        Log of transition probability across states.
-
-    log_sitewise_transmat : array, shape (n_observations)
-        Log of phase switch probability of each gene (or bin).
-    """
-    log_emission_rdr, log_emission_baf = hmm_sitewise.compute_emission_probability_nb_betabinom(X, base_nb_mean, log_mu, alphas, total_bb_RD, p_binom, taus)
-    log_emission = log_emission_rdr + log_emission_baf
-    log_alpha = hmm_sitewise.forward_lattice(lengths, log_transmat, log_startprob, log_emission, log_sitewise_transmat)
-    log_beta = hmm_sitewise.backward_lattice(lengths, log_transmat, log_startprob, log_emission, log_sitewise_transmat)
-    log_gamma = compute_posterior_obs(log_alpha, log_beta)
-    return log_gamma
-
-
-def loglikelihood_nb_bb_sitewise(X, lengths, base_nb_mean, log_mu, alphas, total_bb_RD, p_binom, taus, log_startprob, log_transmat, log_sitewise_transmat):
-    """
-    Attributes
-    ----------
-    X : array, shape (n_observations, n_components, n_spots)
-        Observed expression UMI count and allele frequency UMI count.
-
-    lengths : array, shape (n_chromosomes,)
-        Number genes (or bins) per chromosome, the sum of this vector should be equal to n_observations.
-
-    base_nb_mean : array, shape (n_observations, n_spots)
-        Mean expression under diploid state.
-
-    log_mu : array, shape (n_states, n_spots)
-        Log read depth shift of each CNV states.
-
-    alphas : array, shape (n_states, n_spots)
-        Inverse of dispersion in NB distribution of each state.
-
-    total_bb_RD : array, shape (n_observations, n_spots)
-        SNP-covering reads for both REF and ALT across genes along genome.
-
-    p_binom : array, shape (n_states, n_spots)
-        MAF of each CNV states.
-
-    taus : array, shape (n_states, n_spots)
-        Inverse of dispersion of Beta-Binomial distribution of each state.
-
-    log_startprob : array, shape (n_states,)
-        Log of start probability.
-
-    log_transmat : array, shape (n_states, n_states)
-        Log of transition probability across states.
-
-    log_sitewise_transmat : array, shape (n_observations)
-        Log of phase switch probability of each gene (or bin).
-    """
-    log_emission_rdr, log_emission_baf = hmm_sitewise.compute_emission_probability_nb_betabinom(X, base_nb_mean, log_mu, alphas, total_bb_RD, p_binom, taus)
-    log_emission = log_emission_rdr + log_emission_baf
-    log_alpha = hmm_sitewise.forward_lattice(lengths, log_transmat, log_startprob, log_emission, log_sitewise_transmat)
-    return np.sum(scipy.special.logsumexp(log_alpha[:,np.cumsum(lengths)-1], axis=0)), log_alpha
-
-
-def viterbi_nb_bb_sitewise(X, lengths, base_nb_mean, log_mu, alphas, total_bb_RD, p_binom, taus, log_startprob, log_transmat, log_sitewise_transmat):
-    '''
-    Input
-        X: size n_observations * n_components * n_spots.
-        lengths: sum of lengths = n_observations.
-        exposures: size of n_observations * n_spots.
-        base_prob: size of n_observations. The expression probability derived from normal spots.
-        log_mu: size of n_states. Log of mean/exposure/base_prob of each HMM state.
-        alpha: size of n_states. Dispersioon parameter of each HMM state.
-        log_transmat: n_states * n_states. Transition probability after log transformation.
-        log_startprob: n_states. Start probability after log transformation.
-    Output
-#        log_prob: a scalar.
-        labels: size of n_observations.
-    Intermediate
-        log_emission: n_states * n_observations * n_spots. Log probability.
-        log_v: n_states * n_observations per chromosome. Log of viterbi DP table. v[i,t] = max_{q_1, ..., q_{t-1}} P(o_1, q_1, ..., o_{t-1}, q_{t-1}, o_t, q_t=i | lambda).
-    '''
-    n_obs = X.shape[0]
-    n_comp = X.shape[1]
-    n_spots = X.shape[2]
-    n_states = log_transmat.shape[0]
-    log_sitewise_self_transmat = np.log(1 - np.exp(log_sitewise_transmat))
-    log_emission_rdr, log_emission_baf = hmm_sitewise.compute_emission_probability_nb_betabinom(X, base_nb_mean, log_mu, alphas, total_bb_RD, p_binom, taus)
-    log_emission = log_emission_rdr + log_emission_baf
-    # initialize viterbi DP table and backtracking table
-    labels = np.array([])
-    merged_labels = np.array([])
-    cumlen = 0
-    for le in lengths:
-        log_v = np.zeros((2*n_states, le))
-        bt = np.zeros((2*n_states, le))
-        for t in np.arange(le):
-            if cumlen == 0 and t == 0:
-                log_v[:, 0] = np.mean(log_emission[:,0,:], axis=1) + np.append(log_startprob,log_startprob) + np.log(0.5)
-                continue
-            for i in np.arange(2*n_states):
-                if t > 0:
-                    tmp = log_v[:, (t-1)] + np.append(log_transmat[:,i - n_states * int(i/n_states)], log_transmat[:,i - n_states * int(i/n_states)]) + np.sum(log_emission[i, (cumlen+t), :])
-                else:
-                    tmp = np.append(log_startprob[i - n_states * int(i/n_states)], log_startprob[i - n_states * int(i/n_states)]) + np.sum(log_emission[i, (cumlen+t), :])
-                bt[i, t] = np.argmax(tmp)
-                log_v[i, t] = np.max(tmp)
-        # backtracking to get the sequence
-        chr_labels = [ np.argmax(log_v[:,-1]) ]
-        
-        if cumlen == 0:
-            for t2 in np.arange(le-1, 0, -1):
-                chr_labels.append( int(bt[chr_labels[-1],t2]))
-        else:
-            for t2 in np.arange(le-2, -1, -1):
-                chr_labels.append( int(bt[chr_labels[-1],t2]))
-
-        chr_labels = np.array(chr_labels[::-1]).astype(int)
-        # merge two phases
-        chr_merged_labels = copy.copy(chr_labels)
-        chr_merged_labels[chr_merged_labels >= n_states] = chr_merged_labels[chr_merged_labels >= n_states] - n_states
-        
-        if cumlen == 0:
-            labels = chr_labels
-            merged_labels = chr_merged_labels
-        else:
-            labels = np.append(labels, chr_labels)
-            merged_labels = np.append(merged_labels, chr_merged_labels)
-        
-        cumlen += le
-    return labels, merged_labels
-
-
-def pipeline_baum_welch(output_prefix, X, lengths, n_states, base_nb_mean, total_bb_RD, log_sitewise_transmat, tumor_prop=None, \
-    hmmclass=hmm_sitewise, params="smp", t=1-1e-6, random_state=0, \
-    in_log_space=True, only_minor=False, fix_NB_dispersion=False, shared_NB_dispersion=True, fix_BB_dispersion=False, shared_BB_dispersion=True, \
-    init_log_mu=None, init_p_binom=None, init_alphas=None, init_taus=None, is_diag=True, max_iter=100, tol=1e-4):
-    # initialization
-    n_spots = X.shape[2]
-    if ((init_log_mu is None) and ("m" in params)) or ((init_p_binom is None) and ("p" in params)):
-        tmp_log_mu, tmp_p_binom = initialization_by_gmm(n_states, X, base_nb_mean, total_bb_RD, params, random_state=random_state, in_log_space=in_log_space, only_minor=only_minor)
-        if (init_log_mu is None) and ("m" in params):
-            init_log_mu = tmp_log_mu
-        if (init_p_binom is None) and ("p" in params):
-            init_p_binom = tmp_p_binom
-    print(f"init_log_mu = {init_log_mu}")
-    print(f"init_p_binom = {init_p_binom}")
-    
-    # fit HMM-NB-BetaBinom
-    hmmmodel = hmmclass(params=params, t=t)
-    new_log_mu, new_alphas, new_p_binom, new_taus, new_log_startprob, new_log_transmat = hmmmodel.run_baum_welch_nb_bb(X, lengths, \
-        n_states, base_nb_mean, total_bb_RD, log_sitewise_transmat, tumor_prop, \
-        fix_NB_dispersion=fix_NB_dispersion, shared_NB_dispersion=shared_NB_dispersion, \
-        fix_BB_dispersion=fix_BB_dispersion, shared_BB_dispersion=shared_BB_dispersion, \
-        is_diag=is_diag, init_log_mu=init_log_mu, init_p_binom=init_p_binom, init_alphas=init_alphas, init_taus=init_taus, \
-        max_iter=max_iter, tol=tol)
-
-    # likelihood
-    if tumor_prop is None:
-        log_emission_rdr, log_emission_baf = hmmclass.compute_emission_probability_nb_betabinom(X, base_nb_mean, new_log_mu, new_alphas, total_bb_RD, new_p_binom, new_taus)
-        log_emission = log_emission_rdr + log_emission_baf
-    else:
-        log_emission_rdr, log_emission_baf = hmmclass.compute_emission_probability_nb_betabinom_mix(X, base_nb_mean, new_log_mu, new_alphas, total_bb_RD, new_p_binom, new_taus, tumor_prop)
-        log_emission = log_emission_rdr + log_emission_baf
-    log_alpha = hmmclass.forward_lattice(lengths, new_log_transmat, new_log_startprob, log_emission, log_sitewise_transmat)
-    llf = np.sum(scipy.special.logsumexp(log_alpha[:,np.cumsum(lengths)-1], axis=0))
-
-    log_beta = hmmclass.backward_lattice(lengths, new_log_transmat, new_log_startprob, log_emission, log_sitewise_transmat)
-    log_gamma = compute_posterior_obs(log_alpha, log_beta)
-    pred = np.argmax(log_gamma, axis=0)
-    pred_cnv = pred % n_states
-
-    # save results
-    if not output_prefix is None:
-        tmp = np.log10(1 - t)
-        np.savez(f"{output_prefix}_nstates{n_states}_{params}_{tmp:.0f}_seed{random_state}.npz", \
-                new_log_mu=new_log_mu, new_alphas=new_alphas, new_p_binom=new_p_binom, new_taus=new_taus, \
-                new_log_startprob=new_log_startprob, new_log_transmat=new_log_transmat, log_gamma=log_gamma, pred_cnv=pred_cnv, llf=llf)
-    else:
-        res = {"new_log_mu":new_log_mu, "new_alphas":new_alphas, "new_p_binom":new_p_binom, "new_taus":new_taus, \
-            "new_log_startprob":new_log_startprob, "new_log_transmat":new_log_transmat, "log_gamma":log_gamma, "pred_cnv":pred_cnv, "llf":llf}
-        return res
-
-
-def similarity_components_rdrbaf_neymanpearson(X, base_nb_mean, total_bb_RD, res, threshold=2.0, minlength=10, topk=10, params="smp", tumor_prop=None, hmmclass=hmm_sitewise):
-    n_obs = X.shape[0]
-    n_states = res["new_p_binom"].shape[0]
-    n_clones = X.shape[2]
-    G = nx.Graph()
-    G.add_nodes_from( np.arange(n_clones) )
-    #
-    def eval_neymanpearson_bafonly(log_emission_baf_c1, pred_c1, log_emission_baf_c2, pred_c2, bidx, n_states, res, p):
-        assert log_emission_baf_c1.shape[0] == n_states or log_emission_baf_c1.shape[0] == 2 * n_states
-        # likelihood under the corresponding state
-        llf_original = np.append(log_emission_baf_c1[pred_c1[bidx], bidx], log_emission_baf_c2[pred_c2[bidx], bidx]).reshape(-1,1)
-        # likelihood under the switched state
-        if log_emission_baf_c1.shape[0] == 2 * n_states:
-            if (res["new_p_binom"][p[0],0] > 0.5) == (res["new_p_binom"][p[1],0] > 0.5):
-                switch_pred_c1 = n_states * (pred_c1 >= n_states) + (pred_c2 % n_states)
-                switch_pred_c2 = n_states * (pred_c2 >= n_states) + (pred_c1 % n_states)
-            else:
-                switch_pred_c1 = n_states * (pred_c1 < n_states) + (pred_c2 % n_states)
-                switch_pred_c2 = n_states * (pred_c2 < n_states) + (pred_c1 % n_states)
-        else:
-            switch_pred_c1 = pred_c2
-            switch_pred_c2 = pred_c1
-        llf_switch = np.append(log_emission_baf_c1[switch_pred_c1[bidx], bidx], log_emission_baf_c2[switch_pred_c2[bidx], bidx]).reshape(-1,1)
-        # log likelihood difference
-        return np.mean(llf_original) - np.mean(llf_switch)
-    #
-    def eval_neymanpearson_rdrbaf(log_emission_rdr_c1, log_emission_baf_c1, pred_c1, log_emission_rdr_c2, log_emission_baf_c2, pred_c2, bidx, n_states, res, p):
-        assert log_emission_baf_c1.shape[0] == n_states or log_emission_baf_c1.shape[0] == 2 * n_states
-        # likelihood under the corresponding state
-        llf_original = 0.5 * np.append(log_emission_rdr_c1[pred_c1[bidx], bidx] + log_emission_baf_c1[pred_c1[bidx], bidx], \
-            log_emission_rdr_c2[pred_c2[bidx], bidx] + log_emission_baf_c2[pred_c2[bidx], bidx]).reshape(-1,1)
-        # likelihood under the switched state
-        if log_emission_baf_c1.shape[0] == 2 * n_states:
-            if (res["new_p_binom"][p[0],0] > 0.5) == (res["new_p_binom"][p[1],0] > 0.5):
-                switch_pred_c1 = n_states * (pred_c1 >= n_states) + (pred_c2 % n_states)
-                switch_pred_c2 = n_states * (pred_c2 >= n_states) + (pred_c1 % n_states)
-            else:
-                switch_pred_c1 = n_states * (pred_c1 < n_states) + (pred_c2 % n_states)
-                switch_pred_c2 = n_states * (pred_c2 < n_states) + (pred_c1 % n_states)
-        else:
-            switch_pred_c1 = pred_c2
-            switch_pred_c2 = pred_c1
-        llf_switch = 0.5 * np.append(log_emission_rdr_c1[switch_pred_c1[bidx], bidx] + log_emission_baf_c1[switch_pred_c1[bidx], bidx], \
-            log_emission_rdr_c2[switch_pred_c2[bidx], bidx] + log_emission_baf_c2[switch_pred_c2[bidx], bidx]).reshape(-1,1)
-        # log likelihood difference
-        return np.mean(llf_original) - np.mean(llf_switch)
-    #
-    if tumor_prop is None:
-        log_emission_rdr, log_emission_baf = hmmclass.compute_emission_probability_nb_betabinom(np.vstack([X[:,0,:].flatten("F"), X[:,1,:].flatten("F")]).T.reshape(-1,2,1), \
-            base_nb_mean.flatten("F").reshape(-1,1), res["new_log_mu"], res["new_alphas"], \
-            total_bb_RD.flatten("F").reshape(-1,1), res["new_p_binom"], res["new_taus"])
-    else:
-        log_emission_rdr, log_emission_baf = hmmclass.compute_emission_probability_nb_betabinom_mix(np.vstack([X[:,0,:].flatten("F"), X[:,1,:].flatten("F")]).T.reshape(-1,2,1), \
-            base_nb_mean.flatten("F").reshape(-1,1), res["new_log_mu"], res["new_alphas"], \
-            total_bb_RD.flatten("F").reshape(-1,1), res["new_p_binom"], res["new_taus"], tumor_prop)
-    log_emission_rdr = log_emission_rdr.reshape((log_emission_rdr.shape[0], n_obs, n_clones), order="F")
-    log_emission_baf = log_emission_baf.reshape((log_emission_baf.shape[0], n_obs, n_clones), order="F")
-    reshaped_pred = np.argmax(res["log_gamma"], axis=0).reshape((X.shape[2],-1))
-    reshaped_pred_cnv = reshaped_pred % n_states
-    for c1 in range(n_clones):
-        for c2 in range(c1+1, n_clones):
-            # unmergeable_bincount = 0
-            unique_pair_states = [x for x in np.unique(reshaped_pred_cnv[np.array([c1,c2]), :], axis=1).T if x[0] != x[1]]
-            list_t_neymanpearson = []
-            for p in unique_pair_states:
-                bidx = np.where( (reshaped_pred_cnv[c1,:]==p[0]) & (reshaped_pred_cnv[c2,:]==p[1]) )[0]
-                if "m" in params and "p" in params:
-                    t_neymanpearson = eval_neymanpearson_rdrbaf(log_emission_rdr[:,:,c1], log_emission_baf[:,:,c1], reshaped_pred[c1,:], log_emission_rdr[:,:,c2], log_emission_baf[:,:,c2], reshaped_pred[c2,:], bidx, n_states, res, p)
-                elif "p" in params:
-                    t_neymanpearson = eval_neymanpearson_bafonly(log_emission_baf[:,:,c1], reshaped_pred[c1,:], log_emission_baf[:,:,c2], reshaped_pred[c2,:], bidx, n_states, res, p)
-                # if t_neymanpearson > threshold:
-                #     unmergeable_bincount += len(bidx)
-                print(c1, c2, p, len(bidx), t_neymanpearson)
-                if len(bidx) >= minlength:
-                    list_t_neymanpearson.append(t_neymanpearson)
-            if len(list_t_neymanpearson) == 0 or np.max(list_t_neymanpearson) < threshold:
-                max_v = np.max(list_t_neymanpearson) if len(list_t_neymanpearson) > 0 else 1e-3
-                G.add_weighted_edges_from([ (c1, c2, max_v) ])
-            # if unmergeable_bincount < topk:
-            #     G.add_edge(c1, c2)
-    # maximal cliques
-    cliques = []
-    for x in nx.find_cliques(G):
-        this_len = len(x)
-        this_weights = np.sum([G.get_edge_data(a,b)["weight"] for a in x for b in x if a != b]) / 2
-        cliques.append( (x, this_len, this_weights) )
-    cliques.sort(key = lambda x:(-x[1],x[2]) )
-    covered_nodes = set()
-    merging_groups = []
-    for c in cliques:
-        if len(set(c[0]) & covered_nodes) == 0:
-            merging_groups.append( list(c[0]) )
-            covered_nodes = covered_nodes | set(c[0])
-    for c in range(n_clones):
-        if not (c in covered_nodes):
-            merging_groups.append( [c] )
-            covered_nodes.add(c)
-    merging_groups.sort(key = lambda x:np.min(x))
-    # clone assignment after merging
-    map_clone_id = {}
-    for i,x in enumerate(merging_groups):
-        for z in x:
-            map_clone_id[z] = i
-    new_assignment = np.array([map_clone_id[x] for x in res["new_assignment"]])
-    merged_res = copy.copy(res)
-    merged_res["new_assignment"] = new_assignment
-    merged_res["total_llf"] = np.NAN
-    merged_res["pred_cnv"] = np.concatenate([ res["pred_cnv"][(c[0]*n_obs):(c[0]*n_obs+n_obs)] for c in merging_groups ])
-    merged_res["log_gamma"] = np.hstack([ res["log_gamma"][:, (c[0]*n_obs):(c[0]*n_obs+n_obs)] for c in merging_groups ])
-    return merging_groups, merged_res
-
-
-def similarity_components_rdrbaf_neymanpearson_posterior(X, base_nb_mean, total_bb_RD, res, threshold=2.0, minlength=10, topk=10, params="smp", tumor_prop=None, hmmclass=hmm_sitewise):
-    n_obs = X.shape[0]
-    n_states = res["new_p_binom"].shape[0]
-    n_clones = X.shape[2]
-    G = nx.Graph()
-    G.add_nodes_from( np.arange(n_clones) )
-    #
-    def eval_neymanpearson_bafonly(log_emission_baf_c1, log_gamma_c1, log_emission_baf_c2, log_gamma_c2, bidx, n_states, res, p):
-        assert log_emission_baf_c1.shape[0] == n_states or log_emission_baf_c1.shape[0] == 2 * n_states
-        # likelihood under the corresponding state
-        llf_original = np.append(scipy.special.logsumexp(log_emission_baf_c1[:, bidx] + log_gamma_c1[:, bidx], axis=0), 
-                                 scipy.special.logsumexp(log_emission_baf_c2[:, bidx] + log_gamma_c2[:, bidx], axis=0))
-        # likelihood under the switched state
-        if log_emission_baf_c1.shape[0] == 2 * n_states:
-            whether_switch = False
-            pred_c1 = np.argmax(log_gamma_c1[:,bidx[0]])
-            pred_c2 = np.argmax(log_gamma_c2[:,bidx[0]])
-            if ( ((res["new_p_binom"][p[0],0] > 0.5) == (res["new_p_binom"][p[1],0] > 0.5)) ^ ((pred_c1 < n_states) == (pred_c2 < n_states)) ):
-                whether_switch = True
-            if not whether_switch:
-                switch_log_gamma_c1 = log_gamma_c2
-                switch_log_gamma_c2 = log_gamma_c1
-            else:
-                switch_log_gamma_c1 = np.vstack([log_gamma_c2[:n_states,:], log_gamma_c2[n_states:,:]])
-                switch_log_gamma_c2 = np.vstack([log_gamma_c1[:n_states,:], log_gamma_c1[n_states:,:]])
-        else:
-            switch_log_gamma_c1 = log_gamma_c2
-            switch_log_gamma_c2 = log_gamma_c1
-        llf_switch = np.append(scipy.special.logsumexp(log_emission_baf_c1[:, bidx] + switch_log_gamma_c1[:, bidx], axis=0), 
-                               scipy.special.logsumexp(log_emission_baf_c2[:, bidx] + switch_log_gamma_c2[:, bidx], axis=0))
-        # log likelihood difference
-        return np.mean(llf_original) - np.mean(llf_switch)
-    #
-    def eval_neymanpearson_rdrbaf(log_emission_rdr_c1, log_emission_baf_c1, log_gamma_c1, log_emission_rdr_c2, log_emission_baf_c2, log_gamma_c2, bidx, n_states, res, p):
-        assert log_emission_baf_c1.shape[0] == n_states or log_emission_baf_c1.shape[0] == 2 * n_states
-        # likelihood under the corresponding state
-        llf_original = 0.5 * np.append(scipy.special.logsumexp((log_emission_rdr_c1+log_emission_baf_c1)[:, bidx] + log_gamma_c1[:, bidx], axis=0), \
-                                       scipy.special.logsumexp((log_emission_rdr_c2+log_emission_baf_c2)[:, bidx] + log_gamma_c2[:, bidx], axis=0))
-        # likelihood under the switched state
-        if log_emission_baf_c1.shape[0] == 2 * n_states:
-            whether_switch = False
-            pred_c1 = np.argmax(log_gamma_c1[:,bidx[0]])
-            pred_c2 = np.argmax(log_gamma_c2[:,bidx[0]])
-            if ( ((res["new_p_binom"][p[0],0] > 0.5) == (res["new_p_binom"][p[1],0] > 0.5)) ^ ((pred_c1 < n_states) == (pred_c2 < n_states)) ):
-                whether_switch = True
-            if not whether_switch:
-                switch_log_gamma_c1 = log_gamma_c2
-                switch_log_gamma_c2 = log_gamma_c1
-            else:
-                switch_log_gamma_c1 = np.vstack([log_gamma_c2[:n_states,:], log_gamma_c2[n_states:,:]])
-                switch_log_gamma_c2 = np.vstack([log_gamma_c1[:n_states,:], log_gamma_c1[n_states:,:]])
-        else:
-            switch_log_gamma_c1 = log_gamma_c2
-            switch_log_gamma_c2 = log_gamma_c1
-        llf_switch = 0.5 * np.append(scipy.special.logsumexp((log_emission_rdr_c1+log_emission_baf_c1)[:, bidx] + switch_log_gamma_c1[:, bidx], axis=0), \
-                                     scipy.special.logsumexp((log_emission_rdr_c2+log_emission_baf_c2)[:, bidx] + switch_log_gamma_c2[:, bidx], axis=0))
-        # log likelihood difference
-        return np.mean(llf_original) - np.mean(llf_switch)
-    #
-    if tumor_prop is None:
-        log_emission_rdr, log_emission_baf = hmmclass.compute_emission_probability_nb_betabinom(np.vstack([X[:,0,:].flatten("F"), X[:,1,:].flatten("F")]).T.reshape(-1,2,1), \
-            base_nb_mean.flatten("F").reshape(-1,1), res["new_log_mu"], res["new_alphas"], \
-            total_bb_RD.flatten("F").reshape(-1,1), res["new_p_binom"], res["new_taus"])
-    else:
-        log_emission_rdr, log_emission_baf = hmmclass.compute_emission_probability_nb_betabinom_mix(np.vstack([X[:,0,:].flatten("F"), X[:,1,:].flatten("F")]).T.reshape(-1,2,1), \
-            base_nb_mean.flatten("F").reshape(-1,1), res["new_log_mu"], res["new_alphas"], \
-            total_bb_RD.flatten("F").reshape(-1,1), res["new_p_binom"], res["new_taus"], tumor_prop)
-    log_emission_rdr = log_emission_rdr.reshape((log_emission_rdr.shape[0], n_obs, n_clones), order="F")
-    log_emission_baf = log_emission_baf.reshape((log_emission_baf.shape[0], n_obs, n_clones), order="F")
-    reshaped_pred = np.argmax(res["log_gamma"], axis=0).reshape((X.shape[2],-1))
-    reshaped_pred_cnv = reshaped_pred % n_states
-    reshaped_log_gamma = np.stack([ res["log_gamma"][:,(c*n_obs):(c*n_obs + n_obs)] for c in range(n_clones) ], axis=-1)
-    for c1 in range(n_clones):
-        for c2 in range(c1+1, n_clones):
-            # unmergeable_bincount = 0
-            unique_pair_states = [x for x in np.unique(reshaped_pred_cnv[np.array([c1,c2]), :], axis=1).T if x[0] != x[1]]
-            list_t_neymanpearson = []
-            for p in unique_pair_states:
-                bidx = np.where( (reshaped_pred_cnv[c1,:]==p[0]) & (reshaped_pred_cnv[c2,:]==p[1]) )[0]
-                if "m" in params and "p" in params:
-                    t_neymanpearson = eval_neymanpearson_rdrbaf(log_emission_rdr[:,:,c1], log_emission_baf[:,:,c1], reshaped_log_gamma[:,:,c1], log_emission_rdr[:,:,c2], log_emission_baf[:,:,c2], reshaped_log_gamma[:,:,c2], bidx, n_states, res, p)
-                elif "p" in params:
-                    t_neymanpearson = eval_neymanpearson_bafonly(log_emission_baf[:,:,c1], reshaped_log_gamma[:,:,c1], log_emission_baf[:,:,c2], reshaped_log_gamma[:,:,c2], bidx, n_states, res, p)
-                # if t_neymanpearson > threshold:
-                #     unmergeable_bincount += len(bidx)
-                print(c1, c2, p, len(bidx), t_neymanpearson)
-                if len(bidx) >= minlength:
-                    list_t_neymanpearson.append(t_neymanpearson)
-            if len(list_t_neymanpearson) == 0 or np.max(list_t_neymanpearson) < threshold:
-                max_v = np.max(list_t_neymanpearson) if len(list_t_neymanpearson) > 0 else 1e-3
-                G.add_weighted_edges_from([ (c1, c2, max_v) ])
-            # if unmergeable_bincount < topk:
-            #     G.add_edge(c1, c2)
-    # maximal cliques
-    cliques = []
-    for x in nx.find_cliques(G):
-        this_len = len(x)
-        this_weights = np.sum([G.get_edge_data(a,b)["weight"] for a in x for b in x if a != b]) / 2
-        cliques.append( (x, this_len, this_weights) )
-    cliques.sort(key = lambda x:(-x[1],x[2]) )
-    covered_nodes = set()
-    merging_groups = []
-    for c in cliques:
-        if len(set(c[0]) & covered_nodes) == 0:
-            merging_groups.append( list(c[0]) )
-            covered_nodes = covered_nodes | set(c[0])
-    for c in range(n_clones):
-        if not (c in covered_nodes):
-            merging_groups.append( [c] )
-            covered_nodes.add(c)
-    merging_groups.sort(key = lambda x:np.min(x))
-    # clone assignment after merging
-    map_clone_id = {}
-    for i,x in enumerate(merging_groups):
-        for z in x:
-            map_clone_id[z] = i
-    new_assignment = np.array([map_clone_id[x] for x in res["new_assignment"]])
-    merged_res = copy.copy(res)
-    merged_res["new_assignment"] = new_assignment
-    merged_res["total_llf"] = np.NAN
-    merged_res["pred_cnv"] = np.concatenate([ res["pred_cnv"][(c[0]*n_obs):(c[0]*n_obs+n_obs)] for c in merging_groups ])
-    merged_res["log_gamma"] = np.hstack([ res["log_gamma"][:, (c[0]*n_obs):(c[0]*n_obs+n_obs)] for c in merging_groups ])
-    return merging_groups, merged_res

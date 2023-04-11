@@ -57,7 +57,7 @@ def old_hill_climbing_integer_copynumber_oneclone(new_log_mu, base_nb_mean, new_
     return best_integer_copies, best_obj
 
 
-def hill_climbing_integer_copynumber_oneclone(new_log_mu, base_nb_mean, new_p_binom, pred_cnv, max_allele_copy=4):
+def hill_climbing_integer_copynumber_oneclone(new_log_mu, base_nb_mean, new_p_binom, pred_cnv, max_allele_copy=4, max_total_copy=6, max_medploidy=4):
     n_states = len(new_log_mu)
     lambd = base_nb_mean / np.sum(base_nb_mean)
     weight_per_state = np.array([ np.sum(lambd[pred_cnv == s]) for s in range(n_states)])
@@ -87,7 +87,7 @@ def hill_climbing_integer_copynumber_oneclone(new_log_mu, base_nb_mean, new_p_bi
                     params[k,:] = candi
                     obj = f(params, ploidy)
                     if obj < this_best_obj:
-                        print(k, candi, obj, this_best_obj, ploidy+1, 0.1 * np.maximum(0, np.sum(params[k,:]) - ploidy-1) * np.sum(pred_cnv==k))
+                        # print(k, candi, obj, this_best_obj, ploidy+1, 0.1 * np.maximum(0, np.sum(params[k,:]) - ploidy-1) * np.sum(pred_cnv==k))
                         this_best_obj = obj
                         this_best_k = candi
                 increased = (increased | (this_best_obj < best_obj))
@@ -97,14 +97,14 @@ def hill_climbing_integer_copynumber_oneclone(new_log_mu, base_nb_mean, new_p_bi
                 break
         return params, best_obj
     # candidate integer copy states
-    candidates = np.array([ [i,j] for i in range(max_allele_copy + 1) for j in range(max_allele_copy) if not (i == 0 and j == 0)])
+    candidates = np.array([ [i,j] for i in range(max_allele_copy + 1) for j in range(max_allele_copy) if (not (i == 0 and j == 0)) and (i + j <= max_total_copy)])
     # find the best copy number states starting from various ploidy
     best_obj = np.inf
     best_integer_copies = np.zeros((n_states, 2), dtype=int)
     # fix the genomic bin with the median new_log_mu to have exactly ploidy genomes
     bidx_med = np.argsort(new_log_mu[pred_cnv])[ int(len(pred_cnv)/2) ]
     idx_med = pred_cnv[bidx_med]
-    for ploidy in range(1, 5):
+    for ploidy in range(1, max_medploidy+1):
         initial_params = np.ones((n_states, 2), dtype=int) * int(ploidy / 2)
         initial_params[:, 1] = ploidy - initial_params[:, 0]
         params, obj = hill_climb(initial_params, ploidy, idx_med)

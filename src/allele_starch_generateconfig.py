@@ -14,7 +14,6 @@ from hmm_NB_BB_phaseswitch import *
 from composite_hmm_NB_BB_phaseswitch import *
 from utils_distribution_fitting import *
 from hmrf import *
-from hmrf_normalmixture import *
 from utils_IO import *
 
 
@@ -29,14 +28,21 @@ def read_configuration_file(filename):
         "normalidx_file" : None,
         "tumorprop_file" : None,
         "filtergenelist_file" : None,
+        "filterregion_file" : None,
         "binsize" : 1,
         "rdrbinsize" : 1,
+        # "secondbinning_min_umi" : 500,
+        "max_nbins" : 1200,
+        "avg_umi_perbinspot" : 1.5,
         "bafonly" : True,
         # phase switch probability
         "nu" : 1,
         "logphase_shift" : 1,
+        "npart_phasing" : 2,
         # HMRF configurations
         "n_clones" : None,
+        "min_spots_per_clone" : 100,
+        "maxspots_pooling" : 7,
         "tumorprop_threshold" : 0.5, 
         "max_iter_outer" : 20,
         "nodepotential" : "max", # max or weighted_sum
@@ -54,7 +60,9 @@ def read_configuration_file(filename):
         "max_iter" : 30,
         "tol" : 1e-3,
         "spatial_weight" : 2.0,
-        "gmm_random_state" : 0
+        "gmm_random_state" : 0,
+        "np_threshold" : 2.0,
+        "np_eventminlen" : 10
     }
 
     argument_type = {
@@ -66,14 +74,21 @@ def read_configuration_file(filename):
         "normalidx_file" : "str",
         "tumorprop_file" : "str",
         "filtergenelist_file" : "str",
+        "filterregion_file" : "str",
         "binsize" : "int",
         "rdrbinsize" : "int",
+        # "secondbinning_min_umi" : "int",
+        "max_nbins" : "int",
+        "avg_umi_perbinspot" : "float",
         "bafonly" : "bool",
         # phase switch probability
         "nu" : "float",
         "logphase_shift" : "float",
+        "npart_phasing" : "int",
         # HMRF configurations
         "n_clones" : "int",
+        "min_spots_per_clone" : "int",
+        "maxspots_pooling" : "int",
         "tumorprop_threshold" : "float", 
         "max_iter_outer" : "int",
         "nodepotential" : "str",
@@ -91,7 +106,9 @@ def read_configuration_file(filename):
         "max_iter" : "int",
         "tol" : "float",
         "spatial_weight" : "float",
-        "gmm_random_state" : "int"
+        "gmm_random_state" : "int",
+        "np_threshold" : "float",
+        "np_eventminlen" : "int"
     }
 
     ##### [ read configuration file to update settings ] #####
@@ -129,12 +146,19 @@ def write_config_file(outputfilename, config):
         "normalidx_file",
         "tumorprop_file",
         "filtergenelist_file",
+        "filterregion_file",
         "binsize",
         "rdrbinsize",
+        # "secondbinning_min_umi",
+        "max_nbins",
+        "avg_umi_perbinspot",
         "bafonly"]
     list_argument_phase = ["nu",
-        "logphase_shift"]
+        "logphase_shift",
+        "npart_phasing"]
     list_argument_hmrf = ["n_clones",
+        "min_spots_per_clone",
+        "maxspots_pooling",
         "tumorprop_threshold",
         "max_iter_outer",
         "nodepotential",
@@ -151,7 +175,9 @@ def write_config_file(outputfilename, config):
         "max_iter",
         "tol",
         "spatial_weight",
-        "gmm_random_state"]
+        "gmm_random_state",
+        "np_threshold",
+        "np_eventminlen"]
     with open(outputfilename, 'w') as fp:
         #
         for k in list_argument_io:
