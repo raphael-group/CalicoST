@@ -27,15 +27,24 @@ def read_joint_configuration_file(filename):
         "hgtable_file" : None,
         "normalidx_file" : None,
         "tumorprop_file" : None,
+        "alignment_files" : [],
         "filtergenelist_file" : None,
+        "filterregion_file" : None,
         "binsize" : 1,
         "rdrbinsize" : 1,
+        # "secondbinning_min_umi" : 500,
+        "max_nbins" : 1200,
+        "avg_umi_perbinspot" : 1.5,
         "bafonly" : True,
         # phase switch probability
         "nu" : 1,
         "logphase_shift" : 1,
+        "npart_phasing" : 2,
         # HMRF configurations
         "n_clones" : None,
+        "min_spots_per_clone" : 100,
+        "maxspots_pooling" : 7,
+        "tumorprop_threshold" : 0.5, 
         "max_iter_outer" : 20,
         "nodepotential" : "max", # max or weighted_sum
         "initialization_method" : "rectangle", # rectangle or datadrive
@@ -52,7 +61,9 @@ def read_joint_configuration_file(filename):
         "max_iter" : 30,
         "tol" : 1e-3,
         "spatial_weight" : 2.0,
-        "gmm_random_state" : 0
+        "gmm_random_state" : 0,
+        "np_threshold" : 2.0,
+        "np_eventminlen" : 10
     }
 
     argument_type = {
@@ -63,15 +74,24 @@ def read_joint_configuration_file(filename):
         "hgtable_file" : "str",
         "normalidx_file" : "str",
         "tumorprop_file" : "str",
+        "alignment_files" : "list_str",
         "filtergenelist_file" : "str",
+        "filterregion_file" : "str",
         "binsize" : "int",
         "rdrbinsize" : "int",
+        # "secondbinning_min_umi" : "int",
+        "max_nbins" : "int",
+        "avg_umi_perbinspot" : "float",
         "bafonly" : "bool",
         # phase switch probability
         "nu" : "float",
         "logphase_shift" : "float",
+        "npart_phasing" : "int",
         # HMRF configurations
         "n_clones" : "int",
+        "min_spots_per_clone" : "int",
+        "maxspots_pooling" : "int",
+        "tumorprop_threshold" : "float", 
         "max_iter_outer" : "int",
         "nodepotential" : "str",
         "initialization_method" : "str",
@@ -88,7 +108,9 @@ def read_joint_configuration_file(filename):
         "max_iter" : "int",
         "tol" : "float",
         "spatial_weight" : "float",
-        "gmm_random_state" : "int"
+        "gmm_random_state" : "int",
+        "np_threshold" : "float",
+        "np_eventminlen" : "int"
     }
 
     ##### [ read configuration file to update settings ] #####
@@ -96,9 +118,11 @@ def read_joint_configuration_file(filename):
         for line in fp:
             if line.strip() == "" or line[0] == "#":
                 continue
-            strs = [x.replace(" ", "") for x in line.strip().split(":") if x != ""]
+            strs = [x.strip() for x in line.strip().split(":") if x != ""]
             assert strs[0] in config.keys(), f"{strs[0]} is not a valid configuration parameter! Configuration parameters are: {list(config.keys())}"
-            if strs[1].upper() == "NONE":
+            if len(strs) == 1:
+                config[strs[0]] = []
+            elif strs[1].upper() == "NONE":
                 config[strs[0]] = None
             elif argument_type[strs[0]] == "str":
                 config[strs[0]] = strs[1]
@@ -110,6 +134,8 @@ def read_joint_configuration_file(filename):
                 config[strs[0]] = eval(strs[1])
             elif argument_type[strs[0]] == "bool":
                 config[strs[0]] = (strs[1].upper() == "TRUE")
+            elif argument_type[strs[0]] == "list_str":
+                config[strs[0]] = strs[1].split(" ")
     # assertions
     assert not config["input_filelist"] is None, "No input file list!"
     assert not config["snp_dir"] is None, "No SNP directory!"
@@ -125,13 +151,22 @@ def write_joint_config_file(outputfilename, config):
     list_argument_sup = ["hgtable_file",
         "normalidx_file",
         "tumorprop_file",
+        "alignment_files",
         "filtergenelist_file",
+        "filterregion_file",
         "binsize",
         "rdrbinsize",
+        # "secondbinning_min_umi",
+        "max_nbins",
+        "avg_umi_perbinspot",
         "bafonly"]
     list_argument_phase = ["nu",
-        "logphase_shift"]
+        "logphase_shift",
+        "npart_phasing"]
     list_argument_hmrf = ["n_clones",
+        "min_spots_per_clone",
+        "maxspots_pooling",
+        "tumorprop_threshold",
         "max_iter_outer",
         "nodepotential",
         "initialization_method",
@@ -147,7 +182,9 @@ def write_joint_config_file(outputfilename, config):
         "max_iter",
         "tol",
         "spatial_weight",
-        "gmm_random_state"]
+        "gmm_random_state",
+        "np_threshold",
+        "np_eventminlen"]
     with open(outputfilename, 'w') as fp:
         #
         for k in list_argument_io:
@@ -156,7 +193,10 @@ def write_joint_config_file(outputfilename, config):
         fp.write("\n")
         fp.write("# supporting files and preprocessing arguments\n")
         for k in list_argument_sup:
-            fp.write(f"{k} : {config[k]}\n")
+            if not isinstance(config[k], list):
+                fp.write(f"{k} : {config[k]}\n")
+            else:
+                fp.write(f"{k} : " + " ".join(config[k]) + "\n")
         #
         fp.write("\n")
         fp.write("# phase switch probability\n")

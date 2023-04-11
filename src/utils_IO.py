@@ -10,10 +10,11 @@ from sklearn.cluster import KMeans
 import scanpy as sc
 import anndata
 from utils_phase_switch import *
+from utils_distribution_fitting import *
 import subprocess
 
 
-def load_data(spaceranger_dir, snp_dir, filtergenelist_file, normalidx_file):
+def load_data(spaceranger_dir, snp_dir, filtergenelist_file, filterregion_file, normalidx_file):
     ##### read raw UMI count matrix #####
     if Path(f"{spaceranger_dir}/filtered_feature_bc_matrix.h5").exists():
         adata = sc.read_10x_h5(f"{spaceranger_dir}/filtered_feature_bc_matrix.h5")
@@ -28,8 +29,14 @@ def load_data(spaceranger_dir, snp_dir, filtergenelist_file, normalidx_file):
     unique_snp_ids = np.load(f"{snp_dir}/unique_snp_ids.npy", allow_pickle=True)
 
     # add position
-    df_pos = pd.read_csv(f"{spaceranger_dir}/spatial/tissue_positions_list.csv", sep=",", header=None, \
-                    names=["barcode", "in_tissue", "x", "y", "pixel_row", "pixel_col"])
+    if Path(f"{spaceranger_dir}/spatial/tissue_positions.csv").exists():
+        df_pos = pd.read_csv(f"{spaceranger_dir}/spatial/tissue_positions.csv", sep=",", header=0, \
+                        names=["barcode", "in_tissue", "x", "y", "pixel_row", "pixel_col"])
+    elif Path(f"{spaceranger_dir}/spatial/tissue_positions_list.csv").exists():
+        df_pos = pd.read_csv(f"{spaceranger_dir}/spatial/tissue_positions_list.csv", sep=",", header=None, \
+                        names=["barcode", "in_tissue", "x", "y", "pixel_row", "pixel_col"])
+    else:
+        raise Exception("No spatial coordinate file!")
     df_pos = df_pos[df_pos.in_tissue == True]
     assert set(list(df_pos.barcode)) == set(list(adata.obs.index))
     df_pos.barcode = pd.Categorical(df_pos.barcode, categories=list(adata.obs.index), ordered=True)
@@ -59,15 +66,31 @@ def load_data(spaceranger_dir, snp_dir, filtergenelist_file, normalidx_file):
     if not filtergenelist_file is None:
         filter_gene_list = pd.read_csv(filtergenelist_file, header=None)
         filter_gene_list = set(list( filter_gene_list.iloc[:,0] ))
-        indicator_fulter = np.array([ (not x in filter_gene_list) for x in adata.var.index ])
-        adata = adata[:, indicator_fulter]
-        indicator_fulter = np.array([ (x not in filter_gene_list) for x in snp_gene_list ])
-        cell_snp_Aallele = cell_snp_Aallele[:, indicator_fulter]
-        cell_snp_Ballele = cell_snp_Ballele[:, indicator_fulter]
-        snp_gene_list = snp_gene_list[indicator_fulter]
-        unique_snp_ids = unique_snp_ids[indicator_fulter]
+        indicator_filter = np.array([ (not x in filter_gene_list) for x in adata.var.index ])
+        adata = adata[:, indicator_filter]
         print("median UMI after filtering out genes in filtergenelist_file = {}".format( np.median(np.sum(adata.layers["count"], axis=1)) ))
-    
+
+    if not filterregion_file is None:
+        regions = pd.read_csv(filterregion_file, header=None, sep="\t", names=["Chrname", "Start", "End"])
+        if "chr" in regions.Chrname.iloc[0]:
+            regions["CHR"] = [int(x[3:]) for x in regions.Chrname.values]
+        else:
+            regions.rename(columns={'Chrname':'CHR'}, inplace=True)
+        regions.sort_values(by=["CHR", "Start"], inplace=True)
+        indicator_filter = np.array([True] * cell_snp_Aallele.shape[1])
+        j = 0
+        for i in range(cell_snp_Aallele.shape[1]):
+            this_chr = int(unique_snp_ids[i].split("_")[0])
+            this_pos = int(unique_snp_ids[i].split("_")[1])
+            while j < regions.shape[0] and ( (regions.CHR.values[j] < this_chr) or ((regions.CHR.values[j] == this_chr) and (regions.End.values[j] <= this_pos)) ):
+                j += 1
+            if j < regions.shape[0] and (regions.CHR.values[j] == this_chr) and (regions.Start.values[j] <= this_pos) and (regions.End.values[j] > this_pos):
+                indicator_filter[i] = False
+        cell_snp_Aallele = cell_snp_Aallele[:, indicator_filter]
+        cell_snp_Ballele = cell_snp_Ballele[:, indicator_filter]
+        snp_gene_list = snp_gene_list[indicator_filter]
+        unique_snp_ids = unique_snp_ids[indicator_filter]
+
     clf = LocalOutlierFactor(n_neighbors=200)
     label = clf.fit_predict( np.sum(adata.layers["count"], axis=0).reshape(-1,1) )
     adata.layers["count"][:, np.where(label==-1)[0]] = 0
@@ -82,9 +105,93 @@ def load_data(spaceranger_dir, snp_dir, filtergenelist_file, normalidx_file):
     return adata, cell_snp_Aallele, cell_snp_Ballele, snp_gene_list, unique_snp_ids
 
 
-def load_joint_data(input_filelist, snp_dir, filtergenelist_file, normalidx_file):
+# def load_joint_data(input_filelist, snp_dir, filtergenelist_file, normalidx_file):
+#     ##### read meta sample info #####
+#     df_meta = pd.read_csv(input_filelist, sep="\t", header=None, names=["bam", "sample_id", "spaceranger_dir"])
+#     df_barcode = pd.read_csv(f"{snp_dir}/barcodes.txt", header=None, names=["combined_barcode"])
+#     df_barcode["sample_id"] = [x.split("_")[-1] for x in df_barcode.combined_barcode.values]
+#     df_barcode["barcode"] = [x.split("_")[0] for x in df_barcode.combined_barcode.values]
+#     ##### read SNP count #####
+#     cell_snp_Aallele = scipy.sparse.load_npz(f"{snp_dir}/cell_snp_Aallele.npz")
+#     cell_snp_Aallele = cell_snp_Aallele.A
+#     cell_snp_Ballele = scipy.sparse.load_npz(f"{snp_dir}/cell_snp_Ballele.npz")
+#     cell_snp_Ballele = cell_snp_Ballele.A
+#     snp_gene_list = np.load(f"{snp_dir}/snp_gene_list.npy", allow_pickle=True)
+#     unique_snp_ids = np.load(f"{snp_dir}/unique_snp_ids.npy", allow_pickle=True)
+#     ##### read anndata and coordinate #####
+#     # add position
+#     adata = None
+#     for i,sname in enumerate(df_meta.sample_id.values):
+#         # locate the corresponding rows in df_meta
+#         index = np.where(df_barcode["sample_id"] == sname)[0]
+#         df_this_barcode = copy.copy(df_barcode.iloc[index, :])
+#         df_this_barcode.index = df_this_barcode.barcode
+#         # read adata count info
+#         adatatmp = sc.read_10x_h5(f"{df_meta['spaceranger_dir'].iloc[i]}/filtered_feature_bc_matrix.h5")
+#         adatatmp.layers["count"] = adatatmp.X.A
+#         # reorder anndata spots to have the same order as df_this_barcode
+#         idx_argsort = pd.Categorical(adatatmp.obs.index, categories=list(df_this_barcode.barcode), ordered=True).argsort()
+#         adatatmp = adatatmp[idx_argsort, :]
+#         # read position info
+#         df_this_pos = pd.read_csv(f"{df_meta['spaceranger_dir'].iloc[i]}/spatial/tissue_positions.csv", sep=",", header=0, \
+#                     names=["barcode", "in_tissue", "x", "y", "pixel_row", "pixel_col"])
+#         df_this_pos = df_this_pos[df_this_pos.in_tissue == True]
+#         df_this_pos.barcode = pd.Categorical(df_this_pos.barcode, categories=list(df_this_barcode.barcode), ordered=True)
+#         df_this_pos.sort_values(by="barcode", inplace=True)
+#         adatatmp.obsm["X_pos"] = np.vstack([df_this_pos.x, df_this_pos.y]).T
+#         adatatmp.obs["sample"] = sname
+#         adatatmp.obs.index = [f"{x}_{sname}" for x in adatatmp.obs.index]
+#         adatatmp.var_names_make_unique()
+#         if adata is None:
+#             adata = adatatmp
+#         else:
+#             adata = anndata.concat([adata, adatatmp], join="outer")
+    
+#     # # filter out spots with too small number of UMIs
+#     # indicator = (np.sum(adata.layers["count"], axis=1) > 100)
+#     # adata = adata[indicator, :]
+#     # cell_snp_Aallele = cell_snp_Aallele[indicator, :]
+#     # cell_snp_Ballele = cell_snp_Ballele[indicator, :]
+
+#     # filter out genes that are expressed in <0.5% cells
+#     indicator = (np.sum(adata.X > 0, axis=0) >= 0.005 * adata.shape[0]).A.flatten()
+#     genenames = set(list(adata.var.index[indicator]))
+#     adata = adata[:, indicator]
+#     print(adata)
+#     print("median UMI after filtering out genes < 0.5% of cells = {}".format( np.median(np.sum(adata.layers["count"], axis=1)) ))
+
+#     # remove genes in filtergenelist_file
+#     # ig_gene_list = pd.read_csv("/n/fs/ragr-data/users/congma/references/cellranger_refdata-gex-GRCh38-2020-A/genes/ig_gene_list.txt", header=None)
+#     if not filtergenelist_file is None:
+#         filter_gene_list = pd.read_csv(filtergenelist_file, header=None)
+#         filter_gene_list = set(list( filter_gene_list.iloc[:,0] ))
+#         indicator_fulter = np.array([ (not x in filter_gene_list) for x in adata.var.index ])
+#         adata = adata[:, indicator_fulter]
+#         indicator_fulter = np.array([ (x not in filter_gene_list) for x in snp_gene_list ])
+#         cell_snp_Aallele = cell_snp_Aallele[:, indicator_fulter]
+#         cell_snp_Ballele = cell_snp_Ballele[:, indicator_fulter]
+#         snp_gene_list = snp_gene_list[indicator_fulter]
+#         unique_snp_ids = unique_snp_ids[indicator_fulter]
+#         print("median UMI after filtering out genes in filtergenelist_file = {}".format( np.median(np.sum(adata.layers["count"], axis=1)) ))
+
+#     clf = LocalOutlierFactor(n_neighbors=200)
+#     label = clf.fit_predict( np.sum(adata.layers["count"], axis=0).reshape(-1,1) )
+#     adata.layers["count"][:, np.where(label==-1)[0]] = 0
+#     print("filter out {} outlier genes.".format( np.sum(label==-1) ))
+
+#     if not normalidx_file is None:
+#         normal_barcodes = pd.read_csv(normalidx_file, header=None).iloc[:,0].values
+#         adata.obs["tumor_annotation"] = "tumor"
+#         adata.obs["tumor_annotation"][adata.obs.index.isin(normal_barcodes)] = "normal"
+#         print( adata.obs["tumor_annotation"].value_counts() )
+
+#     return adata, cell_snp_Aallele, cell_snp_Ballele, snp_gene_list, unique_snp_ids
+
+
+def load_joint_data(input_filelist, snp_dir, alignment_files, filtergenelist_file, filterregion_file, normalidx_file):
     ##### read meta sample info #####
-    df_meta = pd.read_csv(input_filelist, sep="\t", header=None, names=["bam", "sample_id", "spaceranger_dir"])
+    df_meta = pd.read_csv(input_filelist, sep="\t", header=None)
+    df_meta.rename(columns=dict(zip( df_meta.columns[:3], ["bam", "sample_id", "spaceranger_dir"] )), inplace=True)
     df_barcode = pd.read_csv(f"{snp_dir}/barcodes.txt", header=None, names=["combined_barcode"])
     df_barcode["sample_id"] = [x.split("_")[-1] for x in df_barcode.combined_barcode.values]
     df_barcode["barcode"] = [x.split("_")[0] for x in df_barcode.combined_barcode.values]
@@ -95,6 +202,9 @@ def load_joint_data(input_filelist, snp_dir, filtergenelist_file, normalidx_file
     cell_snp_Ballele = cell_snp_Ballele.A
     snp_gene_list = np.load(f"{snp_dir}/snp_gene_list.npy", allow_pickle=True)
     unique_snp_ids = np.load(f"{snp_dir}/unique_snp_ids.npy", allow_pickle=True)
+
+    assert (len(alignment_files) == 0) or (len(alignment_files) + 1 == df_meta.shape[0])
+
     ##### read anndata and coordinate #####
     # add position
     adata = None
@@ -110,8 +220,14 @@ def load_joint_data(input_filelist, snp_dir, filtergenelist_file, normalidx_file
         idx_argsort = pd.Categorical(adatatmp.obs.index, categories=list(df_this_barcode.barcode), ordered=True).argsort()
         adatatmp = adatatmp[idx_argsort, :]
         # read position info
-        df_this_pos = pd.read_csv(f"{df_meta['spaceranger_dir'].iloc[i]}/spatial/tissue_positions.csv", sep=",", header=0, \
-                    names=["barcode", "in_tissue", "x", "y", "pixel_row", "pixel_col"])
+        if Path(f"{df_meta['spaceranger_dir'].iloc[i]}/spatial/tissue_positions.csv").exists():
+            df_this_pos = pd.read_csv(f"{df_meta['spaceranger_dir'].iloc[i]}/spatial/tissue_positions.csv", sep=",", header=0, \
+                        names=["barcode", "in_tissue", "x", "y", "pixel_row", "pixel_col"])
+        elif Path(f"{df_meta['spaceranger_dir'].iloc[i]}/spatial/tissue_positions_list.csv").exists():
+            df_this_pos = pd.read_csv(f"{df_meta['spaceranger_dir'].iloc[i]}/spatial/tissue_positions_list.csv", sep=",", header=None, \
+                        names=["barcode", "in_tissue", "x", "y", "pixel_row", "pixel_col"])
+        else:
+            raise Exception("No spatial coordinate file!")
         df_this_pos = df_this_pos[df_this_pos.in_tissue == True]
         df_this_pos.barcode = pd.Categorical(df_this_pos.barcode, categories=list(df_this_barcode.barcode), ordered=True)
         df_this_pos.sort_values(by="barcode", inplace=True)
@@ -123,39 +239,78 @@ def load_joint_data(input_filelist, snp_dir, filtergenelist_file, normalidx_file
             adata = adatatmp
         else:
             adata = anndata.concat([adata, adatatmp], join="outer")
+
+    ##### load pairwise alignments #####
+    # TBD: directly convert to big "adjacency" matrix
+    across_slice_adjacency_mat = None
+    if len(alignment_files) > 0:
+        EPS = 1e-6
+        row_ind = []
+        col_ind = []
+        dat = []
+        offset = 0
+        for i,f in enumerate(alignment_files):
+            pi = np.load(f)
+            # normalize p such that max( rowsum(pi), colsum(pi) ) = 1, max alignment weight = 1
+            pi = pi / np.max( np.append(np.sum(pi,axis=0), np.sum(pi,axis=1)) )
+            sname1 = df_meta.sample_id.values[i]
+            sname2 = df_meta.sample_id.values[i+1]
+            assert pi.shape[0] == np.sum(df_barcode["sample_id"] == sname1) # double check whether this is correct
+            assert pi.shape[1] == np.sum(df_barcode["sample_id"] == sname2) # or the dimension should be flipped
+            # for each spot s in sname1, select {t: spot t in sname2 and pi[s,t] >= np.max(pi[s,:])} as the corresponding spot in the other slice
+            for row in range(pi.shape[0]):
+                cutoff = np.max(pi[row,:]) if np.max(pi[row,:]) > EPS else 1+EPS
+                list_cols = np.where(pi[row, :] >= cutoff - EPS)[0]
+                row_ind += [offset + row] * len(list_cols)
+                col_ind += list( offset + pi.shape[0] + list_cols )
+                dat += list(pi[row, list_cols])
+            offset += pi.shape[0]
+        across_slice_adjacency_mat = scipy.sparse.csr_matrix((dat, (row_ind, col_ind) ), shape=(adata.shape[0], adata.shape[0]))
+        across_slice_adjacency_mat += across_slice_adjacency_mat.T
     
-    # # filter out spots with too small number of UMIs
-    # indicator = (np.sum(adata.layers["count"], axis=1) > 100)
-    # adata = adata[indicator, :]
-    # cell_snp_Aallele = cell_snp_Aallele[indicator, :]
-    # cell_snp_Ballele = cell_snp_Ballele[indicator, :]
+    # filter out spots with too small number of UMIs
+    indicator = (np.sum(adata.layers["count"], axis=1) > 100)
+    adata = adata[indicator, :]
+    cell_snp_Aallele = cell_snp_Aallele[indicator, :]
+    cell_snp_Ballele = cell_snp_Ballele[indicator, :]
+    if not (across_slice_adjacency_mat is None):
+        across_slice_adjacency_mat = across_slice_adjacency_mat[indicator,:][:,indicator]
 
     # filter out genes that are expressed in <0.5% cells
     indicator = (np.sum(adata.X > 0, axis=0) >= 0.005 * adata.shape[0]).A.flatten()
     genenames = set(list(adata.var.index[indicator]))
     adata = adata[:, indicator]
-    # indicator = np.array([ (x in genenames) for x in snp_gene_list ])
-    # cell_snp_Aallele = cell_snp_Aallele[:, indicator]
-    # cell_snp_Ballele = cell_snp_Ballele[:, indicator]
-    # snp_gene_list = snp_gene_list[indicator]
-    # unique_snp_ids = unique_snp_ids[indicator]
     print(adata)
     print("median UMI after filtering out genes < 0.5% of cells = {}".format( np.median(np.sum(adata.layers["count"], axis=1)) ))
 
-    # remove genes in filtergenelist_file
-    # ig_gene_list = pd.read_csv("/n/fs/ragr-data/users/congma/references/cellranger_refdata-gex-GRCh38-2020-A/genes/ig_gene_list.txt", header=None)
     if not filtergenelist_file is None:
         filter_gene_list = pd.read_csv(filtergenelist_file, header=None)
         filter_gene_list = set(list( filter_gene_list.iloc[:,0] ))
-        indicator_fulter = np.array([ (not x in filter_gene_list) for x in adata.var.index ])
-        adata = adata[:, indicator_fulter]
-        indicator_fulter = np.array([ (x not in filter_gene_list) for x in snp_gene_list ])
-        cell_snp_Aallele = cell_snp_Aallele[:, indicator_fulter]
-        cell_snp_Ballele = cell_snp_Ballele[:, indicator_fulter]
-        snp_gene_list = snp_gene_list[indicator_fulter]
-        unique_snp_ids = unique_snp_ids[indicator_fulter]
+        indicator_filter = np.array([ (not x in filter_gene_list) for x in adata.var.index ])
+        adata = adata[:, indicator_filter]
         print("median UMI after filtering out genes in filtergenelist_file = {}".format( np.median(np.sum(adata.layers["count"], axis=1)) ))
 
+    if not filterregion_file is None:
+        regions = pd.read_csv(filterregion_file, header=None, sep="\t", names=["Chrname", "Start", "End"])
+        if "chr" in regions.Chrname.iloc[0]:
+            regions["CHR"] = [int(x[3:]) for x in regions.Chrname.values]
+        else:
+            regions.rename(columns={'Chrname':'CHR'}, inplace=True)
+        regions.sort_values(by=["CHR", "Start"], inplace=True)
+        indicator_filter = np.array([True] * cell_snp_Aallele.shape[1])
+        j = 0
+        for i in range(cell_snp_Aallele.shape[1]):
+            this_chr = int(unique_snp_ids[i].split("_")[0])
+            this_pos = int(unique_snp_ids[i].split("_")[1])
+            while j < regions.shape[0] and ( (regions.CHR.values[j] < this_chr) or ((regions.CHR.values[j] == this_chr) and (regions.End.values[j] <= this_pos)) ):
+                j += 1
+            if j < regions.shape[0] and (regions.CHR.values[j] == this_chr) and (regions.Start.values[j] <= this_pos) and (regions.End.values[j] > this_pos):
+                indicator_filter[i] = False
+        cell_snp_Aallele = cell_snp_Aallele[:, indicator_filter]
+        cell_snp_Ballele = cell_snp_Ballele[:, indicator_filter]
+        snp_gene_list = snp_gene_list[indicator_filter]
+        unique_snp_ids = unique_snp_ids[indicator_filter]
+        
     clf = LocalOutlierFactor(n_neighbors=200)
     label = clf.fit_predict( np.sum(adata.layers["count"], axis=0).reshape(-1,1) )
     adata.layers["count"][:, np.where(label==-1)[0]] = 0
@@ -167,7 +322,7 @@ def load_joint_data(input_filelist, snp_dir, filtergenelist_file, normalidx_file
         adata.obs["tumor_annotation"][adata.obs.index.isin(normal_barcodes)] = "normal"
         print( adata.obs["tumor_annotation"].value_counts() )
 
-    return adata, cell_snp_Aallele, cell_snp_Ballele, snp_gene_list, unique_snp_ids
+    return adata, cell_snp_Aallele, cell_snp_Ballele, snp_gene_list, unique_snp_ids, across_slice_adjacency_mat
 
 
 def load_slidedna_data(snp_dir, bead_file, filterregion_bedfile):
@@ -238,7 +393,11 @@ def filter_slidedna_spot_by_adjacency(coords, cell_snp_Aallele, cell_snp_Ballele
     return coords, cell_snp_Aallele, cell_snp_Ballele, barcodes
 
 
-def convert_to_hmm_input(adata, cell_snp_Aallele, cell_snp_Ballele, snp_gene_list, unique_snp_ids, binsize, rdrbinsize, nu, logphase_shift, hgtable_file, genome_build="hg38"):
+# def convert_to_hmm_input_new(adata, cell_snp_Aallele, cell_snp_Ballele, snp_gene_list, unique_snp_ids, hgtable_file, nu, logphase_shift, initial_percentile=75, genome_build="hg38"):
+def convert_to_hmm_input_new(adata, cell_snp_Aallele, cell_snp_Ballele, snp_gene_list, unique_snp_ids, hgtable_file, nu, logphase_shift, initial_min_umi=15, genome_build="hg38"):
+    """
+    Coverage-based binning.
+    """
     uncovered_genes = set(list(adata.var.index)) - set(list(snp_gene_list))
     # df_hgtable = pd.read_csv("/u/congma/ragr-data/users/congma/Codes/STARCH_crazydev/hgTables_hg38_gencode.txt", header=0, index_col=0, sep="\t")
     df_hgtable = pd.read_csv(hgtable_file, header=0, index_col=0, sep="\t")
@@ -265,55 +424,72 @@ def convert_to_hmm_input(adata, cell_snp_Aallele, cell_snp_Ballele, snp_gene_lis
     single_X[idx_snps, 1, :] = cell_snp_Aallele.T
     single_total_bb_RD[idx_snps, :] = (cell_snp_Aallele + cell_snp_Ballele).T
     # RDR
+    x_gene_list = [""] * len(sorted_chr_pos) #!
     combined_snp_gene_list = [snp_gene_list[map_unique_snp_ids[map_id[x]]] if map_id[x] in map_unique_snp_ids else map_id[x] for i,x in enumerate(sorted_chr_pos)]
     rdridx_X = []
     rdridx_gene = []
     for i,g in enumerate(combined_snp_gene_list):
-        if g != "":
+        if g != "" and g in gene_mapper:
             if i == 0 or g != combined_snp_gene_list[i-1]:
                 rdridx_X.append(i)
                 rdridx_gene.append( gene_mapper[g] )
+                x_gene_list[i] = g #!
     rdridx_X = np.array(rdridx_X)
     rdridx_gene = np.array(rdridx_gene)
     single_X[rdridx_X,0,:] = adata.layers["count"][:, rdridx_gene].T
-
-    # diploid baseline
-    if "tumor_annotation" in adata.obs:
-        idx_normal = np.where(adata.obs["tumor_annotation"] == "tumor")[0]
-        idx_normal = idx_normal[np.arange(0, len(idx_normal), 2)] # TBD
-        single_base_nb_mean = np.sum(single_X[:,0,:], axis=0, keepdims=True) * np.sum(single_X[:,0,idx_normal], axis=1, keepdims=True) / np.sum(single_X[:,0,idx_normal])
-        assert np.sum(np.abs( np.sum(single_X[:,0,:],axis=0) - np.sum(single_base_nb_mean,axis=0) )) < 1e-4
-
+    
     # bin both RDR and BAF
-    bin_single_X = np.zeros((int(single_X.shape[0] / binsize), 2, single_X.shape[2]), dtype=int)
-    bin_single_base_nb_mean = np.zeros((int(single_base_nb_mean.shape[0] / binsize), single_base_nb_mean.shape[1]))
-    bin_single_total_bb_RD = np.zeros((int(single_total_bb_RD.shape[0] / binsize), single_total_bb_RD.shape[1]), dtype=int)
-    bin_sorted_chr_pos = []
-    for i in range(bin_single_X.shape[0]):
-        bin_single_X[i,:,:] = np.sum(single_X[(i*binsize):(i*binsize+binsize), :, :], axis=0)
-        bin_single_base_nb_mean[i,:] = np.sum(single_base_nb_mean[(i*binsize):(i*binsize+binsize), :], axis=0)
-        bin_single_total_bb_RD[i,:] = np.sum(single_total_bb_RD[(i*binsize):(i*binsize+binsize), :], axis=0)
-        bin_sorted_chr_pos.append( sorted_chr_pos[(i*binsize)] )
-    single_X = bin_single_X
-    single_base_nb_mean = bin_single_base_nb_mean
-    single_total_bb_RD = bin_single_total_bb_RD
-    sorted_chr_pos = bin_sorted_chr_pos
+    # initial_min_umi = np.percentile(np.sum(single_total_bb_RD, axis=1), initial_percentile)
+    bin_single_X = []
+    bin_single_base_nb_mean = []
+    bin_single_total_bb_RD = []
+    # bin_sorted_chr_pos = []
+    bin_sorted_chr_pos_first = []
+    bin_sorted_chr_pos_last = []
+    bin_x_gene_list = []
+    i = 0
+    per_snp_umis = np.sum(single_total_bb_RD, axis=1)
+    while i < single_X.shape[0]:
+        t = i + 1
+        while t < len(per_snp_umis) and sorted_chr_pos[i][0] == sorted_chr_pos[t][0] and np.sum(per_snp_umis[i:t]) < initial_min_umi:
+            t += 1
+        if np.sum(per_snp_umis[i:t]) >= initial_min_umi:
+            bin_single_X.append( np.sum(single_X[i:t, :, :], axis=0) )
+            bin_single_base_nb_mean.append( np.sum(single_base_nb_mean[i:t, :], axis=0) )
+            bin_single_total_bb_RD.append( np.sum(single_total_bb_RD[i:t, :], axis=0) )
+            # bin_sorted_chr_pos.append( sorted_chr_pos[i] )
+            bin_sorted_chr_pos_first.append( sorted_chr_pos[i] )
+            bin_sorted_chr_pos_last.append( sorted_chr_pos[t-1] )
+            this_genes = [g for g in x_gene_list[i:t] if g != ""]
+            bin_x_gene_list.append( " ".join(this_genes) )
+        else:
+            bin_single_X[-1] += np.sum(single_X[i:t, :, :], axis=0)
+            bin_single_base_nb_mean[-1] += np.sum(single_base_nb_mean[i:t, :], axis=0)
+            bin_single_total_bb_RD[-1] += np.sum(single_total_bb_RD[i:t, :], axis=0)
+            this_genes = [g for g in x_gene_list[i:t] if g != ""]
+            if len(this_genes) > 0:
+                bin_x_gene_list[-1] += " " + " ".join(this_genes)
+        i = t
+    single_X = np.stack( bin_single_X )
+    single_base_nb_mean = np.vstack(bin_single_base_nb_mean)
+    single_total_bb_RD = np.vstack(bin_single_total_bb_RD)
+    sorted_chr_pos_first = bin_sorted_chr_pos_first
+    sorted_chr_pos_last = bin_sorted_chr_pos_last
+    x_gene_list = bin_x_gene_list
 
     # phase switch probability from genetic distance
-    sorted_chr = np.array([x[0] for x in sorted_chr_pos])
-    lengths = np.array([ np.sum(sorted_chr == chrname) for chrname in unique_chrs ])
-    position_cM = get_position_cM_table( sorted_chr_pos, genome_build=genome_build )
-    phase_switch_prob = compute_phase_switch_probability_position(position_cM, sorted_chr_pos, nu)
+    tmp_sorted_chr_pos = [val for pair in zip(sorted_chr_pos_first, sorted_chr_pos_last) for val in pair]
+    sorted_chr = np.array([x[0] for x in tmp_sorted_chr_pos])
+    position_cM = get_position_cM_table( tmp_sorted_chr_pos, genome_build=genome_build )
+    phase_switch_prob = compute_phase_switch_probability_position(position_cM, tmp_sorted_chr_pos, nu)
     log_sitewise_transmat = np.log(phase_switch_prob) - logphase_shift
+    # log_sitewise_transmat = log_sitewise_transmat[np.arange(0, len(log_sitewise_transmat), 2)]
+    log_sitewise_transmat = log_sitewise_transmat[np.arange(1, len(log_sitewise_transmat), 2)]
 
-    # bin RDR
-    for i in range(int(np.ceil(single_X.shape[0] / rdrbinsize))):
-        single_X[(i*rdrbinsize):(i*rdrbinsize+rdrbinsize), 0, :] = np.sum(single_X[(i*rdrbinsize):(i*rdrbinsize+rdrbinsize), 0, :], axis=0)
-        single_X[(i*rdrbinsize+1):(i*rdrbinsize+rdrbinsize), 0, :] = 0
-        single_base_nb_mean[(i*rdrbinsize):(i*rdrbinsize+rdrbinsize), :] = np.sum(single_base_nb_mean[(i*rdrbinsize):(i*rdrbinsize+rdrbinsize), :], axis=0)
-        single_base_nb_mean[(i*rdrbinsize+1):(i*rdrbinsize+rdrbinsize), :] = 0
+    sorted_chr = np.array([x[0] for x in sorted_chr_pos_first])
+    lengths = np.array([ np.sum(sorted_chr == chrname) for chrname in unique_chrs ])
 
-    return lengths, single_X, single_base_nb_mean, single_total_bb_RD, log_sitewise_transmat, sorted_chr_pos
+    return lengths, single_X, single_base_nb_mean, single_total_bb_RD, log_sitewise_transmat, sorted_chr_pos_first, sorted_chr_pos_last, x_gene_list
 
 
 def convert_to_hmm_input_v2(adata, cell_snp_Aallele, cell_snp_Ballele, snp_gene_list, unique_snp_ids, hgtable_file, nu, logphase_shift, genome_build="hg38"):
@@ -430,58 +606,126 @@ def convert_to_hmm_input_slidedna(cell_snp_Aallele, cell_snp_Ballele, unique_snp
     return lengths, single_X, single_base_nb_mean, single_total_bb_RD, log_sitewise_transmat, sorted_chr_pos
 
 
-# def perform_binning(lengths, single_X, single_base_nb_mean, single_total_bb_RD, sorted_chr_pos, x_gene_list, phase_prob, binsize, rdrbinsize, nu, logphase_shift, min_genes_perbin=5, genome_build="hg38"):
-#     # bin both RDR and BAF
-#     bin_single_X_rdr = []
-#     bin_single_X_baf = []
-#     bin_single_base_nb_mean = []
-#     bin_single_total_bb_RD = []
-#     bin_sorted_chr_pos = []
-#     bin_x_gene_list = []
-#     cumlen = 0
-#     s = 0
-#     for le in lengths:
-#         while s < cumlen + le:
-#             # initial bin with certain number of SNPs
-#             t = min(s + binsize, cumlen + le)
-#             # expand binsize by minimum number of genes
-#             this_genes = set( sum([ x_gene_list[i].split(" ") for i in range(s,t) ], []) )
-#             # while (t < cumlen + le) and (len(this_genes) < min_genes_perbin):
-#             #     t += 1
-#             #     this_genes = this_genes | set(x_gene_list[t].split(" "))
-#             idx_A = np.where(phase_prob[s:t] >= 0.5)[0]
-#             idx_B = np.where(phase_prob[s:t] < 0.5)[0]
-#             bin_single_X_rdr.append( np.sum(single_X[s:t, 0, :], axis=0) )
-#             bin_single_X_baf.append( np.sum(single_X[s:t, 1, :][idx_A,:], axis=0) + np.sum(single_total_bb_RD[s:t, :][idx_B,:] - single_X[s:t, 1, :][idx_B,:], axis=0) )
-#             bin_single_base_nb_mean.append( np.sum(single_base_nb_mean[s:t, :], axis=0) )
-#             bin_single_total_bb_RD.append( np.sum(single_total_bb_RD[s:t, :], axis=0) )
-#             bin_sorted_chr_pos.append( sorted_chr_pos[s] )
-#             # this_genes = sum([ x_gene_list[i].split(" ") for i in range(s,t) ], [])
-#             bin_x_gene_list.append( " ".join(this_genes) )
-#             s = t
-#         cumlen += le
-#     single_X = np.stack([ np.vstack([bin_single_X_rdr[i], bin_single_X_baf[i]]) for i in range(len(bin_single_X_rdr)) ])
-#     single_base_nb_mean = np.vstack(bin_single_base_nb_mean)
-#     single_total_bb_RD = np.vstack(bin_single_total_bb_RD)
-#     sorted_chr_pos = bin_sorted_chr_pos
-#     x_gene_list = bin_x_gene_list
+def choose_umithreshold_given_nbins(single_total_bb_RD, refined_lengths, expected_nbins):
+    def count_num_bins(per_snp_umi, refined_lengths, secondary_min_umi):
+        cumlen = 0
+        s = 0
+        bin_counter = 0
+        for le in refined_lengths:
+            while s < cumlen + le:
+                # initial bin with certain number of SNPs
+                t = s + 1
+                while t < cumlen + le and np.sum(per_snp_umi[s:t]) < secondary_min_umi:
+                    t += 1
+                if np.sum(per_snp_umi[s:t]) >= secondary_min_umi:
+                    bin_counter += 1
+                s = t
+            cumlen += le
+        return bin_counter
+    per_snp_umi = np.sum(single_total_bb_RD, axis=1)
+    # candicate range
+    lo = np.sort(per_snp_umi)[-expected_nbins]
+    # hi = np.sort(per_snp_umi)[-int(expected_nbins/3)]
+    hi = int(np.ceil(np.sum(per_snp_umi) / expected_nbins))
+    # binary search
+    while lo < hi:
+        mid = int((hi + lo) / 2)
+        bin_counter = count_num_bins(per_snp_umi, refined_lengths, mid)
+        if bin_counter == expected_nbins:
+            return mid
+        elif bin_counter < expected_nbins:
+            hi = mid - 1
+        else:
+            lo = mid + 1
+    return mid
 
-#     # phase switch probability from genetic distance
-#     unique_chrs = np.arange(1, 23)
-#     sorted_chr = np.array([x[0] for x in sorted_chr_pos])
-#     lengths = np.array([ np.sum(sorted_chr == chrname) for chrname in unique_chrs ])
-#     position_cM = get_position_cM_table( sorted_chr_pos, genome_build=genome_build )
-#     phase_switch_prob = compute_phase_switch_probability_position(position_cM, sorted_chr_pos, nu)
-#     log_sitewise_transmat = np.log(phase_switch_prob) - logphase_shift
 
-#     # bin RDR
-#     for i in range(int(np.ceil(single_X.shape[0] / rdrbinsize))):
-#         single_X[(i*rdrbinsize):(i*rdrbinsize+rdrbinsize), 0, :] = np.sum(single_X[(i*rdrbinsize):(i*rdrbinsize+rdrbinsize), 0, :], axis=0)
-#         single_X[(i*rdrbinsize+1):(i*rdrbinsize+rdrbinsize), 0, :] = 0
-#         single_base_nb_mean[(i*rdrbinsize):(i*rdrbinsize+rdrbinsize), :] = np.sum(single_base_nb_mean[(i*rdrbinsize):(i*rdrbinsize+rdrbinsize), :], axis=0)
-#         single_base_nb_mean[(i*rdrbinsize+1):(i*rdrbinsize+rdrbinsize), :] = 0
+# def perform_binning_new(lengths, single_X, single_base_nb_mean, single_total_bb_RD, sorted_chr_pos, sorted_chr_pos_last, x_gene_list, phase_indicator, refined_lengths, binsize, rdrbinsize, nu, logphase_shift, secondary_percentile=90, genome_build="hg38"):
+def perform_binning_new(lengths, single_X, single_base_nb_mean, single_total_bb_RD, sorted_chr_pos, sorted_chr_pos_last, x_gene_list, phase_indicator, refined_lengths, binsize, rdrbinsize, nu, logphase_shift, secondary_min_umi=1000, genome_build="hg38"):
+    per_snp_umi = np.sum(single_total_bb_RD, axis=1)
+    # secondary_min_umi = np.percentile(per_snp_umi, secondary_percentile)
+    # bin both RDR and BAF
+    bin_single_X_rdr = []
+    bin_single_X_baf = []
+    bin_single_base_nb_mean = []
+    bin_single_total_bb_RD = []
+    bin_sorted_chr_pos_first = []
+    bin_sorted_chr_pos_last = []
+    bin_x_gene_list = []
+    cumlen = 0
+    s = 0
+    for le in refined_lengths:
+        while s < cumlen + le:
+            # initial bin with certain number of SNPs
+            t = s + 1
+            while t < cumlen + le and np.sum(per_snp_umi[s:t]) < secondary_min_umi:
+                t += 1
+            # expand binsize by minimum number of genes
+            this_genes = sum([ x_gene_list[i].split(" ") for i in range(s,t) ], [])
+            this_genes = [z for z in this_genes if z!=""]
+            idx_A = np.where(phase_indicator[s:t])[0]
+            idx_B = np.where(~phase_indicator[s:t])[0]
+            if np.sum(per_snp_umi[s:t]) >= secondary_min_umi:
+                bin_single_X_rdr.append( np.sum(single_X[s:t, 0, :], axis=0) )
+                bin_single_X_baf.append( np.sum(single_X[s:t, 1, :][idx_A,:], axis=0) + np.sum(single_total_bb_RD[s:t, :][idx_B,:] - single_X[s:t, 1, :][idx_B,:], axis=0) )
+                bin_single_base_nb_mean.append( np.sum(single_base_nb_mean[s:t, :], axis=0) )
+                bin_single_total_bb_RD.append( np.sum(single_total_bb_RD[s:t, :], axis=0) )
+                bin_sorted_chr_pos_first.append( sorted_chr_pos[s] )
+                bin_sorted_chr_pos_last.append( sorted_chr_pos_last[t-1] )
+                bin_x_gene_list.append( " ".join(this_genes) )
+            else:
+                bin_single_X_rdr[-1] += np.sum(single_X[s:t, 0, :], axis=0) 
+                bin_single_X_baf[-1] += np.sum(single_X[s:t, 1, :][idx_A,:], axis=0) + np.sum(single_total_bb_RD[s:t, :][idx_B,:] - single_X[s:t, 1, :][idx_B,:], axis=0)
+                bin_single_base_nb_mean[-1] += np.sum(single_base_nb_mean[s:t, :], axis=0)
+                bin_single_total_bb_RD[-1] += np.sum(single_total_bb_RD[s:t, :], axis=0)
+                bin_sorted_chr_pos_last[-1] = sorted_chr_pos_last[t-1]
+                if len(this_genes) > 0:
+                    bin_x_gene_list[-1] += " " +  " ".join(this_genes)
+            s = t
+        cumlen += le
+    single_X = np.stack([ np.vstack([bin_single_X_rdr[i], bin_single_X_baf[i]]) for i in range(len(bin_single_X_rdr)) ])
+    single_base_nb_mean = np.vstack(bin_single_base_nb_mean)
+    single_total_bb_RD = np.vstack(bin_single_total_bb_RD)
+    sorted_chr_pos_first = bin_sorted_chr_pos_first
+    sorted_chr_pos_last = bin_sorted_chr_pos_last
+    x_gene_list = bin_x_gene_list
 
-#     return lengths, single_X, single_base_nb_mean, single_total_bb_RD, log_sitewise_transmat, sorted_chr_pos, x_gene_list
+    # phase switch probability from genetic distance
+    tmp_sorted_chr_pos = [val for pair in zip(sorted_chr_pos_first, sorted_chr_pos_last) for val in pair]
+    sorted_chr = np.array([x[0] for x in tmp_sorted_chr_pos])
+    position_cM = get_position_cM_table( tmp_sorted_chr_pos, genome_build=genome_build )
+    phase_switch_prob = compute_phase_switch_probability_position(position_cM, tmp_sorted_chr_pos, nu)
+    log_sitewise_transmat = np.log(phase_switch_prob) - logphase_shift
+    # log_sitewise_transmat = log_sitewise_transmat[np.arange(0, len(log_sitewise_transmat), 2)]
+    log_sitewise_transmat = log_sitewise_transmat[np.arange(1, len(log_sitewise_transmat), 2)]
+
+    sorted_chr = np.array([x[0] for x in sorted_chr_pos_first])
+    unique_chrs = [sorted_chr[0]]
+    for x in sorted_chr[1:]:
+        if x != unique_chrs[-1]:
+            unique_chrs.append( x )
+    lengths = np.array([ np.sum(sorted_chr == chrname) for chrname in unique_chrs ])
+    
+    # bin RDR
+    s = 0
+    while s < single_X.shape[0]:
+        t = s+1
+        this_genes = sum([ x_gene_list[i].split(" ") for i in range(s,t) ], [])
+        this_genes = [z for z in this_genes if z!=""]
+        while t < single_X.shape[0] and len(this_genes) < rdrbinsize:
+            t += 1
+            this_genes += x_gene_list[t-1].split(" ")
+            this_genes = [z for z in this_genes if z!=""]
+        single_X[s, 0, :] = np.sum(single_X[s:t, 0, :], axis=0)
+        single_X[(s+1):t, 0, :] = 0
+        single_base_nb_mean[s, :] = np.sum(single_base_nb_mean[s:t, :], axis=0)
+        single_base_nb_mean[(s+1):t, :] = 0
+        x_gene_list[s] = " ".join(this_genes)
+        for k in range(s+1,t):
+            x_gene_list[k] = ""
+        s = t
+
+    return lengths, single_X, single_base_nb_mean, single_total_bb_RD, log_sitewise_transmat, sorted_chr_pos_first, sorted_chr_pos_last, x_gene_list
 
 
 def perform_binning(lengths, single_X, single_base_nb_mean, single_total_bb_RD, sorted_chr_pos, x_gene_list, phase_indicator, refined_lengths, binsize, rdrbinsize, nu, logphase_shift, min_genes_perbin=5, genome_build="hg38"):
@@ -522,12 +766,13 @@ def perform_binning(lengths, single_X, single_base_nb_mean, single_total_bb_RD, 
     x_gene_list = bin_x_gene_list
 
     # phase switch probability from genetic distance
-    unique_chrs = np.arange(1, 23)
     sorted_chr = np.array([x[0] for x in sorted_chr_pos])
-    lengths = np.array([ np.sum(sorted_chr == chrname) for chrname in unique_chrs ])
     position_cM = get_position_cM_table( sorted_chr_pos, genome_build=genome_build )
     phase_switch_prob = compute_phase_switch_probability_position(position_cM, sorted_chr_pos, nu)
     log_sitewise_transmat = np.log(phase_switch_prob) - logphase_shift
+
+    unique_chrs = np.unique(sorted_chr)
+    lengths = np.array([ np.sum(sorted_chr == chrname) for chrname in unique_chrs ])
 
     # bin RDR
     for i in range(int(np.ceil(single_X.shape[0] / rdrbinsize))):
@@ -539,12 +784,48 @@ def perform_binning(lengths, single_X, single_base_nb_mean, single_total_bb_RD, 
     return lengths, single_X, single_base_nb_mean, single_total_bb_RD, log_sitewise_transmat, sorted_chr_pos, x_gene_list
 
 
-def filter_de_genes(adata, x_gene_list, logfcthreshold=4, quantile_threshold=80):
+def bin_selection_basedon_normal(single_X, single_base_nb_mean, single_total_bb_RD, sorted_chr_pos, sorted_chr_pos_last, x_gene_list, nu, logphase_shift, index_normal, genome_build="hg38", confidence_interval=[0.05, 0.95]):
+    """
+    Filter out bins that potential contain somatic mutations based on BAF of normal spots.
+    """
+    # pool B allele counts for each bin across all normal spots
+    tmpX = np.sum(single_X[:, 1, index_normal], axis=1)
+    tmptotal_bb_RD = np.sum(single_total_bb_RD[:, index_normal], axis=1)
+    model = Weighted_BetaBinom(tmpX, np.ones(len(tmpX)), weights=np.ones(len(tmpX)), exposure=tmptotal_bb_RD)
+    tmpres = model.fit(disp=0)
+    # remove bins if normal B allele frequencies fall out of 5%-95% probability range
+    removal_indicator1 = (tmpX < scipy.stats.betabinom.ppf(confidence_interval[0], tmptotal_bb_RD, tmpres.params[0] * tmpres.params[1], (1-tmpres.params[0]) * tmpres.params[1]))
+    removal_indicator2 = (tmpX > scipy.stats.betabinom.ppf(confidence_interval[1], tmptotal_bb_RD, tmpres.params[0] * tmpres.params[1], (1-tmpres.params[0]) * tmpres.params[1]))
+    index_remaining = np.where(~(removal_indicator1 | removal_indicator2))[0]
+    #
+    # change the related data matrices
+    single_X = single_X[index_remaining, :, :]
+    single_base_nb_mean = single_base_nb_mean[index_remaining, :]
+    single_total_bb_RD = single_total_bb_RD[index_remaining, :]
+    sorted_chr_pos = [sorted_chr_pos[i] for i in index_remaining]
+    sorted_chr_pos_last = [sorted_chr_pos_last[i] for i in index_remaining]
+    x_gene_list = [x_gene_list[i] for i in index_remaining]
+    # re-estimating phase switch probability
+    tmp_sorted_chr_pos = [val for pair in zip(sorted_chr_pos, sorted_chr_pos_last) for val in pair]
+    sorted_chr = np.array([x[0] for x in tmp_sorted_chr_pos])
+    position_cM = get_position_cM_table( tmp_sorted_chr_pos, genome_build=genome_build )
+    phase_switch_prob = compute_phase_switch_probability_position(position_cM, tmp_sorted_chr_pos, nu)
+    log_sitewise_transmat = np.log(phase_switch_prob) - logphase_shift
+    # log_sitewise_transmat = log_sitewise_transmat[np.arange(0, len(log_sitewise_transmat), 2)]
+    log_sitewise_transmat = log_sitewise_transmat[np.arange(1, len(log_sitewise_transmat), 2)]
+    #
+    sorted_chr = np.array([x[0] for x in sorted_chr_pos])
+    unique_chrs = [sorted_chr[0]]
+    for x in sorted_chr[1:]:
+        if x != unique_chrs[-1]:
+            unique_chrs.append( x )
+    lengths = np.array([ np.sum(sorted_chr == chrname) for chrname in unique_chrs ])
+    #
+    return lengths, single_X, single_base_nb_mean, single_total_bb_RD, log_sitewise_transmat, sorted_chr_pos, sorted_chr_pos_last, x_gene_list, index_remaining
+
+
+def filter_de_genes(adata, x_gene_list, sample_list=None, logfcthreshold=4, quantile_threshold=80):
     assert "normal_candidate" in adata.obs
-    # clone = np.array(["normal"] * adata.shape[0])
-    # clone[~adata.obs["normal_candidate"]] = "tumor"
-    tmpadata = adata.copy()
-    # tmpadata.obs["clone"] = clone
     #
     map_gene_adatavar = {}
     map_gene_umi = {}
@@ -552,29 +833,41 @@ def filter_de_genes(adata, x_gene_list, logfcthreshold=4, quantile_threshold=80)
         map_gene_adatavar[x] = i
         map_gene_umi[x] = np.sum(adata.layers["count"][:,i])
     #
-    umi_threshold = np.percentile( np.sum(adata.layers["count"], axis=0), quantile_threshold )
+    if sample_list is None:
+        sample_list = ["ALL"]
     #
-    sc.pp.filter_cells(tmpadata, min_genes=200)
-    sc.pp.filter_genes(tmpadata, min_cells=10)
-    #sc.pp.filter_genes(tmpadata, min_counts=200)
-    sc.pp.normalize_total(tmpadata, target_sum=1e4)
-    sc.pp.log1p(tmpadata)
-    # new added
-    sc.pp.pca(tmpadata, n_comps=4)
-    kmeans = KMeans(n_clusters=2, random_state=0).fit(tmpadata.X)
-    kmeans_labels = kmeans.predict(tmpadata.X)
-    idx_kmeans_label = np.argmax(np.bincount( kmeans_labels[tmpadata.obs["normal_candidate"]], minlength=2 ))
-    clone = np.array(["normal"] * tmpadata.shape[0])
-    clone[ (kmeans_labels != idx_kmeans_label) & (~tmpadata.obs["normal_candidate"]) ] = "tumor"
-    tmpadata.obs["clone"] = clone
-    # end added
-    sc.tl.rank_genes_groups(tmpadata, 'clone', groups=["tumor"], reference="normal", method='wilcoxon')
-    genenames = np.array([ x[0] for x in tmpadata.uns["rank_genes_groups"]["names"] ])
-    logfc = np.array([ x[0] for x in tmpadata.uns["rank_genes_groups"]["logfoldchanges"] ])
-    geneumis = np.array([ map_gene_umi[x] for x in genenames])
-    # filtered_out_set = set(list(genenames[ np.abs(logfc) > logfcthreshold ]))
-    filtered_out_set = set(list(genenames[ (np.abs(logfc) > logfcthreshold) & (geneumis > umi_threshold) ]))
-    print(f"Filter out {len(filtered_out_set)} DE genes")
+    filtered_out_set = set()
+    for sname in sample_list:
+        if sname == "ALL":
+            index = np.arange(adata.shape[0])
+        else:
+            index = np.where(adata.obs["sample"] == sname)[0]
+        tmpadata = adata[index, :].copy()
+        #
+        umi_threshold = np.percentile( np.sum(tmpadata.layers["count"], axis=0), quantile_threshold )
+        #
+        sc.pp.filter_cells(tmpadata, min_genes=200)
+        sc.pp.filter_genes(tmpadata, min_cells=10)
+        med = np.median( np.sum(tmpadata.layers["count"], axis=1) )
+        # sc.pp.normalize_total(tmpadata, target_sum=1e4)
+        sc.pp.normalize_total(tmpadata, target_sum=med)
+        sc.pp.log1p(tmpadata)
+        # new added
+        sc.pp.pca(tmpadata, n_comps=4)
+        kmeans = KMeans(n_clusters=2, random_state=0).fit(tmpadata.X)
+        kmeans_labels = kmeans.predict(tmpadata.X)
+        idx_kmeans_label = np.argmax(np.bincount( kmeans_labels[tmpadata.obs["normal_candidate"]], minlength=2 ))
+        clone = np.array(["normal"] * tmpadata.shape[0])
+        clone[ (kmeans_labels != idx_kmeans_label) & (~tmpadata.obs["normal_candidate"]) ] = "tumor"
+        tmpadata.obs["clone"] = clone
+        # end added
+        sc.tl.rank_genes_groups(tmpadata, 'clone', groups=["tumor"], reference="normal", method='wilcoxon')
+        genenames = np.array([ x[0] for x in tmpadata.uns["rank_genes_groups"]["names"] ])
+        logfc = np.array([ x[0] for x in tmpadata.uns["rank_genes_groups"]["logfoldchanges"] ])
+        geneumis = np.array([ map_gene_umi[x] for x in genenames])
+        this_filtered_out_set = set(list(genenames[ (np.abs(logfc) > logfcthreshold) & (geneumis > umi_threshold) ]))
+        filtered_out_set = filtered_out_set | this_filtered_out_set
+        print(f"Filter out {len(filtered_out_set)} DE genes")
     #
     new_single_X_rdr = np.zeros((len(x_gene_list), adata.shape[0]))
     for i,x in enumerate(x_gene_list):
@@ -582,7 +875,7 @@ def filter_de_genes(adata, x_gene_list, logfcthreshold=4, quantile_threshold=80)
         idx_genes = np.array([ map_gene_adatavar[g] for g in g_list if (not g in filtered_out_set) and (g in map_gene_adatavar)])
         if len(idx_genes) > 0:
             new_single_X_rdr[i, :] = np.sum(adata.layers["count"][:, idx_genes], axis=1)
-    return new_single_X_rdr
+    return new_single_X_rdr, filtered_out_set
 
 
 def get_lengths_by_arm(sorted_chr_pos, centromere_file):
