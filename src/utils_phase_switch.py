@@ -36,11 +36,13 @@ def get_position_cM_table(chr_pos_vector, genome_build="hg38"):
         pos = x[1]
         while k < len(ref_chrom) and (ref_chrom[k] < chrname or (ref_chrom[k] == chrname and ref_pos[k] < pos)):
             k += 1
-        if ref_chrom[k] == chrname and ref_pos[k] >= pos:
+        if k < len(ref_chrom) and ref_chrom[k] == chrname and ref_pos[k] >= pos:
             if k > 0 and ref_chrom[k-1] == chrname:
                 position_cM[i] = ref_cm[k-1] + (pos - ref_pos[k-1]) / (ref_pos[k] - ref_pos[k-1]) * (ref_cm[k] - ref_cm[k-1])
             else:
                 position_cM[i] = (pos - 0) / (ref_pos[k] - 0) * (ref_cm[k] - 0)
+        else:
+            position_cM[i] = ref_cm[k-1]
     return position_cM
 
 
