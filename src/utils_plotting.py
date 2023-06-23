@@ -35,7 +35,7 @@ def get_full_palette():
     return palette, ordered_acn
 
 
-def plot_acn(cn_file, ax_handle, clone_ids=None, add_chrbar=True, chrbar_thickness=0.1, add_legend=True, remove_xticks=True):
+def plot_acn(cn_file, ax_handle, clone_ids=None, clone_names=None, add_chrbar=True, chrbar_thickness=0.1, add_legend=True, remove_xticks=True):
     # full color palette
     palette,_ = get_full_palette()
 
@@ -72,60 +72,111 @@ def plot_acn(cn_file, ax_handle, clone_ids=None, add_chrbar=True, chrbar_thickne
         seaborn.heatmap(rename_cnv_mapped, cmap=LinearSegmentedColormap.from_list('multi-level', colors, len(colors)), linewidths=0, cbar=False, rasterized=True, ax=ax_handle)
     else:
         tmp_ploidy = [ploidy.loc[f"clone {cid}"].values[0] for cid in clone_ids]
-        rename_cnv_mapped = pd.DataFrame(cnv_mapped.loc[[f"clone {cid}" for cid in clone_ids]].values, index=[f"clone {cid}\nploidy {tmp_ploidy[c]}" for c,cid in enumerate(clone_ids)])
+        if clone_names is None:
+            rename_cnv_mapped = pd.DataFrame(cnv_mapped.loc[[f"clone {cid}" for cid in clone_ids]].values, index=[f"clone {cid}\nploidy {tmp_ploidy[c]}" for c,cid in enumerate(clone_ids)])
+        else:
+            rename_cnv_mapped = pd.DataFrame(cnv_mapped.loc[[f"clone {cid}" for cid in clone_ids]].values, index=[f"{clone_names[c]}\nploidy {tmp_ploidy[c]}" for c,cid in enumerate(clone_ids)])
         seaborn.heatmap(rename_cnv_mapped, cmap=LinearSegmentedColormap.from_list('multi-level', colors, len(colors)), linewidths=0, cbar=False, rasterized=True, ax=ax_handle)
 
     # indicate allele switches
     if clone_ids is None:
-        # up-arrow
-        up_intervals = []
-        for c,cid in enumerate(final_clone_ids):
-            intervals, labs = get_intervals( (df_cnv[f"clone{cid} A"].values > df_cnv[f"clone{cid} B"].values) )
-            y1 = c
-            y2 = c+1
-            for i in range(len(intervals)):
-                if intervals[i][1] - intervals[i][0] > 10 and labs[i]:
-                    axes.fill_between( np.arange(intervals[i][0], intervals[i][1]), y1, y2, color="none", edgecolor="black")
-                    axes.arrow(x=np.mean(intervals[i]), y=0.9*y2+0.1*y1, dx=0, dy=0.7*(y1-y2), head_width=0.3*(intervals[i][1] - intervals[i][0]), head_length=0.1*np.abs(y1-y2), fc="black")
-                    up_intervals.append( intervals[i] )
-        # down-arrow
-        # flatten up intervals into binary vector of length n_obs, to indicate whether each bin is in up intervals
-        if len(up_intervals) > 0:
-            up_indicator = np.array([False] * df_cnv.shape[0])
-            up_indicator[ np.concatenate([ np.arange(intl[0], intl[1]) for intl in up_intervals ]) ] = True
+        # find regions where there exist both clones with A > B and clones with A < B
+        has_up = np.any(np.vstack([ df_cnv[f"clone{cid} A"].values > df_cnv[f"clone{cid} B"].values for cid in final_clone_ids]), axis=0)
+        has_down = np.any(np.vstack([ df_cnv[f"clone{cid} A"].values < df_cnv[f"clone{cid} B"].values for cid in final_clone_ids]), axis=0)
+        intervals, labs = get_intervals( (has_up & has_down) )
+        # for each intervals, find the corresponding clones with A > B to plot up-arrow, and corresponding clones with A < B to plot down-arrow
+        for i in range(len(intervals)):
+            if not labs[i]:
+                continue
             for c,cid in enumerate(final_clone_ids):
-                intervals, labs = get_intervals( (df_cnv[f"clone{cid} A"].values < df_cnv[f"clone{cid} B"].values) * up_indicator )
                 y1 = c
                 y2 = c+1
-                for i in range(len(intervals)):
-                    if intervals[i][1] - intervals[i][0] > 10 and labs[i]:
-                        axes.fill_between( np.arange(intervals[i][0], intervals[i][1]), y1, y2, color="none", edgecolor="black")
-                        axes.arrow(x=np.mean(intervals[i]), y=0.9*y1+0.1*y2, dx=0, dy=-0.7*(y1-y2), head_width=0.3*(intervals[i][1] - intervals[i][0]), head_length=0.1*np.abs(y1-y2), fc="black")
+                # up-arrow
+                sub_intervals, sub_labs = get_intervals( df_cnv[f"clone{cid} A"].values[intervals[i][0]:intervals[i][1]] > df_cnv[f"clone{cid} B"].values[intervals[i][0]:intervals[i][1]] )
+                for j, sub_int in enumerate(sub_intervals):
+                    if sub_labs[j]:
+                        axes.fill_between( np.arange(intervals[i][0]+sub_int[0], intervals[i][0]+sub_int[1]), y1, y2, color="none", edgecolor="black")
+                        axes.arrow(x=intervals[i][0]+np.mean(sub_int), y=0.9*y2+0.1*y1, dx=0, dy=0.7*(y1-y2), head_width=0.3*(sub_int[1] - sub_int[0]), head_length=0.1*np.abs(y1-y2), fc="black")
+                # down-arrow
+                sub_intervals, sub_labs = get_intervals( df_cnv[f"clone{cid} A"].values[intervals[i][0]:intervals[i][1]] < df_cnv[f"clone{cid} B"].values[intervals[i][0]:intervals[i][1]] )
+                for j, sub_int in enumerate(sub_intervals):
+                    if sub_labs[j]:
+                        axes.fill_between( np.arange(intervals[i][0]+sub_int[0], intervals[i][0]+sub_int[1]), y1, y2, color="none", edgecolor="black")
+                        axes.arrow(x=intervals[i][0]+np.mean(sub_int), y=0.9*y1+0.1*y2, dx=0, dy=-0.7*(y1-y2), head_width=0.3*(sub_int[1]-sub_int[0]), head_length=0.1*np.abs(y1-y2), fc="black")
+        
+        # # up-arrow
+        # up_intervals = []
+        # for c,cid in enumerate(final_clone_ids):
+        #     intervals, labs = get_intervals( (df_cnv[f"clone{cid} A"].values > df_cnv[f"clone{cid} B"].values) )
+        #     y1 = c
+        #     y2 = c+1
+        #     for i in range(len(intervals)):
+        #         if intervals[i][1] - intervals[i][0] > 10 and labs[i]:
+        #             axes.fill_between( np.arange(intervals[i][0], intervals[i][1]), y1, y2, color="none", edgecolor="black")
+        #             axes.arrow(x=np.mean(intervals[i]), y=0.9*y2+0.1*y1, dx=0, dy=0.7*(y1-y2), head_width=0.3*(intervals[i][1] - intervals[i][0]), head_length=0.1*np.abs(y1-y2), fc="black")
+        #             up_intervals.append( intervals[i] )
+        # # down-arrow
+        # # flatten up intervals into binary vector of length n_obs, to indicate whether each bin is in up intervals
+        # if len(up_intervals) > 0:
+        #     up_indicator = np.array([False] * df_cnv.shape[0])
+        #     up_indicator[ np.concatenate([ np.arange(intl[0], intl[1]) for intl in up_intervals ]) ] = True
+        #     for c,cid in enumerate(final_clone_ids):
+        #         intervals, labs = get_intervals( (df_cnv[f"clone{cid} A"].values < df_cnv[f"clone{cid} B"].values) * up_indicator )
+        #         y1 = c
+        #         y2 = c+1
+        #         for i in range(len(intervals)):
+        #             if intervals[i][1] - intervals[i][0] > 10 and labs[i]:
+        #                 axes.fill_between( np.arange(intervals[i][0], intervals[i][1]), y1, y2, color="none", edgecolor="black")
+        #                 axes.arrow(x=np.mean(intervals[i]), y=0.9*y1+0.1*y2, dx=0, dy=-0.7*(y1-y2), head_width=0.3*(intervals[i][1] - intervals[i][0]), head_length=0.1*np.abs(y1-y2), fc="black")
     else:
-        # up-arrow
-        up_intervals = []
-        for c,cid in enumerate(clone_ids):
-            intervals, labs = get_intervals( (df_cnv[f"clone{cid} A"].values > df_cnv[f"clone{cid} B"].values) )
-            y1 = c
-            y2 = c+1
-            for i in range(len(intervals)):
-                if intervals[i][1] - intervals[i][0] > 10 and labs[i]:
-                    axes.fill_between( np.arange(intervals[i][0], intervals[i][1]), y1, y2, color="none", edgecolor="black")
-                    axes.arrow(x=np.mean(intervals[i]), y=0.9*y2+0.1*y1, dx=0, dy=0.7*(y1-y2), head_width=0.3*(intervals[i][1] - intervals[i][0]), head_length=0.1*np.abs(y1-y2), fc="black")
-                    up_intervals.append( intervals[i] )
-        # down-arrow
-        # flatten up intervals into binary vector of length n_obs, to indicate whether each bin is in up intervals
-        if len(up_intervals) > 0:
-            up_indicator = np.array([False] * df_cnv.shape[0])
-            up_indicator[ np.concatenate([ np.arange(intl[0], intl[1]) for intl in up_intervals ]) ] = True
+        # find regions where there exist both clones with A > B and clones with A < B
+        has_up = np.any(np.vstack([ df_cnv[f"clone{cid} A"].values > df_cnv[f"clone{cid} B"].values for cid in clone_ids]), axis=0)
+        has_down = np.any(np.vstack([ df_cnv[f"clone{cid} A"].values < df_cnv[f"clone{cid} B"].values for cid in clone_ids]), axis=0)
+        intervals, labs = get_intervals( (has_up & has_down) )
+        # for each intervals, find the corresponding clones with A > B to plot up-arrow, and corresponding clones with A < B to plot down-arrow
+        for i in range(len(intervals)):
+            if not labs[i]:
+                continue
             for c,cid in enumerate(clone_ids):
-                intervals, labs = get_intervals( (df_cnv[f"clone{cid} A"].values < df_cnv[f"clone{cid} B"].values) * up_indicator )
                 y1 = c
                 y2 = c+1
-                for i in range(len(intervals)):
-                    if intervals[i][1] - intervals[i][0] > 10 and labs[i]:
-                        axes.fill_between( np.arange(intervals[i][0], intervals[i][1]), y1, y2, color="none", edgecolor="black")
-                        axes.arrow(x=np.mean(intervals[i]), y=0.9*y1+0.1*y2, dx=0, dy=-0.7*(y1-y2), head_width=0.3*(intervals[i][1] - intervals[i][0]), head_length=0.1*np.abs(y1-y2), fc="black")
+                # up-arrow
+                sub_intervals, sub_labs = get_intervals( df_cnv[f"clone{cid} A"].values[intervals[i][0]:intervals[i][1]] > df_cnv[f"clone{cid} B"].values[intervals[i][0]:intervals[i][1]] )
+                for j, sub_int in enumerate(sub_intervals):
+                    if sub_labs[j]:
+                        axes.fill_between( np.arange(intervals[i][0]+sub_int[0], intervals[i][0]+sub_int[1]), y1, y2, color="none", edgecolor="black")
+                        axes.arrow(x=intervals[i][0]+np.mean(sub_int), y=0.9*y2+0.1*y1, dx=0, dy=0.7*(y1-y2), head_width=0.3*(sub_int[1] - sub_int[0]), head_length=0.1*np.abs(y1-y2), fc="black")
+                # down-arrow
+                sub_intervals, sub_labs = get_intervals( df_cnv[f"clone{cid} A"].values[intervals[i][0]:intervals[i][1]] < df_cnv[f"clone{cid} B"].values[intervals[i][0]:intervals[i][1]] )
+                for j, sub_int in enumerate(sub_intervals):
+                    if sub_labs[j]:
+                        axes.fill_between( np.arange(intervals[i][0]+sub_int[0], intervals[i][0]+sub_int[1]), y1, y2, color="none", edgecolor="black")
+                        axes.arrow(x=intervals[i][0]+np.mean(sub_int), y=0.9*y1+0.1*y2, dx=0, dy=-0.7*(y1-y2), head_width=0.3*(sub_int[1] - sub_int[0]), head_length=0.1*np.abs(y1-y2), fc="black")
+
+        # # up-arrow
+        # up_intervals = []
+        # for c,cid in enumerate(clone_ids):
+        #     intervals, labs = get_intervals( (df_cnv[f"clone{cid} A"].values > df_cnv[f"clone{cid} B"].values) )
+        #     y1 = c
+        #     y2 = c+1
+        #     for i in range(len(intervals)):
+        #         if intervals[i][1] - intervals[i][0] > 10 and labs[i]:
+        #             axes.fill_between( np.arange(intervals[i][0], intervals[i][1]), y1, y2, color="none", edgecolor="black")
+        #             axes.arrow(x=np.mean(intervals[i]), y=0.9*y2+0.1*y1, dx=0, dy=0.7*(y1-y2), head_width=0.3*(intervals[i][1] - intervals[i][0]), head_length=0.1*np.abs(y1-y2), fc="black")
+        #             up_intervals.append( intervals[i] )
+        # # down-arrow
+        # # flatten up intervals into binary vector of length n_obs, to indicate whether each bin is in up intervals
+        # if len(up_intervals) > 0:
+        #     up_indicator = np.array([False] * df_cnv.shape[0])
+        #     up_indicator[ np.concatenate([ np.arange(intl[0], intl[1]) for intl in up_intervals ]) ] = True
+        #     for c,cid in enumerate(clone_ids):
+        #         intervals, labs = get_intervals( (df_cnv[f"clone{cid} A"].values < df_cnv[f"clone{cid} B"].values) * up_indicator )
+        #         y1 = c
+        #         y2 = c+1
+        #         for i in range(len(intervals)):
+        #             if intervals[i][1] - intervals[i][0] > 10 and labs[i]:
+        #                 axes.fill_between( np.arange(intervals[i][0], intervals[i][1]), y1, y2, color="none", edgecolor="black")
+        #                 axes.arrow(x=np.mean(intervals[i]), y=0.9*y1+0.1*y2, dx=0, dy=-0.7*(y1-y2), head_width=0.3*(intervals[i][1] - intervals[i][0]), head_length=0.1*np.abs(y1-y2), fc="black")
 
     if add_chrbar:
         # add chr color
@@ -280,7 +331,7 @@ def plot_rdr_baf(configuration_file, r_hmrf_initialization, cn_file, clone_ids=N
                 palette=seaborn.color_palette(colors), s=pointsize, edgecolor="black", alpha=0.8, legend=False, ax=axes[2*s])
             axes[2*s].set_ylabel(f"clone {cid}\nRDR")
             axes[2*s].set_yticks(np.arange(1, rdr_ylim, 1))
-            axes[2*s].set_ylim([0,5])
+            axes[2*s].set_ylim([0,rdr_ylim])
             axes[2*s].set_xlim([0, n_obs])
             if remove_xticks:
                 axes[2*s].set_xticks([])
