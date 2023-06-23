@@ -42,6 +42,7 @@ def read_joint_configuration_file(filename):
         "npart_phasing" : 2,
         # HMRF configurations
         "n_clones" : None,
+        "n_clones_rdr" : 2,
         "min_spots_per_clone" : 100,
         "maxspots_pooling" : 7,
         "tumorprop_threshold" : 0.5, 
@@ -89,6 +90,7 @@ def read_joint_configuration_file(filename):
         "npart_phasing" : "int",
         # HMRF configurations
         "n_clones" : "int",
+        "n_clones_rdr" : "int",
         "min_spots_per_clone" : "int",
         "maxspots_pooling" : "int",
         "tumorprop_threshold" : "float", 
@@ -164,6 +166,7 @@ def write_joint_config_file(outputfilename, config):
         "logphase_shift",
         "npart_phasing"]
     list_argument_hmrf = ["n_clones",
+        "n_clones_rdr",
         "min_spots_per_clone",
         "maxspots_pooling",
         "tumorprop_threshold",
