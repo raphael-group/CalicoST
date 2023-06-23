@@ -72,35 +72,6 @@ def compute_weighted_adjacency(coords, unit_xsquared=9, unit_ysquared=3, bandwid
     return A
 
 
-# def choose_adjacency_by_readcounts(coords, single_total_bb_RD, count_threshold=3000, unit_xsquared=9, unit_ysquared=3):
-# # def choose_adjacency_by_readcounts(coords, single_total_bb_RD, count_threshold=4000, unit_xsquared=9, unit_ysquared=3):
-#     # XXX: change from count_threshold 500 to 3000
-#     # pairwise distance
-#     x_dist = coords[:,0][None,:] - coords[:,0][:,None]
-#     y_dist = coords[:,1][None,:] - coords[:,1][:,None]
-#     tmp_pairwise_squared_dist = x_dist**2 * unit_xsquared + y_dist**2 * unit_ysquared
-#     np.fill_diagonal(tmp_pairwise_squared_dist, np.max(tmp_pairwise_squared_dist))
-#     base_ratio = np.median(np.min(tmp_pairwise_squared_dist, axis=0)) / (unit_xsquared + unit_ysquared)
-#     selected_ratio = 0
-#     for ratio in range(0, 4):
-#         smooth_mat = compute_adjacency_mat_v2(coords, unit_xsquared, unit_ysquared, ratio * base_ratio)
-#         smooth_mat.setdiag(1)
-#         if np.median(smooth_mat.dot( np.sum(single_total_bb_RD, axis=0) )) > count_threshold:
-#             selected_ratio = ratio
-#             break
-#     # sw_adjustment = 1.0 * np.median(np.sum(tmp_pairwise_squared_dist <= unit_xsquared + unit_ysquared, axis=0)) / np.median(np.sum(adjacency_mat.A, axis=0))
-#     for bandwidth in np.arange(unit_xsquared + unit_ysquared, 5*(unit_xsquared + unit_ysquared), unit_xsquared + unit_ysquared):
-#         adjacency_mat = compute_weighted_adjacency(coords, unit_xsquared, unit_ysquared, bandwidth=bandwidth)
-#         adjacency_mat.setdiag(1)
-#         adjacency_mat = adjacency_mat - smooth_mat
-#         adjacency_mat[adjacency_mat < 0] = 0
-#         if np.median(np.sum(adjacency_mat, axis=0).A.flatten()) >= 6:
-#             print(f"bandwidth: {bandwidth}")
-#             break
-#     sw_adjustment = 1
-#     return smooth_mat, adjacency_mat, sw_adjustment
-
-
 def choose_adjacency_by_readcounts(coords, single_total_bb_RD, maxspots_pooling=7, unit_xsquared=9, unit_ysquared=3):
 # def choose_adjacency_by_readcounts(coords, single_total_bb_RD, count_threshold=4000, unit_xsquared=9, unit_ysquared=3):
     # XXX: change from count_threshold 500 to 3000
@@ -133,18 +104,29 @@ def choose_adjacency_by_readcounts(coords, single_total_bb_RD, maxspots_pooling=
     return smooth_mat, adjacency_mat, sw_adjustment
 
 
-def choose_adjacency_by_readcounts_slidedna(coords, single_total_bb_RD, maxknn=100, q=95, count_threshold=4):
+# def choose_adjacency_by_readcounts_slidedna(coords, single_total_bb_RD, maxknn=100, q=95, count_threshold=4):
+#     """
+#     Merge spots such that 95% quantile of read count per SNP per spot exceed count_threshold.
+#     """
+#     knnsize = 10
+#     for k in range(10, maxknn, 10):
+#         smooth_mat = kneighbors_graph(coords, n_neighbors=k)
+#         if np.percentile(smooth_mat.dot( single_total_bb_RD.T ), q) >= count_threshold:
+#             knnsize = k
+#             print(f"Picked spatial smoothing KNN K = {knnsize}")
+#             break
+#     adjacency_mat = kneighbors_graph(coords, n_neighbors=knnsize + 6)
+#     adjacency_mat = adjacency_mat - smooth_mat
+#     # sw_adjustment = 1.0 * 6 / np.median(np.sum(adjacency_mat.A, axis=0))
+#     sw_adjustment = 1
+#     return smooth_mat, adjacency_mat, sw_adjustment
+
+def choose_adjacency_by_readcounts_slidedna(coords, maxspots_pooling=30):
     """
     Merge spots such that 95% quantile of read count per SNP per spot exceed count_threshold.
     """
-    knnsize = 10
-    for k in range(10, maxknn, 10):
-        smooth_mat = kneighbors_graph(coords, n_neighbors=k)
-        if np.percentile(smooth_mat.dot( single_total_bb_RD.T ), q) >= count_threshold:
-            knnsize = k
-            print(f"Picked spatial smoothing KNN K = {knnsize}")
-            break
-    adjacency_mat = kneighbors_graph(coords, n_neighbors=knnsize + 6)
+    smooth_mat = kneighbors_graph(coords, n_neighbors=maxspots_pooling)
+    adjacency_mat = kneighbors_graph(coords, n_neighbors=maxspots_pooling + 6)
     adjacency_mat = adjacency_mat - smooth_mat
     # sw_adjustment = 1.0 * 6 / np.median(np.sum(adjacency_mat.A, axis=0))
     sw_adjustment = 1
@@ -366,7 +348,7 @@ def reorder_results(res_combine, posterior, single_tumor_prop):
         pred_cnv = res_combine["pred_cnv"]
         baf_profiles = np.array([ res_combine["new_p_binom"][pred_cnv[:,c], c] for c in range(n_clones) ])
         cid_normal = np.argmin(np.sum( np.maximum(np.abs(baf_profiles - 0.5)-EPS_BAF, 0), axis=1))
-        cid_rest = np.array([c for c in range(n_clones) if c != cid_normal])
+        cid_rest = np.array([c for c in range(n_clones) if c != cid_normal]).astype(int)
         reidx = np.append(cid_normal, cid_rest)
         map_reidx = {cid:i for i,cid in enumerate(reidx)}
         # re-order entries in res_combine
@@ -389,6 +371,23 @@ def reorder_results(res_combine, posterior, single_tumor_prop):
         new_res_combine["pred_cnv"] = np.hstack([np.zeros((n_obs,1), dtype=int), res_combine["pred_cnv"]])
         new_posterior = np.hstack([np.ones((n_spots,1)) * np.nan, posterior])
     return new_res_combine, new_posterior
+
+
+def reorder_results_merged(res, n_obs):
+    n_clones = int(len(res["pred_cnv"]) / n_obs)
+    EPS_BAF = 0.05
+    pred_cnv = np.array([ res["pred_cnv"][(c*n_obs):(c*n_obs + n_obs)] for c in range(n_clones) ]).T
+    baf_profiles = np.array([ res["new_p_binom"][pred_cnv[:,c], 0] for c in range(n_clones) ])
+    cid_normal = np.argmin(np.sum( np.maximum(np.abs(baf_profiles - 0.5)-EPS_BAF, 0), axis=1))
+    cid_rest = np.array([c for c in range(n_clones) if c != cid_normal])
+    reidx = np.append(cid_normal, cid_rest)
+    map_reidx = {cid:i for i,cid in enumerate(reidx)}
+    # re-order entries in res
+    new_res = copy.copy(res)
+    new_res["new_assignment"] = np.array([ map_reidx[c] for c in res["new_assignment"] ])
+    new_res["log_gamma"] = np.hstack([ res["log_gamma"][:, (c*n_obs):(c*n_obs + n_obs)] for c in reidx ])
+    new_res["pred_cnv"] = np.concatenate([ res["pred_cnv"][(c*n_obs):(c*n_obs + n_obs)] for c in reidx ])
+    return new_res
     
 
 def load_hmrf_last_iteration(filename):
@@ -416,7 +415,7 @@ def load_hmrf_given_iteration(filename, r):
     return res
 
 
-def get_LoH_for_phylogeny(df_seglevel_cnv):
+def get_LoH_for_phylogeny(df_seglevel_cnv, min_num_bins=3):
     """
     Treating LoH as irreversible point mutations, output a clone-by-mutation matrix for phylogeny reconstruction.
     Mutation states: 0 for no LoH, 1 for lossing A allele, 2 for lossing B allele.
@@ -460,6 +459,8 @@ def get_LoH_for_phylogeny(df_seglevel_cnv):
     df_loh = []
     for i, acn in enumerate(seg_acn):
         if np.all(acn != 0):
+            continue
+        if intervals[i][1] - intervals[i][0] < min_num_bins:
             continue
         idx_zero = np.where(acn == 0)[0]
         idx_clones = (idx_zero / 2).astype(int)
