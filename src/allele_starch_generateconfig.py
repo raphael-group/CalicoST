@@ -27,6 +27,7 @@ def read_configuration_file(filename):
         "hgtable_file" : None,
         "normalidx_file" : None,
         "tumorprop_file" : None,
+        "supervision_clone_file" : None,
         "filtergenelist_file" : None,
         "filterregion_file" : None,
         "binsize" : 1,
@@ -50,6 +51,9 @@ def read_configuration_file(filename):
         "initialization_method" : "rectangle", # rectangle or datadrive
         "num_hmrf_initialization_start" : 0, 
         "num_hmrf_initialization_end" : 10,
+        "spatial_weight" : 2.0,
+        "construct_adjacency_method" : "hexagon",
+        "construct_adjacency_w" : 1.0,
         # HMM configurations
         "n_states" : None,
         "params" : None,
@@ -60,7 +64,6 @@ def read_configuration_file(filename):
         "shared_BB_dispersion" : True,
         "max_iter" : 30,
         "tol" : 1e-3,
-        "spatial_weight" : 2.0,
         "gmm_random_state" : 0,
         "np_threshold" : 2.0,
         "np_eventminlen" : 10
@@ -74,6 +77,7 @@ def read_configuration_file(filename):
         "hgtable_file" : "str",
         "normalidx_file" : "str",
         "tumorprop_file" : "str",
+        "supervision_clone_file" : "str",
         "filtergenelist_file" : "str",
         "filterregion_file" : "str",
         "binsize" : "int",
@@ -97,6 +101,9 @@ def read_configuration_file(filename):
         "initialization_method" : "str",
         "num_hmrf_initialization_start" : "int", 
         "num_hmrf_initialization_end" : "int",
+        "spatial_weight" : "float",
+        "construct_adjacency_method" : "str",
+        "construct_adjacency_w" : "float",
         # HMM configurations
         "n_states" : "int",
         "params" : "str",
@@ -107,7 +114,6 @@ def read_configuration_file(filename):
         "shared_BB_dispersion" : "bool",
         "max_iter" : "int",
         "tol" : "float",
-        "spatial_weight" : "float",
         "gmm_random_state" : "int",
         "np_threshold" : "float",
         "np_eventminlen" : "int"
@@ -118,7 +124,8 @@ def read_configuration_file(filename):
         for line in fp:
             if line.strip() == "" or line[0] == "#":
                 continue
-            strs = [x.replace(" ", "") for x in line.strip().split(":") if x != ""]
+            # strs = [x.replace(" ", "") for x in line.strip().split(":") if x != ""]
+            strs = [x.strip() for x in line.strip().split(":") if x != ""]
             assert strs[0] in config.keys(), f"{strs[0]} is not a valid configuration parameter! Configuration parameters are: {list(config.keys())}"
             if strs[1].upper() == "NONE":
                 config[strs[0]] = None
@@ -132,6 +139,8 @@ def read_configuration_file(filename):
                 config[strs[0]] = eval(strs[1])
             elif argument_type[strs[0]] == "bool":
                 config[strs[0]] = (strs[1].upper() == "TRUE")
+            elif argument_type[strs[0]] == "list_str":
+                config[strs[0]] = strs[1].split(" ")
     # assertions
     assert not config["spaceranger_dir"] is None, "No spaceranger directory!"
     assert not config["snp_dir"] is None, "No SNP directory!"
@@ -147,6 +156,7 @@ def write_config_file(outputfilename, config):
     list_argument_sup = ["hgtable_file",
         "normalidx_file",
         "tumorprop_file",
+        "supervision_clone_file",
         "filtergenelist_file",
         "filterregion_file",
         "binsize",
@@ -167,7 +177,10 @@ def write_config_file(outputfilename, config):
         "nodepotential",
         "initialization_method",
         "num_hmrf_initialization_start", 
-        "num_hmrf_initialization_end"]
+        "num_hmrf_initialization_end",
+        "spatial_weight",
+        "construct_adjacency_method",
+        "construct_adjacency_w"]
     list_argument_hmm = ["n_states",
         "params",
         "t",
@@ -177,7 +190,6 @@ def write_config_file(outputfilename, config):
         "shared_BB_dispersion",
         "max_iter",
         "tol",
-        "spatial_weight",
         "gmm_random_state",
         "np_threshold",
         "np_eventminlen"]

@@ -70,25 +70,45 @@ def hill_climbing_integer_copynumber_oneclone(new_log_mu, base_nb_mean, new_p_bi
     return best_integer_copies, best_obj
 
 
-def test_hill_climbing_integer_copynumber_oneclone(X, base_nb_mean, total_bb_RD, tumor_prop, hmmclass, new_log_mu, new_p_binom, new_alphas, new_taus, pred_cnv, max_allele_copy=4, max_total_copy=6, max_medploidy=4):
-    n_states = len(new_log_mu)
-    lambd = base_nb_mean / np.sum(base_nb_mean)
-    weight_per_state = np.array([ np.sum(lambd[pred_cnv == s]) for s in range(n_states)])
+def hill_climbing_integer_copynumber_joint(new_log_mu, base_nb_mean, new_p_binom, pred_cnv, max_allele_copy=4, max_total_copy=6, max_medploidy=4):
+    """
+    Jointly infer copy numbers across multiple clones, given they share the same set of new_log_mu and new_p_binom parameters.
+    
+    Attributes:
+    ----------
+    new_log_mu : array of size (n_states, n_clones)
+        Log mean of the negative binomial distribution, after adjusting to make weighted sum to be 1.
+
+    base_nb_mean : array of size (n_obs, n_clones)
+        Baseline probability of gene expression across bins (n_obs) for each clone (n_clones).
+
+    new_p_binom : array of size (n_states,)
+        BAF parameter in the Beta-binomial distribution.
+
+    pred_cnv : array of size (n_obs, n_clones)
+        Copy unmber states across bins (n_obs) for each clone (n_clones).
+    """
+    n_states = new_log_mu.shape[0]
+    n_clones = base_nb_mean.shape[1]
+    lambd = np.sum(base_nb_mean,axis=1) / np.sum(base_nb_mean)
+    weight_per_state = np.array([[ np.sum(lambd[pred_cnv[:,c] == s]) for s in range(n_states)] for c in range(n_clones)]).T # size of (n_states, n_clones)
     mu = np.exp(new_log_mu)
     def f(params, ploidy):
         # params of size (n_states, 2)
-        n_obs = X.shape[0]
-        denom = weight_per_state.dot( np.sum(params, axis=1) )
-        frac_rdr = np.log( np.sum(params, axis=1) / denom ).reshape(-1,1)
-        frac_baf = (params[:,0] / np.sum(params, axis=1)).reshape(-1,1)
-        # kwargs
-        kwargs = {"logmu_shift":np.array([0]).reshape(1,1), "sample_length":np.ones(1,dtype=int) * X.shape[0]}
-        tmp_log_emission_rdr, tmp_log_emission_baf = hmmclass.compute_emission_probability_nb_betabinom_mix( X, \
-                                            base_nb_mean, frac_rdr, new_alphas, \
-                                            total_bb_RD, frac_baf, new_taus, tumor_prop, **kwargs )
-        ratio_nonzeros = 1.0 * np.sum(total_bb_RD > 0) / np.sum(base_nb_mean > 0)
-        llf = ratio_nonzeros * np.sum(tmp_log_emission_rdr[pred_cnv, np.arange(n_obs), 0]) + np.sum(tmp_log_emission_baf[pred_cnv, np.arange(n_obs), 0])
-        return -llf
+        if np.any( np.sum(params, axis=1) == 0 ):
+            return len(pred_cnv) * 1e6
+        denom = weight_per_state.T.dot( np.sum(params, axis=1) ) # size of (n_clones,)
+        frac_rdr = np.sum(params, axis=1).reshape(-1,1) / denom.reshape(1,-1) # size of (n_states, n_clones)
+        frac_baf = params[:,0] / np.sum(params, axis=1)
+        points_per_state = np.vstack([ np.bincount(pred_cnv[:,c], minlength=params.shape[0]) for c in range(n_clones) ]).T # size of (n_states, n_clones)
+        ### temp penalty ###
+        mu_threshold = 0.3
+        crucial_ordered_pairs_1 = (mu[:,0][:,None] - mu[:,0][None,:] > mu_threshold) * (np.sum(params, axis=1)[:,None] - np.sum(params, axis=1)[None,:] < 0)
+        crucial_ordered_pairs_2 = (mu[:,0][:,None] - mu[:,0][None,:] < -mu_threshold) * (np.sum(params, axis=1)[:,None] - np.sum(params, axis=1)[None,:] > 0)
+        return np.sum(np.square(0.3 * (mu - frac_rdr) * points_per_state)) + np.sum(np.square((new_p_binom - frac_baf).reshape(-1,1) * points_per_state)) + \
+            np.sum(crucial_ordered_pairs_1) * np.prod(pred_cnv.shape) + np.sum(crucial_ordered_pairs_2) * np.prod(pred_cnv.shape)
+        ### end temp penalty ###
+        # return np.abs(mu - frac_rdr).dot(points_per_state) + 5 * np.abs(new_p_binom - frac_baf).dot(points_per_state)
     def hill_climb(initial_params, ploidy, idx_med, max_iter=10):
         best_obj = f(initial_params, ploidy)
         params = copy.copy(initial_params)
@@ -119,8 +139,8 @@ def test_hill_climbing_integer_copynumber_oneclone(X, base_nb_mean, total_bb_RD,
     best_obj = np.inf
     best_integer_copies = np.zeros((n_states, 2), dtype=int)
     # fix the genomic bin with the median new_log_mu to have exactly ploidy genomes
-    bidx_med = np.argsort(new_log_mu[pred_cnv])[ int(len(pred_cnv)/2) ]
-    idx_med = pred_cnv[bidx_med]
+    bidx_med = np.argsort(np.concatenate([ new_log_mu[pred_cnv[:,c],c] for c in range(n_clones) ]))[ int(len(pred_cnv.flatten())/2) ]
+    idx_med = pred_cnv.flatten(order="F")[bidx_med]
     for ploidy in range(1, max_medploidy+1):
         initial_params = np.ones((n_states, 2), dtype=int) * int(ploidy / 2)
         initial_params[:, 1] = ploidy - initial_params[:, 0]

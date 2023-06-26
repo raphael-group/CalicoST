@@ -27,6 +27,7 @@ def read_joint_configuration_file(filename):
         "hgtable_file" : None,
         "normalidx_file" : None,
         "tumorprop_file" : None,
+        "supervision_clone_file" : None,
         "alignment_files" : [],
         "filtergenelist_file" : None,
         "filterregion_file" : None,
@@ -51,6 +52,9 @@ def read_joint_configuration_file(filename):
         "initialization_method" : "rectangle", # rectangle or datadrive
         "num_hmrf_initialization_start" : 0, 
         "num_hmrf_initialization_end" : 10,
+        "spatial_weight" : 2.0,
+        "construct_adjacency_method" : "hexagon",
+        "construct_adjacency_w" : 1.0,
         # HMM configurations
         "n_states" : None,
         "params" : None,
@@ -61,7 +65,6 @@ def read_joint_configuration_file(filename):
         "shared_BB_dispersion" : True,
         "max_iter" : 30,
         "tol" : 1e-3,
-        "spatial_weight" : 2.0,
         "gmm_random_state" : 0,
         "np_threshold" : 2.0,
         "np_eventminlen" : 10
@@ -75,6 +78,7 @@ def read_joint_configuration_file(filename):
         "hgtable_file" : "str",
         "normalidx_file" : "str",
         "tumorprop_file" : "str",
+        "supervision_clone_file" : "str",
         "alignment_files" : "list_str",
         "filtergenelist_file" : "str",
         "filterregion_file" : "str",
@@ -99,6 +103,9 @@ def read_joint_configuration_file(filename):
         "initialization_method" : "str",
         "num_hmrf_initialization_start" : "int", 
         "num_hmrf_initialization_end" : "int",
+        "spatial_weight" : "float",
+        "construct_adjacency_method" : "str",
+        "construct_adjacency_w" : "float",
         # HMM configurations
         "n_states" : "int",
         "params" : "str",
@@ -109,7 +116,6 @@ def read_joint_configuration_file(filename):
         "shared_BB_dispersion" : "bool",
         "max_iter" : "int",
         "tol" : "float",
-        "spatial_weight" : "float",
         "gmm_random_state" : "int",
         "np_threshold" : "float",
         "np_eventminlen" : "int"
@@ -146,6 +152,7 @@ def read_joint_configuration_file(filename):
     return config
 
 
+
 def write_joint_config_file(outputfilename, config):
     list_argument_io = ["input_filelist",
         "snp_dir",
@@ -153,6 +160,7 @@ def write_joint_config_file(outputfilename, config):
     list_argument_sup = ["hgtable_file",
         "normalidx_file",
         "tumorprop_file",
+        "supervision_clone_file",
         "alignment_files",
         "filtergenelist_file",
         "filterregion_file",
@@ -174,7 +182,10 @@ def write_joint_config_file(outputfilename, config):
         "nodepotential",
         "initialization_method",
         "num_hmrf_initialization_start", 
-        "num_hmrf_initialization_end"]
+        "num_hmrf_initialization_end",
+        "spatial_weight",
+        "construct_adjacency_method",
+        "construct_adjacency_w"]
     list_argument_hmm = ["n_states",
         "params",
         "t",
@@ -184,7 +195,6 @@ def write_joint_config_file(outputfilename, config):
         "shared_BB_dispersion",
         "max_iter",
         "tol",
-        "spatial_weight",
         "gmm_random_state",
         "np_threshold",
         "np_eventminlen"]

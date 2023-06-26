@@ -41,7 +41,8 @@ def plot_acn(cn_file, ax_handle, clone_ids=None, clone_names=None, add_chrbar=Tr
 
     # read CN profiles
     df_cnv = pd.read_csv(cn_file, header=0, sep="\t")
-    final_clone_ids = np.unique([ int(x.split(" ")[0][5:]) for x in df_cnv.columns[3:] ])
+    final_clone_ids = np.unique([ x.split(" ")[0][5:] for x in df_cnv.columns[3:] ])
+    print(final_clone_ids)
     assert (clone_ids is None) or np.all([ (cid in final_clone_ids) for cid in clone_ids])
 
     found = []
