@@ -13,7 +13,6 @@ import copy
 from utils_hmm import *
 from utils_distribution_fitting import *
 from hmm_NB_BB_nophasing import *
-from hmm_NB_BB_sharedcells import *
 from hmm_NB_BB_nophasing_v2 import *
 import networkx as nx
 

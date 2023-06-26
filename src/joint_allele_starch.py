@@ -36,6 +36,7 @@ def read_joint_configuration_file(filename):
         "hgtable_file" : None,
         "normalidx_file" : None,
         "tumorprop_file" : None,
+        "supervision_clone_file" : None,
         "alignment_files" : [],
         "filtergenelist_file" : None,
         "filterregion_file" : None,
@@ -73,7 +74,7 @@ def read_joint_configuration_file(filename):
         "spatial_weight" : 2.0,
         "gmm_random_state" : 0,
         "np_threshold" : 2.0,
-        "np_eventminlen" : 10,
+        "np_eventminlen" : 10
     }
 
     argument_type = {
@@ -84,6 +85,7 @@ def read_joint_configuration_file(filename):
         "hgtable_file" : "str",
         "normalidx_file" : "str",
         "tumorprop_file" : "str",
+        "supervision_clone_file" : "str",
         "alignment_files" : "list_str",
         "filtergenelist_file" : "str",
         "filterregion_file" : "str",
