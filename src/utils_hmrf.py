@@ -9,6 +9,7 @@ from sklearn.mixture import GaussianMixture
 from sklearn.cluster import KMeans
 from sklearn.metrics import adjusted_rand_score, silhouette_score
 from sklearn.neighbors import kneighbors_graph
+from sklearn.neighbors import NearestNeighbors
 import networkx as nx
 from tqdm import trange
 import copy
@@ -91,7 +92,6 @@ def choose_adjacency_by_readcounts(coords, single_total_bb_RD, maxspots_pooling=
         s_ratio = ratio
     smooth_mat = compute_adjacency_mat_v2(coords, unit_xsquared, unit_ysquared, s_ratio * base_ratio)
     smooth_mat.setdiag(1)
-    # sw_adjustment = 1.0 * np.median(np.sum(tmp_pairwise_squared_dist <= unit_xsquared + unit_ysquared, axis=0)) / np.median(np.sum(adjacency_mat.A, axis=0))
     for bandwidth in np.arange(unit_xsquared + unit_ysquared, 15*(unit_xsquared + unit_ysquared), unit_xsquared + unit_ysquared):
         adjacency_mat = compute_weighted_adjacency(coords, unit_xsquared, unit_ysquared, bandwidth=bandwidth)
         adjacency_mat.setdiag(1)
@@ -100,26 +100,57 @@ def choose_adjacency_by_readcounts(coords, single_total_bb_RD, maxspots_pooling=
         if np.median(np.sum(adjacency_mat, axis=0).A.flatten()) >= 6:
             print(f"bandwidth: {bandwidth}")
             break
-    sw_adjustment = 1
-    return smooth_mat, adjacency_mat, sw_adjustment
+    return smooth_mat, adjacency_mat
 
 
-# def choose_adjacency_by_readcounts_slidedna(coords, single_total_bb_RD, maxknn=100, q=95, count_threshold=4):
-#     """
-#     Merge spots such that 95% quantile of read count per SNP per spot exceed count_threshold.
-#     """
-#     knnsize = 10
-#     for k in range(10, maxknn, 10):
-#         smooth_mat = kneighbors_graph(coords, n_neighbors=k)
-#         if np.percentile(smooth_mat.dot( single_total_bb_RD.T ), q) >= count_threshold:
-#             knnsize = k
-#             print(f"Picked spatial smoothing KNN K = {knnsize}")
-#             break
-#     adjacency_mat = kneighbors_graph(coords, n_neighbors=knnsize + 6)
-#     adjacency_mat = adjacency_mat - smooth_mat
-#     # sw_adjustment = 1.0 * 6 / np.median(np.sum(adjacency_mat.A, axis=0))
-#     sw_adjustment = 1
-#     return smooth_mat, adjacency_mat, sw_adjustment
+def choose_adjacency_by_KNN(coords, exp_counts=None, w=1, maxspots_pooling=7):
+    """
+    Compute adjacency matrix for pooling and for HMRF by KNN of pairwise spatial distance + pairwise expression distance.
+    
+    Attributes
+    ----------
+    coords : array, shape (n_spots, 2)
+        Spatial coordinates of spots.
+
+    exp_counts : None or array, shape (n_spots, n_genes)
+        Expression counts of spots.
+
+    w : float
+        Weight of spatial distance in computing adjacency matrix.
+
+    maxspots_pooling : int
+        Number of spots in the adjacency matrix for pooling.
+    """
+    n_spots = coords.shape[0]
+
+    # pairwise expression distance if exp_counts is not None
+    pair_exp_dist = scipy.sparse.csr_matrix( np.zeros((n_spots,n_spots)) )
+    scaling_factor = 1
+    if not exp_counts is None:
+        adata = anndata.AnnData( pd.DataFrame(exp_counts) )
+        sc.pp.normalize_total(adata, target_sum=np.median(np.sum(exp_counts.values,axis=1)) )
+        sc.pp.log1p(adata)
+        sc.tl.pca(adata)
+        pair_exp_dist = scipy.spatial.distance.squareform(scipy.spatial.distance.pdist(adata.obsm["X_pca"]))
+        # compute the scaling factor to normalize coords such that it has the same sum of variance as PCA
+        var_coord = np.sum(np.var(coords, axis=0))
+        var_pca = np.sum(np.var(adata.obsm["X_pca"], axis=0))
+        scaling_factor = np.sqrt(var_coord / var_pca)
+
+    # pairwise spatial distance
+    pair_spatial_dist = scipy.spatial.distance.squareform(scipy.spatial.distance.pdist(coords / scaling_factor))
+
+    # adjacency for pooling
+    smooth_mat = NearestNeighbors(n_neighbors=maxspots_pooling, metric='precomputed').fit(w * pair_spatial_dist + (1-w) * pair_exp_dist).kneighbors_graph()
+    smooth_mat.setdiag(1) # include self adjacency
+
+    # adjacency for HMRF
+    adjacency_mat = NearestNeighbors(n_neighbors=maxspots_pooling + 6, metric='precomputed').fit(w * pair_spatial_dist + (1-w) * pair_exp_dist).kneighbors_graph()
+    adjacency_mat = adjacency_mat - smooth_mat
+    adjacency_mat[adjacency_mat < 0] = 0
+    adjacency_mat.setdiag(1) # include self adjacency
+    return smooth_mat, adjacency_mat
+
 
 def choose_adjacency_by_readcounts_slidedna(coords, maxspots_pooling=30):
     """
@@ -128,9 +159,7 @@ def choose_adjacency_by_readcounts_slidedna(coords, maxspots_pooling=30):
     smooth_mat = kneighbors_graph(coords, n_neighbors=maxspots_pooling)
     adjacency_mat = kneighbors_graph(coords, n_neighbors=maxspots_pooling + 6)
     adjacency_mat = adjacency_mat - smooth_mat
-    # sw_adjustment = 1.0 * 6 / np.median(np.sum(adjacency_mat.A, axis=0))
-    sw_adjustment = 1
-    return smooth_mat, adjacency_mat, sw_adjustment
+    return smooth_mat, adjacency_mat
 
 
 def rectangle_initialize_initial_clone(coords, n_clones, random_state=0):
