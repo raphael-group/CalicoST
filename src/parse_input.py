@@ -122,14 +122,22 @@ def parse_visium(config):
     if not single_tumor_prop is None:
         table_meta["TUMOR_PROPORTION"] = single_tumor_prop
 
+    # expression count dataframe
+    exp_counts = pd.DataFrame.sparse.from_spmatrix( scipy.sparse.csc_matrix(adata.layers["count"]), index=adata.obs.index, columns=adata.var.index)
+
     # smooth and adjacency matrix for each sample
     adjacency_mat = []
     smooth_mat = []
     for sname in sample_list:
         index = np.where(adata.obs["sample"] == sname)[0]
         this_coords = np.array(coords[index,:])
-        tmpsmooth_mat, tmpadjacency_mat, _ = choose_adjacency_by_readcounts(this_coords, single_total_bb_RD[:,index], maxspots_pooling=config["maxspots_pooling"])
-        # tmpsmooth_mat, tmpadjacency_mat, _ = choose_adjacency_by_readcounts_slidedna(this_coords, maxspots_pooling=config["maxspots_pooling"])
+        if config["construct_adjacency_method"] == "hexagon":
+            tmpsmooth_mat, tmpadjacency_mat = choose_adjacency_by_readcounts(this_coords, single_total_bb_RD[:,index], maxspots_pooling=config["maxspots_pooling"])
+        elif config["construct_adjacency_method"] == "KNN":
+            tmpsmooth_mat, tmpadjacency_mat = choose_adjacency_by_KNN(this_coords, exp_counts.iloc[index,:], w=config["construct_adjacency_w"], maxspots_pooling=config["maxspots_pooling"])
+        else:
+            logging.error("Unknown adjacency construction method")
+        # tmpsmooth_mat, tmpadjacency_mat = choose_adjacency_by_readcounts_slidedna(this_coords, maxspots_pooling=config["maxspots_pooling"])
         adjacency_mat.append( tmpadjacency_mat.A )
         smooth_mat.append( tmpsmooth_mat.A )
     adjacency_mat = scipy.linalg.block_diag(*adjacency_mat)
@@ -140,8 +148,6 @@ def parse_visium(config):
     smooth_mat = scipy.sparse.csr_matrix( smooth_mat )
     n_pooled = np.median(np.sum(smooth_mat > 0, axis=0).A.flatten())
     print(f"Set up number of spots to pool in HMRF: {n_pooled}")
-
-    exp_counts = pd.DataFrame.sparse.from_spmatrix( scipy.sparse.csc_matrix(adata.layers["count"]), index=adata.obs.index, columns=adata.var.index)
     
     return table_bininfo, table_rdrbaf, table_meta, exp_counts, adjacency_mat, smooth_mat
 
@@ -202,80 +208,6 @@ def load_tables_to_matrices(config):
 
     return lengths, single_X, single_base_nb_mean, single_total_bb_RD, log_sitewise_transmat, df_bininfo, x_gene_list, \
         barcodes, coords, single_tumor_prop, sample_list, sample_ids, adjacency_mat, smooth_mat, exp_counts
-
-
-def parse_slidetags(config):
-    """
-    Read multiple SlideTags samples and SNP data and generate tables with counts and meta info.
-    
-    Attributes:
-    ----------
-    config : dictionary
-        Dictionary containing configuration parameters. Output from read_joint_configuration_file.
-
-    Returns:
-    ----------
-    table_rdrbaf : DataFrame
-        DataFrame with columns [chr, arm, start, end, log_phase_transition, included_genes, normal count, n_snps, exp_count, tot_count, b_count], where the last 3 columns are repeated for all spots.
-
-    meta_info : DataFrame
-        DataFrame with columns [barcodes, sample, x, y, tumor_proportion]
-
-    expression : sparse matrix, (n_spots, n_genes)
-        Gene expression UMI count matrix.
-
-    adjacency_mat : array, (n_spots, n_spots)
-        Adjacency matrix for evaluating label coherence in HMRF. Since Slide-tags is single-cell resolution, the adjacency matrix may also be a KNN.
-
-    smooth_mat : array, (n_spots, n_spots)
-        KNN smoothing matrix.
-    """
-    if "input_filelist" in config:
-        return NotImplemented
-    else:
-        adata, cell_snp_Aallele, cell_snp_Ballele, snp_gene_list, unique_snp_ids = load_data(config["spaceranger_dir"], config["snp_dir"], config["filtergenelist_file"], config["filterregion_file"], config["normalidx_file"])
-        adata.obs["sample"] = "unique_sample"
-        sample_list = [adata.obs["sample"][0]]
-        sample_ids = np.zeros(adata.shape[0], dtype=int)
-        across_slice_adjacency_mat = None
-
-    coords = adata.obsm["X_pos"]
-
-    if not config["tumorprop_file"] is None:
-        df_tumorprop = pd.read_csv(config["tumorprop_file"], sep="\t", header=0, index_col=0)
-        df_tumorprop = df_tumorprop[["Tumor"]]
-        df_tumorprop.columns = ["tumor_proportion"]
-        adata.obs = adata.obs.join(df_tumorprop)
-        single_tumor_prop = adata.obs["tumor_proportion"]
-    else:
-        single_tumor_prop = None
-    
-    # read original data
-    lengths, single_X, single_base_nb_mean, single_total_bb_RD, log_sitewise_transmat, sorted_chr_pos, sorted_chr_pos_last, x_gene_list, n_snps = convert_to_hmm_input_new(adata, \
-        cell_snp_Aallele, cell_snp_Ballele, snp_gene_list, unique_snp_ids, config["hgtable_file"], config["nu"], config["logphase_shift"])
-    # infer an initial phase using pseudobulk
-    if not Path(f"{config['output_dir']}/initial_phase.npz").exists():
-        initial_clone_for_phasing = perform_partition(coords, sample_ids, x_part=config["npart_phasing"], y_part=config["npart_phasing"], single_tumor_prop=single_tumor_prop, threshold=config["tumorprop_threshold"])
-        phase_indicator, refined_lengths = initial_phase_given_partition(single_X, lengths, single_base_nb_mean, single_total_bb_RD, single_tumor_prop, initial_clone_for_phasing, 5, log_sitewise_transmat, \
-            "sp", 1-1e-4, config["gmm_random_state"], config["fix_NB_dispersion"], config["shared_NB_dispersion"], config["fix_BB_dispersion"], config["shared_BB_dispersion"], 30, 1e-3)
-        np.savez(f"{config['output_dir']}/initial_phase.npz", phase_indicator=phase_indicator, refined_lengths=refined_lengths)
-    else:
-        tmp = dict(np.load(f"{config['output_dir']}/initial_phase.npz"))
-        phase_indicator, refined_lengths = tmp["phase_indicator"], tmp["refined_lengths"]
-    # binning with inferred phase
-    expected_nbins = min(config["max_nbins"], np.median(np.sum(single_total_bb_RD, axis=0)) * config["maxspots_pooling"] / config["avg_umi_perbinspot"] )
-    expected_nbins = int(expected_nbins)
-    secondary_min_umi = choose_umithreshold_given_nbins(single_total_bb_RD, refined_lengths, expected_nbins)
-    print(f"Secondary_min_umi = {secondary_min_umi}")
-    lengths, single_X, single_base_nb_mean, single_total_bb_RD, log_sitewise_transmat, sorted_chr_pos, sorted_chr_pos_last, x_gene_list, n_snps = perform_binning_new(lengths, single_X, \
-        single_base_nb_mean, single_total_bb_RD, sorted_chr_pos, sorted_chr_pos_last, x_gene_list, n_snps, phase_indicator, refined_lengths, config["binsize"], config["rdrbinsize"], config["nu"], config["logphase_shift"], secondary_min_umi=secondary_min_umi)
-    
-    # remove bins where normal spots have imbalanced SNPs
-    if not config["tumorprop_file"] is None:
-        index_normal = np.where(single_tumor_prop < 0.01)[0]
-        lengths, single_X, single_base_nb_mean, single_total_bb_RD, log_sitewise_transmat, sorted_chr_pos, sorted_chr_pos_last, x_gene_list, index_remaining = bin_selection_basedon_normal(single_X, \
-                single_base_nb_mean, single_total_bb_RD, sorted_chr_pos, sorted_chr_pos_last, x_gene_list, config["nu"], config["logphase_shift"], index_normal)
-        n_snps = [n_snps[i] for i in index_remaining]
 
 
 def run_parse_n_load(config):
