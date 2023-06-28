@@ -270,6 +270,8 @@ def main(configuration_file):
                 sorted_chr_pos = list(zip(df_bininfo.CHR.values, df_bininfo.START.values))
                 lengths, single_X, single_base_nb_mean, single_total_bb_RD, log_sitewise_transmat, sorted_chr_pos, _, x_gene_list, index_remaining = bin_selection_basedon_normal(single_X, \
                         single_base_nb_mean, single_total_bb_RD, sorted_chr_pos, sorted_chr_pos, x_gene_list, config["nu"], config["logphase_shift"], index_normal)
+                assert df_bininfo.shape[0] == copy_single_X_rdr.shape[0]
+                df_bininfo = df_bininfo.iloc[index_remaining, :]
                 copy_single_X_rdr = copy_single_X_rdr[index_remaining, :]
                 copy_single_base_nb_mean = copy_single_base_nb_mean[index_remaining, :]
 

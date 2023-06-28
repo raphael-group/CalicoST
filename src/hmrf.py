@@ -14,7 +14,6 @@ from tqdm import trange
 import copy
 from pathlib import Path
 from hmm_NB_BB_phaseswitch import *
-from composite_hmm_NB_BB_phaseswitch import *
 from utils_distribution_fitting import *
 from utils_IO import *
 from utils_hmrf import *

@@ -180,7 +180,7 @@ def load_tables_to_matrices(config):
     log_sitewise_transmat = table_bininfo["LOG_PHASE_TRANSITION"].values
 
     # construct bin info and lengths and x_gene_list
-    df_bininfo = table_bininfo.iloc[:, :4]
+    df_bininfo = table_bininfo
     lengths = np.array([ np.sum(table_bininfo.CHR == c) for c in range(1, 23) ])
     x_gene_list = np.where(table_bininfo["INCLUDED_GENES"].isnull(), "", table_bininfo["INCLUDED_GENES"].values).astype(str)
 
