@@ -11,7 +11,6 @@ import copy
 from pathlib import Path
 import subprocess
 from hmm_NB_BB_phaseswitch import *
-from composite_hmm_NB_BB_phaseswitch import *
 from utils_distribution_fitting import *
 from hmrf import *
 from utils_IO import *

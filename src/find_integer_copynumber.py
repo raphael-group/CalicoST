@@ -105,11 +105,13 @@ def hill_climbing_integer_copynumber_joint(new_log_mu, base_nb_mean, new_p_binom
         mu_threshold = 0.3
         crucial_ordered_pairs_1 = (mu[:,0][:,None] - mu[:,0][None,:] > mu_threshold) * (np.sum(params, axis=1)[:,None] - np.sum(params, axis=1)[None,:] < 0)
         crucial_ordered_pairs_2 = (mu[:,0][:,None] - mu[:,0][None,:] < -mu_threshold) * (np.sum(params, axis=1)[:,None] - np.sum(params, axis=1)[None,:] > 0)
+        # penalty on ploidy
+        derived_ploidy = np.median(np.sum(params, axis=1).dot(points_per_state) / np.sum(points_per_state, axis=0))
         return np.sum(np.square(0.3 * (mu - frac_rdr) * points_per_state)) + np.sum(np.square((new_p_binom - frac_baf).reshape(-1,1) * points_per_state)) + \
-            np.sum(crucial_ordered_pairs_1) * np.prod(pred_cnv.shape) + np.sum(crucial_ordered_pairs_2) * np.prod(pred_cnv.shape)
+            np.sum(crucial_ordered_pairs_1) * np.prod(pred_cnv.shape) + np.sum(crucial_ordered_pairs_2) * np.prod(pred_cnv.shape) + np.sum(derived_ploidy > ploidy + 0.5) * np.prod(pred_cnv.shape)
         ### end temp penalty ###
         # return np.abs(mu - frac_rdr).dot(points_per_state) + 5 * np.abs(new_p_binom - frac_baf).dot(points_per_state)
-    def hill_climb(initial_params, ploidy, idx_med, max_iter=10):
+    def hill_climb(initial_params, ploidy, max_iter=10):
         best_obj = f(initial_params, ploidy)
         params = copy.copy(initial_params)
         increased = True
@@ -119,8 +121,6 @@ def hill_climbing_integer_copynumber_joint(new_log_mu, base_nb_mean, new_p_binom
                 this_best_obj = best_obj
                 this_best_k = copy.copy(params[k,:])
                 for candi in candidates:
-                    if k == idx_med and np.sum(candi) != ploidy:
-                        continue
                     params[k,:] = candi
                     obj = f(params, ploidy)
                     if obj < this_best_obj:
@@ -139,12 +139,12 @@ def hill_climbing_integer_copynumber_joint(new_log_mu, base_nb_mean, new_p_binom
     best_obj = np.inf
     best_integer_copies = np.zeros((n_states, 2), dtype=int)
     # fix the genomic bin with the median new_log_mu to have exactly ploidy genomes
-    bidx_med = np.argsort(np.concatenate([ new_log_mu[pred_cnv[:,c],c] for c in range(n_clones) ]))[ int(len(pred_cnv.flatten())/2) ]
-    idx_med = pred_cnv.flatten(order="F")[bidx_med]
+    # bidx_med = np.argsort(np.concatenate([ new_log_mu[pred_cnv[:,c],c] for c in range(n_clones) ]))[ int(len(pred_cnv.flatten())/2) ]
+    # idx_med = pred_cnv.flatten(order="F")[bidx_med]
     for ploidy in range(1, max_medploidy+1):
         initial_params = np.ones((n_states, 2), dtype=int) * int(ploidy / 2)
         initial_params[:, 1] = ploidy - initial_params[:, 0]
-        params, obj = hill_climb(initial_params, ploidy, idx_med)
+        params, obj = hill_climb(initial_params, ploidy)
         if obj < best_obj:
             best_obj = obj
             best_integer_copies = copy.copy(params)
