@@ -172,7 +172,7 @@ def main(configuration_file):
         EXPECTED_NORMAL_PROP = 0.05
         q = np.sort(single_tumor_prop)[ int(EXPECTED_NORMAL_PROP * len(barcodes)) ]
         normal_candidate = ( single_tumor_prop < q )
-
+        
         copy_single_X_rdr,_ = filter_de_genes(exp_counts, x_gene_list, normal_candidate)
         MIN_NORMAL_COUNT_PERBIN = 20
         bidx_inconfident = np.where( np.sum(copy_single_X_rdr[:, (normal_candidate==True)], axis=1) < MIN_NORMAL_COUNT_PERBIN )[0]
@@ -187,6 +187,10 @@ def main(configuration_file):
 
     # make each cluster in supervision_clone_file a pseudospot
     if not config["supervision_clone_file"] is None:
+        tmp_df_clones = pd.read_csv(config["supervision_clone_file"], header=0, index_col=0, sep="\t")
+        df_clones = pd.DataFrame({"barcodes":barcodes.values}, index=barcodes.values).join(tmp_df_clones)
+        df_clones.columns = ["barcodes", "clone_id"]
+        
         unique_clone_ids = np.unique( df_clones["clone_id"][~df_clones["clone_id"].isnull()].values )
         clone_index = [np.where(df_clones["clone_id"] == c)[0] for c in unique_clone_ids]
         if config["tumorprop_file"] is None:
@@ -194,6 +198,11 @@ def main(configuration_file):
             single_tumor_prop = None
         else:
             single_X, single_base_nb_mean, single_total_bb_RD, single_tumor_prop = merge_pseudobulk_by_index_mix(single_X, single_base_nb_mean, single_total_bb_RD, clone_index, single_tumor_prop, threshold=config["tumorprop_threshold"])
+        coords = np.array([ np.mean(coords[idx,:],axis=0) for idx in clone_index ])
+        smooth_mat = scipy.sparse.csr_matrix(np.eye(coords.shape[0]))
+        adjacency_mat = scipy.sparse.csr_matrix(np.eye(coords.shape[0]))
+        barcodes = pd.Series(unique_clone_ids)
+        sample_ids = np.array([sample_ids[idx][0] for idx in clone_index])
 
     # clear values in RDR to first infer clones using BAF signal only
     copy_single_X_rdr = copy.copy(single_X[:,0,:])
@@ -205,9 +214,9 @@ def main(configuration_file):
     for r_hmrf_initialization in range(config["num_hmrf_initialization_start"], config["num_hmrf_initialization_end"]):
         outdir = f"{config['output_dir']}/clone{config['n_clones']}_rectangle{r_hmrf_initialization}_w{config['spatial_weight']:.1f}"
         if config["tumorprop_file"] is None:
-            initial_clone_index = rectangle_initialize_initial_clone(coords, config["n_clones"], random_state=r_hmrf_initialization)
+            initial_clone_index = rectangle_initialize_initial_clone(coords, min(coords.shape[0],config["n_clones"]), random_state=r_hmrf_initialization)
         else:
-            initial_clone_index = rectangle_initialize_initial_clone_mix(coords, config["n_clones"], single_tumor_prop, threshold=config["tumorprop_threshold"], random_state=r_hmrf_initialization)
+            initial_clone_index = rectangle_initialize_initial_clone_mix(coords, min(coords.shape[0],config["n_clones"]), single_tumor_prop, threshold=config["tumorprop_threshold"], random_state=r_hmrf_initialization)
 
         # create directory
         p = subprocess.Popen(f"mkdir -p {outdir}", stdout=subprocess.PIPE, stderr=subprocess.PIPE, shell=True)
@@ -250,9 +259,9 @@ def main(configuration_file):
         print(f"BAF clone merging after comparing similarity: {merging_groups}")
         #
         if config["tumorprop_file"] is None:
-            merging_groups, merged_res = merge_by_minspots(merged_res["new_assignment"], merged_res, min_spots_thresholds=config["min_spots_per_clone"])
+            merging_groups, merged_res = merge_by_minspots(merged_res["new_assignment"], merged_res, single_total_bb_RD, min_spots_thresholds=config["min_spots_per_clone"], min_umicount_thresholds=config["avg_umi_perbinspot"]*n_obs)
         else:
-            merging_groups, merged_res = merge_by_minspots(merged_res["new_assignment"], merged_res, min_spots_thresholds=config["min_spots_per_clone"], single_tumor_prop=single_tumor_prop)
+            merging_groups, merged_res = merge_by_minspots(merged_res["new_assignment"], merged_res, single_total_bb_RD, min_spots_thresholds=config["min_spots_per_clone"], min_umicount_thresholds=config["avg_umi_perbinspot"]*n_obs, single_tumor_prop=single_tumor_prop)
         print(f"BAF clone merging after requiring minimum # spots: {merging_groups}")
         n_baf_clones = len(merging_groups)
         np.savez(f"{outdir}/mergedallspots_nstates{config['n_states']}_sp.npz", **merged_res)
@@ -325,9 +334,9 @@ def main(configuration_file):
                     continue
                 # initialize clone
                 if config["tumorprop_file"] is None:
-                    initial_clone_index = rectangle_initialize_initial_clone(coords[idx_spots], config['n_clones_rdr'], random_state=r_hmrf_initialization)
+                    initial_clone_index = rectangle_initialize_initial_clone(coords[idx_spots], min(len(idx_spots),config['n_clones_rdr']), random_state=r_hmrf_initialization)
                 else:
-                    initial_clone_index = rectangle_initialize_initial_clone_mix(coords[idx_spots], config['n_clones_rdr'], single_tumor_prop[idx_spots], threshold=config["tumorprop_threshold"], random_state=r_hmrf_initialization)
+                    initial_clone_index = rectangle_initialize_initial_clone_mix(coords[idx_spots], min(len(idx_spots),config['n_clones_rdr']), single_tumor_prop[idx_spots], threshold=config["tumorprop_threshold"], random_state=r_hmrf_initialization)
                 if not Path(f"{outdir}/{prefix}_nstates{config['n_states']}_smp.npz").exists():
                     initial_assignment = np.zeros(len(idx_spots), dtype=int)
                     for c,idx in enumerate(initial_clone_index):
@@ -386,9 +395,9 @@ def main(configuration_file):
                     print(f"part {bafc} merging_groups: {merging_groups}")
                     #
                     if config["tumorprop_file"] is None:
-                        merging_groups, merged_res = merge_by_minspots(merged_res["new_assignment"], res, min_spots_thresholds=config["min_spots_per_clone"])
+                        merging_groups, merged_res = merge_by_minspots(merged_res["new_assignment"], res, single_total_bb_RD, min_spots_thresholds=config["min_spots_per_clone"], min_umicount_thresholds=config["avg_umi_perbinspot"]*n_obs)
                     else:
-                        merging_groups, merged_res = merge_by_minspots(merged_res["new_assignment"], res, min_spots_thresholds=config["min_spots_per_clone"], single_tumor_prop=single_tumor_prop[idx_spots])
+                        merging_groups, merged_res = merge_by_minspots(merged_res["new_assignment"], res, single_total_bb_RD, min_spots_thresholds=config["min_spots_per_clone"], min_umicount_thresholds=config["avg_umi_perbinspot"]*n_obs, single_tumor_prop=single_tumor_prop[idx_spots])
                     # compute posterior using the newly merged pseudobulk
                     n_merged_clones = len(merging_groups)
                     tmp = copy.copy(merged_res["new_assignment"])

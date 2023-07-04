@@ -221,9 +221,9 @@ def main(configuration_file):
         print(f"BAF clone merging after comparing similarity: {merging_groups}")
         #
         if config["tumorprop_file"] is None:
-            merging_groups, merged_res = merge_by_minspots(merged_res["new_assignment"], merged_res, min_spots_thresholds=config["min_spots_per_clone"])
+            merging_groups, merged_res = merge_by_minspots(merged_res["new_assignment"], merged_res, single_total_bb_RD, min_spots_thresholds=config["min_spots_per_clone"], min_umicount_thresholds=config["avg_umi_perbinspot"]*n_obs)
         else:
-            merging_groups, merged_res = merge_by_minspots(merged_res["new_assignment"], merged_res, min_spots_thresholds=config["min_spots_per_clone"], single_tumor_prop=single_tumor_prop)
+            merging_groups, merged_res = merge_by_minspots(merged_res["new_assignment"], merged_res, single_total_bb_RD, min_spots_thresholds=config["min_spots_per_clone"], min_umicount_thresholds=config["avg_umi_perbinspot"]*n_obs, single_tumor_prop=single_tumor_prop)
         print(f"BAF clone merging after requiring minimum # spots: {merging_groups}")
         n_baf_clones = len(merging_groups)
         np.savez(f"{outdir}/mergedallspots_nstates{config['n_states']}_sp.npz", **merged_res)
@@ -370,9 +370,9 @@ def main(configuration_file):
                     print(f"part {bafc} merging_groups: {merging_groups}")
                     #
                     if config["tumorprop_file"] is None:
-                        merging_groups, merged_res = merge_by_minspots(merged_res["new_assignment"], res, min_spots_thresholds=config["min_spots_per_clone"])
+                        merging_groups, merged_res = merge_by_minspots(merged_res["new_assignment"], merged_res, single_total_bb_RD[:,idx_spots], min_spots_thresholds=config["min_spots_per_clone"], min_umicount_thresholds=config["avg_umi_perbinspot"]*n_obs)
                     else:
-                        merging_groups, merged_res = merge_by_minspots(merged_res["new_assignment"], res, min_spots_thresholds=config["min_spots_per_clone"], single_tumor_prop=single_tumor_prop[idx_spots])
+                        merging_groups, merged_res = merge_by_minspots(merged_res["new_assignment"], merged_res, single_total_bb_RD[:,idx_spots], min_spots_thresholds=config["min_spots_per_clone"], min_umicount_thresholds=config["avg_umi_perbinspot"]*n_obs, single_tumor_prop=single_tumor_prop[idx_spots], threshold=config["tumorprop_threshold"])
                     # compute posterior using the newly merged pseudobulk
                     n_merged_clones = len(merging_groups)
                     tmp = copy.copy(merged_res["new_assignment"])
@@ -390,7 +390,7 @@ def main(configuration_file):
                     merged_res["new_assignment"] = copy.copy(tmp)
                     log_gamma = np.stack([ merged_res["log_gamma"][:,(c*n_obs):(c*n_obs+n_obs)] for c in range(n_merged_clones) ], axis=-1)
                     pred_cnv = np.vstack([ merged_res["pred_cnv"][(c*n_obs):(c*n_obs+n_obs)] for c in range(n_merged_clones) ]).T
-                
+                #
                 # add to res_combine
                 if len(res_combine) == 1:
                     res_combine.update({"new_log_mu":np.hstack([ merged_res["new_log_mu"] ] * n_merged_clones), "new_alphas":np.hstack([ merged_res["new_alphas"] ] * n_merged_clones), \
