@@ -243,7 +243,7 @@ def aggr_hmrf_reassignment_concatenate(single_X, single_base_nb_mean, single_tot
         return new_assignment, single_llf, total_llf
 
 
-def merge_by_minspots(assignment, res, min_spots_thresholds=50, single_tumor_prop=None, threshold=0.5):
+def merge_by_minspots(assignment, res, single_total_bb_RD, min_spots_thresholds=50, min_umicount_thresholds=0, single_tumor_prop=None, threshold=0.5):
     n_clones = len(np.unique(assignment))
     n_obs = int(len(res["pred_cnv"]) / n_clones)
     new_assignment = copy.copy(assignment)
@@ -252,7 +252,9 @@ def merge_by_minspots(assignment, res, min_spots_thresholds=50, single_tumor_pro
         tmp_single_tumor_prop = np.array([1] * len(assignment))
     else:
         tmp_single_tumor_prop = single_tumor_prop
-    while np.min(np.bincount(new_assignment[tmp_single_tumor_prop > threshold])) < min_spots_thresholds:
+    unique_assignment = np.unique(new_assignment)
+    while np.min(np.bincount(new_assignment[tmp_single_tumor_prop > threshold])) < min_spots_thresholds or \
+        np.min([ np.sum(single_total_bb_RD[:, (new_assignment == c)&(tmp_single_tumor_prop > threshold)]) for c in unique_assignment ]) < min_umicount_thresholds:
         idx_min = np.argmin(np.bincount(new_assignment[tmp_single_tumor_prop > threshold]))
         idx_max = np.argmax(np.bincount(new_assignment[tmp_single_tumor_prop > threshold]))
         merging_groups = [ [i] for i in range(n_clones) if (i!=idx_min) and (i!=idx_max)] + [[idx_min, idx_max]]
@@ -263,6 +265,7 @@ def merge_by_minspots(assignment, res, min_spots_thresholds=50, single_tumor_pro
             for z in x:
                 map_clone_id[z] = i
         new_assignment = np.array([map_clone_id[x] for x in new_assignment])
+        unique_assignment = np.unique(new_assignment)
     merged_res = copy.copy(res)
     merged_res["new_assignment"] = new_assignment
     merged_res["total_llf"] = np.NAN
