@@ -61,6 +61,9 @@ def read_joint_configuration_file(filename):
         "initialization_method" : "rectangle", # rectangle or datadrive
         "num_hmrf_initialization_start" : 0, 
         "num_hmrf_initialization_end" : 10,
+        "spatial_weight" : 2.0,
+        "construct_adjacency_method" : "hexagon",
+        "construct_adjacency_w" : 1.0,
         # HMM configurations
         "n_states" : None,
         "params" : None,
@@ -71,7 +74,6 @@ def read_joint_configuration_file(filename):
         "shared_BB_dispersion" : True,
         "max_iter" : 30,
         "tol" : 1e-3,
-        "spatial_weight" : 2.0,
         "gmm_random_state" : 0,
         "np_threshold" : 2.0,
         "np_eventminlen" : 10
@@ -110,6 +112,9 @@ def read_joint_configuration_file(filename):
         "initialization_method" : "str",
         "num_hmrf_initialization_start" : "int", 
         "num_hmrf_initialization_end" : "int",
+        "spatial_weight" : "float",
+        "construct_adjacency_method" : "str",
+        "construct_adjacency_w" : "float",
         # HMM configurations
         "n_states" : "int",
         "params" : "str",
@@ -120,7 +125,6 @@ def read_joint_configuration_file(filename):
         "shared_BB_dispersion" : "bool",
         "max_iter" : "int",
         "tol" : "float",
-        "spatial_weight" : "float",
         "gmm_random_state" : "int",
         "np_threshold" : "float",
         "np_eventminlen" : "int"
