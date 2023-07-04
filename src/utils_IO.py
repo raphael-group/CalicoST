@@ -115,89 +115,6 @@ def load_data(spaceranger_dir, snp_dir, filtergenelist_file, filterregion_file, 
     return adata, cell_snp_Aallele, cell_snp_Ballele, snp_gene_list, unique_snp_ids
 
 
-# def load_joint_data(input_filelist, snp_dir, filtergenelist_file, normalidx_file):
-#     ##### read meta sample info #####
-#     df_meta = pd.read_csv(input_filelist, sep="\t", header=None, names=["bam", "sample_id", "spaceranger_dir"])
-#     df_barcode = pd.read_csv(f"{snp_dir}/barcodes.txt", header=None, names=["combined_barcode"])
-#     df_barcode["sample_id"] = [x.split("_")[-1] for x in df_barcode.combined_barcode.values]
-#     df_barcode["barcode"] = [x.split("_")[0] for x in df_barcode.combined_barcode.values]
-#     ##### read SNP count #####
-#     cell_snp_Aallele = scipy.sparse.load_npz(f"{snp_dir}/cell_snp_Aallele.npz")
-#     cell_snp_Aallele = cell_snp_Aallele.A
-#     cell_snp_Ballele = scipy.sparse.load_npz(f"{snp_dir}/cell_snp_Ballele.npz")
-#     cell_snp_Ballele = cell_snp_Ballele.A
-#     snp_gene_list = np.load(f"{snp_dir}/snp_gene_list.npy", allow_pickle=True)
-#     unique_snp_ids = np.load(f"{snp_dir}/unique_snp_ids.npy", allow_pickle=True)
-#     ##### read anndata and coordinate #####
-#     # add position
-#     adata = None
-#     for i,sname in enumerate(df_meta.sample_id.values):
-#         # locate the corresponding rows in df_meta
-#         index = np.where(df_barcode["sample_id"] == sname)[0]
-#         df_this_barcode = copy.copy(df_barcode.iloc[index, :])
-#         df_this_barcode.index = df_this_barcode.barcode
-#         # read adata count info
-#         adatatmp = sc.read_10x_h5(f"{df_meta['spaceranger_dir'].iloc[i]}/filtered_feature_bc_matrix.h5")
-#         adatatmp.layers["count"] = adatatmp.X.A
-#         # reorder anndata spots to have the same order as df_this_barcode
-#         idx_argsort = pd.Categorical(adatatmp.obs.index, categories=list(df_this_barcode.barcode), ordered=True).argsort()
-#         adatatmp = adatatmp[idx_argsort, :]
-#         # read position info
-#         df_this_pos = pd.read_csv(f"{df_meta['spaceranger_dir'].iloc[i]}/spatial/tissue_positions.csv", sep=",", header=0, \
-#                     names=["barcode", "in_tissue", "x", "y", "pixel_row", "pixel_col"])
-#         df_this_pos = df_this_pos[df_this_pos.in_tissue == True]
-#         df_this_pos.barcode = pd.Categorical(df_this_pos.barcode, categories=list(df_this_barcode.barcode), ordered=True)
-#         df_this_pos.sort_values(by="barcode", inplace=True)
-#         adatatmp.obsm["X_pos"] = np.vstack([df_this_pos.x, df_this_pos.y]).T
-#         adatatmp.obs["sample"] = sname
-#         adatatmp.obs.index = [f"{x}_{sname}" for x in adatatmp.obs.index]
-#         adatatmp.var_names_make_unique()
-#         if adata is None:
-#             adata = adatatmp
-#         else:
-#             adata = anndata.concat([adata, adatatmp], join="outer")
-    
-#     # # filter out spots with too small number of UMIs
-#     # indicator = (np.sum(adata.layers["count"], axis=1) > 100)
-#     # adata = adata[indicator, :]
-#     # cell_snp_Aallele = cell_snp_Aallele[indicator, :]
-#     # cell_snp_Ballele = cell_snp_Ballele[indicator, :]
-
-#     # filter out genes that are expressed in <0.5% cells
-#     indicator = (np.sum(adata.X > 0, axis=0) >= 0.005 * adata.shape[0]).A.flatten()
-#     genenames = set(list(adata.var.index[indicator]))
-#     adata = adata[:, indicator]
-#     print(adata)
-#     print("median UMI after filtering out genes < 0.5% of cells = {}".format( np.median(np.sum(adata.layers["count"], axis=1)) ))
-
-#     # remove genes in filtergenelist_file
-#     # ig_gene_list = pd.read_csv("/n/fs/ragr-data/users/congma/references/cellranger_refdata-gex-GRCh38-2020-A/genes/ig_gene_list.txt", header=None)
-#     if not filtergenelist_file is None:
-#         filter_gene_list = pd.read_csv(filtergenelist_file, header=None)
-#         filter_gene_list = set(list( filter_gene_list.iloc[:,0] ))
-#         indicator_fulter = np.array([ (not x in filter_gene_list) for x in adata.var.index ])
-#         adata = adata[:, indicator_fulter]
-#         indicator_fulter = np.array([ (x not in filter_gene_list) for x in snp_gene_list ])
-#         cell_snp_Aallele = cell_snp_Aallele[:, indicator_fulter]
-#         cell_snp_Ballele = cell_snp_Ballele[:, indicator_fulter]
-#         snp_gene_list = snp_gene_list[indicator_fulter]
-#         unique_snp_ids = unique_snp_ids[indicator_fulter]
-#         print("median UMI after filtering out genes in filtergenelist_file = {}".format( np.median(np.sum(adata.layers["count"], axis=1)) ))
-
-#     clf = LocalOutlierFactor(n_neighbors=200)
-#     label = clf.fit_predict( np.sum(adata.layers["count"], axis=0).reshape(-1,1) )
-#     adata.layers["count"][:, np.where(label==-1)[0]] = 0
-#     print("filter out {} outlier genes.".format( np.sum(label==-1) ))
-
-#     if not normalidx_file is None:
-#         normal_barcodes = pd.read_csv(normalidx_file, header=None).iloc[:,0].values
-#         adata.obs["tumor_annotation"] = "tumor"
-#         adata.obs["tumor_annotation"][adata.obs.index.isin(normal_barcodes)] = "normal"
-#         print( adata.obs["tumor_annotation"].value_counts() )
-
-#     return adata, cell_snp_Aallele, cell_snp_Ballele, snp_gene_list, unique_snp_ids
-
-
 def load_joint_data(input_filelist, snp_dir, alignment_files, filtergenelist_file, filterregion_file, normalidx_file):
     ##### read meta sample info #####
     df_meta = pd.read_csv(input_filelist, sep="\t", header=None)
@@ -386,6 +303,65 @@ def load_slidedna_data(snp_dir, bead_file, filterregion_bedfile):
         cell_snp_Ballele = cell_snp_Ballele[:, ~is_within_filterregion]
         unique_snp_ids = unique_snp_ids[~is_within_filterregion]
     return coords, cell_snp_Aallele, cell_snp_Ballele, barcodes, unique_snp_ids
+
+
+def taking_shared_barcodes(snp_barcodes, cell_snp_Aallele, cell_snp_Ballele, adata, df_pos):
+    # shared barcodes between adata and SNPs
+    shared_barcodes = set(list(snp_barcodes.barcodes)) & set(list(adata.obs.index)) & set(list(df_pos.barcode))
+    cell_snp_Aallele = cell_snp_Aallele[snp_barcodes.barcodes.isin(shared_barcodes), :]
+    cell_snp_Ballele = cell_snp_Ballele[snp_barcodes.barcodes.isin(shared_barcodes), :]
+    snp_barcodes = snp_barcodes[snp_barcodes.barcodes.isin(shared_barcodes)]
+    adata = adata[adata.obs.index.isin(shared_barcodes), :]
+    adata = adata[ pd.Categorical(adata.obs.index, categories=list(snp_barcodes.barcodes), ordered=True).argsort(), : ]
+    df_pos = df_pos[df_pos.barcode.isin(shared_barcodes)]
+    df_pos = df_pos.iloc[ pd.Categorical(df_pos.barcode, categories=list(snp_barcodes.barcodes), ordered=True).argsort(), : ]
+    return snp_barcodes, cell_snp_Aallele, cell_snp_Ballele, adata, df_pos
+
+
+def filter_genes_barcodes_hatchetblock(adata, cell_snp_Aallele, cell_snp_Ballele, snp_barcodes, unique_snp_ids, config, min_umi=100, min_spot_percent=0.005, ordered_chr=[str(c) for c in range(1,23)]):
+    # filter out spots with too small number of UMIs
+    indicator = (np.sum(adata.layers["count"], axis=1) > min_umi)
+    adata = adata[indicator, :]
+    cell_snp_Aallele = cell_snp_Aallele[indicator, :]
+    cell_snp_Ballele = cell_snp_Ballele[indicator, :]
+
+    # filter out genes that are expressed in <0.5% cells
+    indicator = (np.sum(adata.X > 0, axis=0) >= min_spot_percent * adata.shape[0]).A.flatten()
+    genenames = set(list(adata.var.index[indicator]))
+    adata = adata[:, indicator]
+    print(adata)
+    print("median UMI after filtering out genes < 0.5% of cells = {}".format( np.median(np.sum(adata.layers["count"], axis=1)) ))
+
+    if not config["filtergenelist_file"] is None:
+        filter_gene_list = pd.read_csv(config["filtergenelist_file"], header=None)
+        filter_gene_list = set(list( filter_gene_list.iloc[:,0] ))
+        indicator_filter = np.array([ (not x in filter_gene_list) for x in adata.var.index ])
+        adata = adata[:, indicator_filter]
+        print("median UMI after filtering out genes in filtergenelist_file = {}".format( np.median(np.sum(adata.layers["count"], axis=1)) ))
+
+    if not config["filterregion_file"] is None:
+        regions = pd.read_csv(config["filterregion_file"], header=None, sep="\t", names=["Chrname", "Start", "End"])
+        ordered_chr_map = {ordered_chr[i]:i for i in range(len(ordered_chr))}
+        # retain only chromosomes in ordered_chr
+        if ~np.any( regions.Chrname.isin(ordered_chr) ):
+            regions["Chrname"] = regions.Chrname.map(lambda x: x.replace("chr", ""))
+        regions = regions[regions.Chrname.isin(ordered_chr)]
+        regions["int_chrom"] = regions.Chrname.map(ordered_chr_map)
+        regions.sort_values(by=["int_chrom", "Start"], inplace=True)
+        indicator_filter = np.array([True] * cell_snp_Aallele.shape[1])
+        j = 0
+        for i in range(cell_snp_Aallele.shape[1]):
+            this_chr = int(unique_snp_ids[i].split("_")[0])
+            this_pos = int(unique_snp_ids[i].split("_")[1])
+            while j < regions.shape[0] and ( (regions.int_chrom.values[j] < this_chr) or ((regions.int_chrom.values[j] == this_chr) and (regions.End.values[j] <= this_pos)) ):
+                j += 1
+            if j < regions.shape[0] and (regions.int_chrom.values[j] == this_chr) and (regions.Start.values[j] <= this_pos) and (regions.End.values[j] > this_pos):
+                indicator_filter[i] = False
+        cell_snp_Aallele = cell_snp_Aallele[:, indicator_filter]
+        cell_snp_Ballele = cell_snp_Ballele[:, indicator_filter]
+        unique_snp_ids = unique_snp_ids[indicator_filter]
+
+    return adata, cell_snp_Aallele, cell_snp_Ballele, snp_barcodes, unique_snp_ids
 
 
 def read_bias_correction_info(bc_file):
@@ -732,6 +708,107 @@ def convert_to_hmm_input_slidedna(cell_snp_Aallele, cell_snp_Ballele, unique_snp
     return lengths, single_X, single_base_nb_mean, single_total_bb_RD, log_sitewise_transmat, sorted_chr_pos_first, sorted_chr_pos_last, n_snps
 
 
+def convert_to_hmm_using_hatchetblock(bb_file, cell_snp_Aallele, cell_snp_Ballele, unique_snp_ids, adata, hgtable_file, nu, logphase_shift, ordered_chr=[str(c) for c in range(1,23)], genome_build="hg38"):
+    # preprocess ordered_chr to a dictionary mapping from the string in ordered_chr to its index
+    ordered_chr_map = {ordered_chr[i]:i for i in range(len(ordered_chr))}
+    # load hatchet bb file
+    df_hatchet = pd.read_csv(bb_file, comment="#", index_col=None, sep="\t", names=["CHR", "START", "END", "SAMPLE", "RD", "NSNPS", "COV", "ALPHA", "BETA", "TOTAL_SNP_READS", "BAF", "TOTAL_READS", \
+                                                                                    "NORMAL_READS", "SNP_POS", "SNP_REF_COUNTS", "SNP_ALT_COUNTS", "HAPLO", "ORIGINAL_BAF", "UNIT", "CORRECTED_READS"])
+    if ~np.any( df_hatchet.CHR.isin(ordered_chr) ):
+        df_hatchet["CHR"] = df_hatchet.CHR.map(lambda x: x.replace("chr", ""))
+    df_hatchet = df_hatchet[df_hatchet.CHR.isin(ordered_chr)]
+    df_hatchet["int_chrom"] = df_hatchet.CHR.map(ordered_chr_map)
+    df_hatchet.sort_values(by=["int_chrom", "START"], inplace=True)
+    # loop over df_hatchet entries and create the following
+    # single_X, single_base_nb_mean, single_total_bb_RD, log_sitewise_transmat, sorted_chr_pos, sorted_chr_pos_last, x_gene_list, n_snps
+    short_unique_snp_ids = np.array([ "_".join(x.split("_")[:2]) for x in unique_snp_ids ])
+    sorted_chr_pos = []
+    sorted_chr_pos_last = []
+    n_snps = np.zeros(df_hatchet.shape[0], dtype=int)
+    mult_B_block = [[], []] # the row index and col index of a sparse matrix such that hatchet phasing is 1, eventually the sparse matrix has size n_snps * n_blocks
+    mult_A_block = [[], []] # the row index and col index of a sparse matrix such that hatchet phasing is 0, eventually the sparse matrix has size n_snps * n_blocks
+    s = 0
+    for i in range(df_hatchet.shape[0]):
+        involved_pos = [int(x) for x in df_hatchet.SNP_POS.values[i].split(",")]
+        involved_snp_ids = [ f"{df_hatchet.int_chrom.values[i]}_{x}" for x in involved_pos ]
+        involved_marker = np.array([False] * len(involved_pos))
+        indexes = []
+        for t in range(s, len(short_unique_snp_ids)):
+            if short_unique_snp_ids[t] in involved_snp_ids:
+                indexes.append(t)
+                involved_marker[involved_snp_ids.index(short_unique_snp_ids[t])] = True
+            else:
+                short_snp_chr = int(short_unique_snp_ids[t].split("_")[0])
+                short_snp_pos = int(short_unique_snp_ids[t].split("_")[1])
+                if short_snp_chr > df_hatchet.int_chrom.values[i] or (short_snp_chr == df_hatchet.int_chrom.values[i] and short_snp_pos > involved_pos[-1]):
+                    break
+        s = t
+        indexes = np.array(indexes)
+        hatchet_phasing = np.array([ (x=="1") for x in df_hatchet.HAPLO.values[i].split(",") ])[involved_marker]
+        assert len(indexes) == len(hatchet_phasing)
+        mult_B_block[0] += list( indexes[hatchet_phasing] )
+        mult_B_block[1] += [i] * np.sum(hatchet_phasing)
+        mult_A_block[0] += list( indexes[~hatchet_phasing] )
+        mult_A_block[1] += [i] * np.sum(~hatchet_phasing)
+        sorted_chr_pos.append( (df_hatchet.int_chrom.values[i], int(short_unique_snp_ids[s].split("_")[1]) ) )
+        sorted_chr_pos_last.append( (df_hatchet.int_chrom.values[i], int(short_unique_snp_ids[t-1].split("_")[1]) ) )
+        n_snps[i] = len(indexes)
+    # construct single_X and single_total_bb_RD using matrix multiplication with mult_B_block and mult_A_block
+    mult_B_block = scipy.sparse.csr_matrix( (np.ones(len(mult_B_block[0]), dtype=int), (mult_B_block[0], mult_B_block[1])), shape=(len(short_unique_snp_ids), df_hatchet.shape[0]) )
+    mult_A_block = scipy.sparse.csr_matrix( (np.ones(len(mult_A_block[0]), dtype=int), (mult_A_block[0], mult_A_block[1])), shape=(len(short_unique_snp_ids), df_hatchet.shape[0]) )
+    single_X = np.zeros((df_hatchet.shape[0], 2, cell_snp_Aallele.shape[0]), dtype=int)
+    single_X[:,1,:] = (cell_snp_Ballele @ mult_B_block + cell_snp_Aallele @ mult_A_block).T.A
+    single_total_bb_RD = ((cell_snp_Ballele + cell_snp_Aallele) @ (mult_B_block + mult_A_block)).T.A
+    
+    # load gene positions and loop over hatchet entries to find corresponding genes within each block
+    map_gene_adataindex = {adata.var.index[i]:i for i in range(adata.shape[1])}
+    df_genes = pd.read_csv(hgtable_file, header=0, index_col=0, sep="\t")
+    df_genes = df_genes[df_genes["name2"].isin(adata.var.index)]
+    if ~np.any( df_genes["chrom"].map(str).isin(ordered_chr) ):
+        df_genes["chrom"] = df_genes["chrom"].map(lambda x: x.replace("chr", ""))
+    df_genes = df_genes[df_genes.chrom.isin(ordered_chr)]
+    df_genes["int_chrom"] = df_genes.chrom.map(ordered_chr_map)
+    df_genes.sort_values(by=["int_chrom", "cdsStart"], inplace=True)
+    gene_ranges = list(zip( df_genes.name2.values, df_genes.int_chrom, df_genes.cdsStart.values ))
+    mult_gene_block = [[],[]]
+    x_gene_list = [""] * df_hatchet.shape[0]
+    s = 0
+    for i in range(df_hatchet.shape[0]):
+        this_chr = df_hatchet.int_chrom.values[i]
+        this_range = [df_hatchet.START.values[i], df_hatchet.END.values[i]]
+        while s < len(gene_ranges) and ((gene_ranges[s][1] < this_chr) or (gene_ranges[s][1] == this_chr and gene_ranges[s][2] < this_range[0])):
+            s += 1
+        indexes = []
+        for t in range(s, len(gene_ranges)):
+            if gene_ranges[t][1] == this_chr and gene_ranges[t][2] >= this_range[0] and gene_ranges[t][2] < this_range[1]:
+                if gene_ranges[t][0] in map_gene_adataindex:
+                    indexes.append( map_gene_adataindex[ gene_ranges[t][0] ] )
+            elif gene_ranges[t][1] > this_chr or (gene_ranges[t][1] == this_chr and gene_ranges[t][2] >= this_range[1]):
+                break
+        s = t
+        indexes = np.array(indexes)
+        mult_gene_block[0] += list( indexes )
+        mult_gene_block[1] += [i] * len(indexes)
+        x_gene_list[i] = " ".join(df_genes.name2.values[indexes]) if len(indexes) > 0 else ""
+    # construct single_gene_X using matrix multiplication with mult_gene_block
+    mult_gene_block = scipy.sparse.csr_matrix( (np.ones(len(mult_gene_block[0]), dtype=int), (mult_gene_block[0], mult_gene_block[1])), shape=(adata.shape[1], df_hatchet.shape[0]) )
+    single_X[:,0,:] = (adata.layers["count"] @ mult_gene_block).T
+    single_base_nb_mean = np.zeros((df_hatchet.shape[0], adata.shape[0] ))
+    
+    # compute log_sitewise_transmat by phasing switch model
+    tmp_sorted_chr_pos = [val for pair in zip(sorted_chr_pos, sorted_chr_pos_last) for val in pair]
+    sorted_chr = np.array([x[0] for x in tmp_sorted_chr_pos])
+    position_cM = get_position_cM_table( tmp_sorted_chr_pos, genome_build=genome_build )
+    phase_switch_prob = compute_phase_switch_probability_position(position_cM, tmp_sorted_chr_pos, nu)
+    log_sitewise_transmat = np.log(phase_switch_prob) - logphase_shift
+    log_sitewise_transmat = log_sitewise_transmat[np.arange(1, len(log_sitewise_transmat), 2)]
+
+    sorted_chr = np.array([x[0] for x in sorted_chr_pos])
+    lengths = np.array([ np.sum(sorted_chr == c) for c in range(len(ordered_chr_map)) ])
+
+    return lengths, single_X, single_base_nb_mean, single_total_bb_RD, log_sitewise_transmat, sorted_chr_pos, x_gene_list
+
+
 def choose_umithreshold_given_nbins(single_total_bb_RD, refined_lengths, expected_nbins):
     def count_num_bins(per_snp_umi, refined_lengths, secondary_min_umi):
         cumlen = 0
@@ -989,8 +1066,8 @@ def filter_de_genes(exp_counts, x_gene_list, normal_candidate, sample_list=None,
         sc.pp.log1p(tmpadata)
         # new added
         sc.pp.pca(tmpadata, n_comps=4)
-        kmeans = KMeans(n_clusters=2, random_state=0).fit(tmpadata.X)
-        kmeans_labels = kmeans.predict(tmpadata.X)
+        kmeans = KMeans(n_clusters=2, random_state=0).fit(tmpadata.obsm["X_pca"])
+        kmeans_labels = kmeans.predict(tmpadata.obsm["X_pca"])
         idx_kmeans_label = np.argmax(np.bincount( kmeans_labels[tmpadata.obs["normal_candidate"]], minlength=2 ))
         clone = np.array(["normal"] * tmpadata.shape[0])
         clone[ (kmeans_labels != idx_kmeans_label) & (~tmpadata.obs["normal_candidate"]) ] = "tumor"

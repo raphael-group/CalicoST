@@ -311,7 +311,7 @@ def main(configuration_file):
         q = np.sort(single_tumor_prop)[ int(EXPECTED_NORMAL_PROP * len(barcodes)) ]
         normal_candidate = ( single_tumor_prop < q )
         
-        copy_single_X_rdr,_ = filter_de_genes(exp_counts, x_gene_list, normal_candidate)
+        copy_single_X_rdr,_ = filter_de_genes(exp_counts, x_gene_list, normal_candidate, sample_list=sample_list, sample_ids=sample_ids)
         MIN_NORMAL_COUNT_PERBIN = 20
         bidx_inconfident = np.where( np.sum(copy_single_X_rdr[:, (normal_candidate==True)], axis=1) < MIN_NORMAL_COUNT_PERBIN )[0]
         rdr_normal = np.sum(copy_single_X_rdr[:, (normal_candidate==True)], axis=1)
@@ -533,9 +533,9 @@ def main(configuration_file):
                     print(f"part {bafc} merging_groups: {merging_groups}")
                     #
                     if config["tumorprop_file"] is None:
-                        merging_groups, merged_res = merge_by_minspots(merged_res["new_assignment"], res, single_total_bb_RD, min_spots_thresholds=config["min_spots_per_clone"], min_umicount_thresholds=config["avg_umi_perbinspot"]*n_obs)
+                        merging_groups, merged_res = merge_by_minspots(merged_res["new_assignment"], merged_res, single_total_bb_RD[:,idx_spots], min_spots_thresholds=config["min_spots_per_clone"], min_umicount_thresholds=config["avg_umi_perbinspot"]*n_obs)
                     else:
-                        merging_groups, merged_res = merge_by_minspots(merged_res["new_assignment"], res, single_total_bb_RD, min_spots_thresholds=config["min_spots_per_clone"], min_umicount_thresholds=config["avg_umi_perbinspot"]*n_obs, single_tumor_prop=single_tumor_prop[idx_spots])
+                        merging_groups, merged_res = merge_by_minspots(merged_res["new_assignment"], merged_res, single_total_bb_RD[:,idx_spots], min_spots_thresholds=config["min_spots_per_clone"], min_umicount_thresholds=config["avg_umi_perbinspot"]*n_obs, single_tumor_prop=single_tumor_prop[idx_spots])
                     # compute posterior using the newly merged pseudobulk
                     n_merged_clones = len(merging_groups)
                     tmp = copy.copy(merged_res["new_assignment"])
