@@ -22,6 +22,13 @@ from phasing import *
 from utils_IO import *
 from find_integer_copynumber import *
 from parse_input import *
+from utils_plotting import *
+
+from matplotlib import pyplot as plt
+from matplotlib.lines import Line2D
+import matplotlib.patches as mpatches
+import seaborn
+plt.rcParams.update({'font.size': 14})
 
 import mkl
 mkl.set_num_threads(1)
@@ -336,6 +343,9 @@ def main(configuration_file):
             single_tumor_prop = None
         else:
             single_X, single_base_nb_mean, single_total_bb_RD, single_tumor_prop = merge_pseudobulk_by_index_mix(single_X, single_base_nb_mean, single_total_bb_RD, clone_index, single_tumor_prop, threshold=config["tumorprop_threshold"])
+        before_coords = copy.copy(coords)
+        before_df_clones = copy.copy(df_clones)
+        before_sample_ids = copy.copy(sample_ids)
         coords = np.array([ np.mean(coords[idx,:],axis=0) for idx in clone_index ])
         smooth_mat = scipy.sparse.csr_matrix(np.eye(coords.shape[0]))
         adjacency_mat = scipy.sparse.csr_matrix(np.eye(coords.shape[0]))
@@ -682,6 +692,45 @@ def main(configuration_file):
             if not config["tumorprop_file"] is None:
                 df_clone_label["tumor_proportion"] = single_tumor_prop
             df_clone_label.to_csv(f"{outdir}/clone_labels.tsv", header=True, index=True, sep="\t")
+
+            ##### plotting #####
+            # make a directory for plots
+            p = subprocess.Popen(f"mkdir -p {outdir}/plots", shell=True)
+            out, err = p.communicate()
+
+            # plot RDR and BAF
+            cn_file = f"{outdir}/cnv_seglevel.tsv"
+            fig = plot_rdr_baf(configuration_file, r_hmrf_initialization, cn_file, clone_ids=None, remove_xticks=True, rdr_ylim=5, chrtext_shift=-0.3, base_height=3.2, pointsize=30, palette="tab10")
+            fig.savefig(f"{outdir}/plots/rdr_baf_defaultcolor.pdf", transparent=True, bbox_inches="tight")
+            # plot allele-specific copy number
+            for o,max_medploidy in enumerate([2, 3, 4]):
+                cn_file = f"{outdir}/cnv{medfix[o+1]}_seglevel.tsv"
+                if not config["supervision_clone_file"] is None:
+                    fig, axes = plt.subplots(1, 1, figsize=(15, 0.6*len(unique_clone_ids) + 0.4), dpi=200, facecolor="white")
+                    merged_df_cnv = pd.read_csv(cn_file, header=0, sep="\t")
+                    df_cnv = merged_df_cnv[["CHR", "START", "END"]]
+                    df_cnv = df_cnv.join( pd.DataFrame({f"clone{x} A":merged_df_cnv[f"clone{res_combine['new_assignment'][i]} A"] for i,x in enumerate(unique_clone_ids)}) )
+                    df_cnv = df_cnv.join( pd.DataFrame({f"clone{x} B":merged_df_cnv[f"clone{res_combine['new_assignment'][i]} B"] for i,x in enumerate(unique_clone_ids)}) )
+                    clone_ids = np.concatenate([ unique_clone_ids[res_combine["new_assignment"]==c].astype(str) for c in final_clone_ids ])
+                    axes = plot_acn_from_df(df_cnv, axes, clone_ids=clone_ids, clone_names=[f"region {x}" for x in clone_ids], add_chrbar=True, add_arrow=False, chrbar_thickness=0.4/(0.6*len(unique_clone_ids) + 0.4), add_legend=True, remove_xticks=True)
+                    fig.tight_layout()
+                    fig.savefig(f"{outdir}/plots/acn_genome{medfix[o+1]}.pdf", transparent=True, bbox_inches="tight")
+                else:
+                    fig, axes = plt.subplots(1, 1, figsize=(15, 0.6**len(final_clone_ids) + 0.4), dpi=200, facecolor="white")
+                    axes = plot_acn(cn_file, axes, add_chrbar=True, add_arrow=True, chrbar_thickness=0.4/(0.6*len(final_clone_ids) + 0.4), add_legend=True, remove_xticks=True)
+                    fig.tight_layout()
+                    fig.savefig(f"{outdir}/plots/acn_genome{medfix[o+1]}.pdf", transparent=True, bbox_inches="tight")
+            # plot clones in space
+            if not config["supervision_clone_file"] is None:
+                before_assignments = pd.Series([None] * before_coords.shape[0])
+                for i,c in enumerate(unique_clone_ids):
+                    before_assignments.iloc[before_df_clones.clone_id.isin([c])] = f"clone {res_combine['new_assignment'][i]}"
+                fig = plot_clones_in_space(before_coords, before_assignments, sample_list, before_sample_ids, palette="Set2", labels=unique_clone_ids, label_coords=coords, label_sample_ids=sample_ids)
+                fig.savefig(f"{outdir}/plots/clone_spatial.pdf", transparent=True, bbox_inches="tight")
+            else:
+                assignment = pd.Series([f"clone {x}" for x in res_combine["new_assignment"]])
+                fig = plot_clones_in_space(coords, assignment, axes, palette="Set2")
+                fig.savefig(f"{outdir}/plots/clone_spatial.pdf", transparent=True, bbox_inches="tight")
 
 
 if __name__ == "__main__":

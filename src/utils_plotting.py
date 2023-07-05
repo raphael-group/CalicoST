@@ -423,11 +423,11 @@ def plot_amp_del(cn_file, ax_handle, clone_ids=None, clone_names=None, add_chrba
 
 
 
-def plot_rdr_baf(configuration_file, r_hmrf_initialization, cn_file, clone_ids=None, remove_xticks=True, rdr_ylim=5, chrtext_shift=-0.3, base_height=3.2, pointsize=15):
+def plot_rdr_baf(configuration_file, r_hmrf_initialization, cn_file, clone_ids=None, remove_xticks=True, rdr_ylim=5, chrtext_shift=-0.3, base_height=3.2, pointsize=15, palette="chisel"):
     # full palette
-    palette, ordered_acn = get_full_palette()
+    chisel_palette, ordered_acn = get_full_palette()
     map_cn = {x:i for i,x in enumerate(ordered_acn)}
-    colors = [palette[c] for c in ordered_acn]
+    colors = [chisel_palette[c] for c in ordered_acn]
 
     try:
         config = read_configuration_file(configuration_file)
@@ -453,6 +453,8 @@ def plot_rdr_baf(configuration_file, r_hmrf_initialization, cn_file, clone_ids=N
     single_tumor_prop = dat["single_tumor_prop"]
     res_combine = dict( np.load(f"{outdir}/rdrbaf_final_nstates{config['n_states']}_smp.npz", allow_pickle=True) )
 
+    n_states = res_combine["new_p_binom"].shape[0]
+
     assert single_X.shape[0] == df_cnv.shape[0]
 
     clone_index = [np.where(res_combine["new_assignment"] == cid)[0] for cid in final_clone_ids]
@@ -475,18 +477,28 @@ def plot_rdr_baf(configuration_file, r_hmrf_initialization, cn_file, clone_ids=N
 
             # plot points
             segments, labs = get_intervals(res_combine["pred_cnv"][:,c])
-            seaborn.scatterplot(x=np.arange(X[:,1,c].shape[0]), y=X[:,0,c]/base_nb_mean[:,c], \
-                hue=pd.Categorical([map_cn[(major[i], minor[i])] for i in range(len(major))], categories=np.arange(len(ordered_acn)), ordered=True), \
-                palette=seaborn.color_palette(colors), s=pointsize, edgecolor="black", alpha=0.8, legend=False, ax=axes[2*s])
+            if palette == "chisel":
+                seaborn.scatterplot(x=np.arange(X[:,1,c].shape[0]), y=X[:,0,c]/base_nb_mean[:,c], \
+                    hue=pd.Categorical([map_cn[(major[i], minor[i])] for i in range(len(major))], categories=np.arange(len(ordered_acn)), ordered=True), \
+                    palette=seaborn.color_palette(colors), s=pointsize, edgecolor="black", alpha=0.8, legend=False, ax=axes[2*s])
+            else:
+                seaborn.scatterplot(x=np.arange(X[:,1,c].shape[0]), y=X[:,0,c]/base_nb_mean[:,c], \
+                    hue=pd.Categorical(res_combine["pred_cnv"][:,cid], categories=np.arange(n_states), ordered=True), \
+                    palette=palette, s=pointsize, edgecolor="black", alpha=0.8, legend=False, ax=axes[2*s])
             axes[2*s].set_ylabel(f"clone {cid}\nRDR")
             axes[2*s].set_yticks(np.arange(1, rdr_ylim, 1))
             axes[2*s].set_ylim([0,rdr_ylim])
             axes[2*s].set_xlim([0, n_obs])
             if remove_xticks:
                 axes[2*s].set_xticks([])
-            seaborn.scatterplot(x=np.arange(X[:,1,c].shape[0]), y=X[:,1,c]/total_bb_RD[:,c], \
-                hue=pd.Categorical([map_cn[(major[i], minor[i])] for i in range(len(major))], categories=np.arange(len(ordered_acn)), ordered=True), \
-                palette=seaborn.color_palette(colors), s=pointsize, edgecolor="black", alpha=0.8, legend=False, ax=axes[2*s+1])
+            if palette == "chisel":
+                seaborn.scatterplot(x=np.arange(X[:,1,c].shape[0]), y=X[:,1,c]/total_bb_RD[:,c], \
+                    hue=pd.Categorical([map_cn[(major[i], minor[i])] for i in range(len(major))], categories=np.arange(len(ordered_acn)), ordered=True), \
+                    palette=seaborn.color_palette(colors), s=pointsize, edgecolor="black", alpha=0.8, legend=False, ax=axes[2*s+1])
+            else:
+                seaborn.scatterplot(x=np.arange(X[:,1,c].shape[0]), y=X[:,1,c]/total_bb_RD[:,c], \
+                    hue=pd.Categorical(res_combine["pred_cnv"][:,cid], categories=np.arange(n_states), ordered=True), \
+                    palette=palette, s=pointsize, edgecolor="black", alpha=0.8, legend=False, ax=axes[2*s+1])
             axes[2*s+1].set_ylabel(f"clone {cid}\nphased AF")
             axes[2*s+1].set_ylim([-0.1, 1.1])
             axes[2*s+1].set_yticks([0, 0.5, 1])
@@ -516,18 +528,28 @@ def plot_rdr_baf(configuration_file, r_hmrf_initialization, cn_file, clone_ids=N
 
             # plot points
             segments, labs = get_intervals(res_combine["pred_cnv"][:,c])
-            seaborn.scatterplot(x=np.arange(X[:,1,c].shape[0]), y=X[:,0,c]/base_nb_mean[:,c], \
-                hue=pd.Categorical([map_cn[(major[i], minor[i])] for i in range(len(major))], categories=np.arange(len(ordered_acn)), ordered=True), \
-                palette=seaborn.color_palette(colors), s=pointsize, edgecolor="black", alpha=0.8, legend=False, ax=axes[2*s])
+            if palette == "chisel":
+                seaborn.scatterplot(x=np.arange(X[:,1,c].shape[0]), y=X[:,0,c]/base_nb_mean[:,c], \
+                    hue=pd.Categorical([map_cn[(major[i], minor[i])] for i in range(len(major))], categories=np.arange(len(ordered_acn)), ordered=True), \
+                    palette=seaborn.color_palette(colors), s=pointsize, edgecolor="black", alpha=0.8, legend=False, ax=axes[2*s])
+            else:
+                seaborn.scatterplot(x=np.arange(X[:,1,c].shape[0]), y=X[:,0,c]/base_nb_mean[:,c], \
+                    hue=pd.Categorical(res_combine["pred_cnv"][:,cid], categories=np.arange(n_states), ordered=True), \
+                    palette=palette, s=pointsize, edgecolor="black", alpha=0.8, legend=False, ax=axes[2*s])
             axes[2*s].set_ylabel(f"clone {cid}\nRDR")
             axes[2*s].set_yticks(np.arange(1, rdr_ylim, 1))
             axes[2*s].set_ylim([0,5])
             axes[2*s].set_xlim([0, n_obs])
             if remove_xticks:
                 axes[2*s].set_xticks([])
-            seaborn.scatterplot(x=np.arange(X[:,1,c].shape[0]), y=X[:,1,c]/total_bb_RD[:,c], \
-                hue=pd.Categorical([map_cn[(major[i], minor[i])] for i in range(len(major))], categories=np.arange(len(ordered_acn)), ordered=True), \
-                palette=seaborn.color_palette(colors), s=pointsize, edgecolor="black", alpha=0.8, legend=False, ax=axes[2*s+1])
+            if palette == "chisel":
+                seaborn.scatterplot(x=np.arange(X[:,1,c].shape[0]), y=X[:,1,c]/total_bb_RD[:,c], \
+                    hue=pd.Categorical([map_cn[(major[i], minor[i])] for i in range(len(major))], categories=np.arange(len(ordered_acn)), ordered=True), \
+                    palette=seaborn.color_palette(colors), s=pointsize, edgecolor="black", alpha=0.8, legend=False, ax=axes[2*s+1])
+            else:
+                seaborn.scatterplot(x=np.arange(X[:,1,c].shape[0]), y=X[:,1,c]/total_bb_RD[:,c], \
+                    hue=pd.Categorical(res_combine["pred_cnv"][:,cid], categories=np.arange(n_states), ordered=True), \
+                    palette=palette, s=pointsize, edgecolor="black", alpha=0.8, legend=False, ax=axes[2*s+1])
             axes[2*s+1].set_ylabel(f"clone {cid}\nphased AF")
             axes[2*s+1].set_ylim([-0.1, 1.1])
             axes[2*s+1].set_yticks([0, 0.5, 1])
@@ -627,3 +649,43 @@ def plot_2dscatter_rdrbaf(configuration_file, r_hmrf_initialization, cn_file, cl
 
     return fig
 
+
+def plot_clones_in_space(coords, assignment, sample_list=None, sample_ids=None, palette="Set2", labels=None, label_coords=None, label_sample_ids=None):
+    if (sample_list is None) or (len(sample_list) == 1):
+        fig, axes = plt.subplots(1, 1, figsize=(5.5,4), dpi=200, facecolor="white")
+        seaborn.scatterplot(x=coords[:,0], y=-coords[:,1], color="lightgrey", alpha=0.5, linewidth=0, s=15, ax=axes)
+        seaborn.scatterplot(x=coords[~assignment.isnull(),0], y=-coords[~assignment.isnull(),1], \
+                            hue=assignment[~assignment.isnull()], palette=palette, linewidth=0, s=15, ax=axes)
+        h,l = axes.get_legend_handles_labels()
+        axes.legend(h, l, loc="upper left", bbox_to_anchor=(1,1))
+
+        if not labels is None:
+            assert len(labels) == len(label_coords)
+            for i,c in enumerate(labels):
+                axes.text(label_coords[i][0]-4, -label_coords[i][1], c)
+    else:
+        unique_assignments = np.sort(np.unique(assignment[~assignment.isnull()].values))
+        fig, axes = plt.subplots(1, len(sample_list), figsize=(5*len(sample_list)+0.5,4), dpi=200, facecolor="white")
+        for s, sname in enumerate(sample_list):
+            indexes = np.where(sample_ids == s)[0]
+            seaborn.scatterplot(x=coords[indexes,0], y=-coords[indexes,1], color="lightgrey", alpha=0.5, linewidth=0, s=15, ax=axes[s])
+            if s + 1 != len(sample_list):
+                seaborn.scatterplot(x=coords[indexes,0][~assignment.iloc[indexes].isnull()], y=-coords[indexes,1][~assignment.iloc[indexes].isnull()], \
+                                hue=pd.Categorical(assignment.iloc[indexes][~assignment.iloc[indexes].isnull()], categories=unique_assignments, ordered=True), \
+                                palette=palette, linewidth=0, s=15, legend=False, ax=axes[s])
+            else:
+                seaborn.scatterplot(x=coords[indexes,0][~assignment.iloc[indexes].isnull()], y=-coords[indexes,1][~assignment.iloc[indexes].isnull()], \
+                                hue=pd.Categorical(assignment.iloc[indexes][~assignment.iloc[indexes].isnull()], categories=unique_assignments, ordered=True), \
+                                palette=palette, linewidth=0, s=15, ax=axes[s])
+                h,l = axes[s].get_legend_handles_labels()
+                axes[s].legend(h, l, loc="upper left", bbox_to_anchor=(1,1))
+
+        if not labels is None:
+            assert len(labels) == len(label_coords) and len(labels) == len(label_sample_ids)
+            for i,c in enumerate(labels):
+                s = label_sample_ids[i]
+                axes[s].text(label_coords[i][0]-4, -label_coords[i][1], c)
+
+    fig.tight_layout()
+
+    return fig
