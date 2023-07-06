@@ -510,10 +510,13 @@ def main(configuration_file):
                         is_diag=True, max_iter=config["max_iter"], tol=config["tol"], spatial_weight=config["spatial_weight"], tumorprop_threshold=config["tumorprop_threshold"])
 
             ##### combine results across clones #####
-            res_combine = {"prev_assignment":np.zeros(single_X.shape[2], dtype=int)}
+            res_combine = {"prev_assignment":-1 * np.ones(single_X.shape[2], dtype=int)}
             offset_clone = 0
             for bafc in range(n_baf_clones):
                 prefix = f"clone{bafc}"
+                if not Path(f"{outdir}/{prefix}_nstates{config['n_states']}_smp.npz").exists():
+                    # we skipped the BAF clone in the previous step because of low SNP-covering UMI conuts.
+                    continue
                 allres = dict( np.load(f"{outdir}/{prefix}_nstates{config['n_states']}_smp.npz", allow_pickle=True) )
                 r = allres["num_iterations"] - 1
                 res = {"new_log_mu":allres[f"round{r}_new_log_mu"], "new_alphas":allres[f"round{r}_new_alphas"], \
@@ -575,6 +578,9 @@ def main(configuration_file):
                         "log_gamma":np.dstack([res_combine["log_gamma"], log_gamma ]), "pred_cnv":np.hstack([res_combine["pred_cnv"], pred_cnv])})
                 res_combine["prev_assignment"][idx_spots] = merged_res["new_assignment"] + offset_clone
                 offset_clone += n_merged_clones
+            # assign un-assigned spots to the clone with smallest number of spots
+            unassigned_spots = np.where(res_combine["prev_assignment"] == -1)[0]
+            res_combine["prev_assignment"][unassigned_spots] = np.argmin(np.bincount(res_combine["prev_assignment"][res_combine["prev_assignment"]>=0]))
             # temp: make dispersions the same across all clones
             res_combine["new_alphas"][:,:] = np.max(res_combine["new_alphas"])
             res_combine["new_taus"][:,:] = np.min(res_combine["new_taus"])
@@ -705,6 +711,11 @@ def main(configuration_file):
             # plot allele-specific copy number
             for o,max_medploidy in enumerate([2, 3, 4]):
                 cn_file = f"{outdir}/cnv{medfix[o+1]}_seglevel.tsv"
+                fig, axes = plt.subplots(1, 1, figsize=(15, 0.9*len(final_clone_ids) + 0.6), dpi=200, facecolor="white")
+                axes = plot_acn(cn_file, axes, add_chrbar=True, add_arrow=True, chrbar_thickness=0.4/(0.6*len(final_clone_ids) + 0.4), add_legend=True, remove_xticks=True)
+                fig.tight_layout()
+                fig.savefig(f"{outdir}/plots/acn_genome{medfix[o+1]}.pdf", transparent=True, bbox_inches="tight")
+                # additionally plot the allele-specific copy number per region
                 if not config["supervision_clone_file"] is None:
                     fig, axes = plt.subplots(1, 1, figsize=(15, 0.6*len(unique_clone_ids) + 0.4), dpi=200, facecolor="white")
                     merged_df_cnv = pd.read_csv(cn_file, header=0, sep="\t")
@@ -714,12 +725,7 @@ def main(configuration_file):
                     clone_ids = np.concatenate([ unique_clone_ids[res_combine["new_assignment"]==c].astype(str) for c in final_clone_ids ])
                     axes = plot_acn_from_df(df_cnv, axes, clone_ids=clone_ids, clone_names=[f"region {x}" for x in clone_ids], add_chrbar=True, add_arrow=False, chrbar_thickness=0.4/(0.6*len(unique_clone_ids) + 0.4), add_legend=True, remove_xticks=True)
                     fig.tight_layout()
-                    fig.savefig(f"{outdir}/plots/acn_genome{medfix[o+1]}.pdf", transparent=True, bbox_inches="tight")
-                else:
-                    fig, axes = plt.subplots(1, 1, figsize=(15, 0.6**len(final_clone_ids) + 0.4), dpi=200, facecolor="white")
-                    axes = plot_acn(cn_file, axes, add_chrbar=True, add_arrow=True, chrbar_thickness=0.4/(0.6*len(final_clone_ids) + 0.4), add_legend=True, remove_xticks=True)
-                    fig.tight_layout()
-                    fig.savefig(f"{outdir}/plots/acn_genome{medfix[o+1]}.pdf", transparent=True, bbox_inches="tight")
+                    fig.savefig(f"{outdir}/plots/acn_genome{medfix[o+1]}_per_region.pdf", transparent=True, bbox_inches="tight")
             # plot clones in space
             if not config["supervision_clone_file"] is None:
                 before_assignments = pd.Series([None] * before_coords.shape[0])

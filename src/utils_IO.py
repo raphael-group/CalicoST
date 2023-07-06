@@ -15,7 +15,7 @@ from utils_distribution_fitting import *
 import subprocess
 
 
-def load_data(spaceranger_dir, snp_dir, filtergenelist_file, filterregion_file, normalidx_file):
+def load_data(spaceranger_dir, snp_dir, filtergenelist_file, filterregion_file, normalidx_file, min_snpumis=50):
     ##### read raw UMI count matrix #####
     if Path(f"{spaceranger_dir}/filtered_feature_bc_matrix.h5").exists():
         adata = sc.read_10x_h5(f"{spaceranger_dir}/filtered_feature_bc_matrix.h5")
@@ -63,6 +63,14 @@ def load_data(spaceranger_dir, snp_dir, filtergenelist_file, filterregion_file, 
     adata = adata[indicator, :]
     cell_snp_Aallele = cell_snp_Aallele[indicator, :]
     cell_snp_Ballele = cell_snp_Ballele[indicator, :]
+
+    # filter out spots with too small number of SNP-covering UMIs
+    indicator = ( np.sum(cell_snp_Aallele, axis=1).A.flatten() + np.sum(cell_snp_Ballele, axis=1).A.flatten() > min_snpumis )
+    adata = adata[indicator, :]
+    cell_snp_Aallele = cell_snp_Aallele[indicator, :]
+    cell_snp_Ballele = cell_snp_Ballele[indicator, :]
+    if not (across_slice_adjacency_mat is None):
+        across_slice_adjacency_mat = across_slice_adjacency_mat[indicator,:][:,indicator]
 
     # filter out genes that are expressed in <0.5% cells
     indicator = (np.sum(adata.X > 0, axis=0) >= 0.005 * adata.shape[0]).A.flatten()
@@ -115,7 +123,7 @@ def load_data(spaceranger_dir, snp_dir, filtergenelist_file, filterregion_file, 
     return adata, cell_snp_Aallele, cell_snp_Ballele, snp_gene_list, unique_snp_ids
 
 
-def load_joint_data(input_filelist, snp_dir, alignment_files, filtergenelist_file, filterregion_file, normalidx_file):
+def load_joint_data(input_filelist, snp_dir, alignment_files, filtergenelist_file, filterregion_file, normalidx_file, min_snpumis=50):
     ##### read meta sample info #####
     df_meta = pd.read_csv(input_filelist, sep="\t", header=None)
     df_meta.rename(columns=dict(zip( df_meta.columns[:3], ["bam", "sample_id", "spaceranger_dir"] )), inplace=True)
@@ -124,9 +132,7 @@ def load_joint_data(input_filelist, snp_dir, alignment_files, filtergenelist_fil
     df_barcode["barcode"] = [x.split("_")[0] for x in df_barcode.combined_barcode.values]
     ##### read SNP count #####
     cell_snp_Aallele = scipy.sparse.load_npz(f"{snp_dir}/cell_snp_Aallele.npz")
-    cell_snp_Aallele = cell_snp_Aallele.A
     cell_snp_Ballele = scipy.sparse.load_npz(f"{snp_dir}/cell_snp_Ballele.npz")
-    cell_snp_Ballele = cell_snp_Ballele.A
     snp_gene_list = np.load(f"{snp_dir}/snp_gene_list.npy", allow_pickle=True)
     unique_snp_ids = np.load(f"{snp_dir}/unique_snp_ids.npy", allow_pickle=True)
     snp_barcodes = pd.read_csv(f"{snp_dir}/barcodes.txt", header=None, names=["barcodes"])
@@ -173,6 +179,9 @@ def load_joint_data(input_filelist, snp_dir, alignment_files, filtergenelist_fil
             adata = adatatmp
         else:
             adata = anndata.concat([adata, adatatmp], join="outer")
+    # replace nan with 0
+    adata.layers["count"][np.isnan(adata.layers["count"])] = 0
+    adata.layers["count"] = adata.layers["count"].astype(int)
 
     # shared barcodes between adata and SNPs
     shared_barcodes = set(list(snp_barcodes.barcodes)) & set(list(adata.obs.index))
@@ -211,7 +220,15 @@ def load_joint_data(input_filelist, snp_dir, alignment_files, filtergenelist_fil
         across_slice_adjacency_mat += across_slice_adjacency_mat.T
     
     # filter out spots with too small number of UMIs
-    indicator = (np.sum(adata.layers["count"], axis=1) > 100)
+    indicator = (np.sum(adata.layers["count"], axis=1) > min_snpumis)
+    adata = adata[indicator, :]
+    cell_snp_Aallele = cell_snp_Aallele[indicator, :]
+    cell_snp_Ballele = cell_snp_Ballele[indicator, :]
+    if not (across_slice_adjacency_mat is None):
+        across_slice_adjacency_mat = across_slice_adjacency_mat[indicator,:][:,indicator]
+
+    # filter out spots with too small number of SNP-covering UMIs
+    indicator = ( np.sum(cell_snp_Aallele, axis=1).A.flatten() + np.sum(cell_snp_Ballele, axis=1).A.flatten() > min_snpumis )
     adata = adata[indicator, :]
     cell_snp_Aallele = cell_snp_Aallele[indicator, :]
     cell_snp_Ballele = cell_snp_Ballele[indicator, :]
@@ -264,7 +281,7 @@ def load_joint_data(input_filelist, snp_dir, alignment_files, filtergenelist_fil
         adata.obs["tumor_annotation"][adata.obs.index.isin(normal_barcodes)] = "normal"
         print( adata.obs["tumor_annotation"].value_counts() )
 
-    return adata, cell_snp_Aallele, cell_snp_Ballele, snp_gene_list, unique_snp_ids, across_slice_adjacency_mat
+    return adata, cell_snp_Aallele.A, cell_snp_Ballele.A, snp_gene_list, unique_snp_ids, across_slice_adjacency_mat
 
 
 def load_slidedna_data(snp_dir, bead_file, filterregion_bedfile):
@@ -806,7 +823,7 @@ def convert_to_hmm_using_hatchetblock(bb_file, cell_snp_Aallele, cell_snp_Ballel
     sorted_chr = np.array([x[0] for x in sorted_chr_pos])
     lengths = np.array([ np.sum(sorted_chr == c) for c in range(len(ordered_chr_map)) ])
 
-    return lengths, single_X, single_base_nb_mean, single_total_bb_RD, log_sitewise_transmat, sorted_chr_pos, x_gene_list
+    return lengths, single_X, single_base_nb_mean, single_total_bb_RD, log_sitewise_transmat, sorted_chr_pos, sorted_chr_pos_last, x_gene_list, n_snps
 
 
 def choose_umithreshold_given_nbins(single_total_bb_RD, refined_lengths, expected_nbins):
