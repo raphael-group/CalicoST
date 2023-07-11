@@ -316,7 +316,7 @@ def main(configuration_file):
     if not config["tumorprop_file"] is None:
         EXPECTED_NORMAL_PROP = 0.05
         q = np.sort(single_tumor_prop)[ int(EXPECTED_NORMAL_PROP * len(barcodes)) ]
-        normal_candidate = ( single_tumor_prop < q )
+        normal_candidate = ( single_tumor_prop <= q )
         
         copy_single_X_rdr,_ = filter_de_genes(exp_counts, x_gene_list, normal_candidate, sample_list=sample_list, sample_ids=sample_ids)
         MIN_NORMAL_COUNT_PERBIN = 20

@@ -23,9 +23,7 @@ def load_data(spaceranger_dir, snp_dir, filtergenelist_file, filterregion_file, 
         adata = sc.read_h5ad(f"{spaceranger_dir}/filtered_feature_bc_matrix.h5ad")
     adata.layers["count"] = adata.X.A.astype(int)
     cell_snp_Aallele = scipy.sparse.load_npz(f"{snp_dir}/cell_snp_Aallele.npz")
-    cell_snp_Aallele = cell_snp_Aallele.A
     cell_snp_Ballele = scipy.sparse.load_npz(f"{snp_dir}/cell_snp_Ballele.npz")
-    cell_snp_Ballele = cell_snp_Ballele.A
     snp_gene_list = np.load(f"{snp_dir}/snp_gene_list.npy", allow_pickle=True)
     unique_snp_ids = np.load(f"{snp_dir}/unique_snp_ids.npy", allow_pickle=True)
     snp_barcodes = pd.read_csv(f"{snp_dir}/barcodes.txt", header=None, names=["barcodes"])
@@ -120,7 +118,7 @@ def load_data(spaceranger_dir, snp_dir, filtergenelist_file, filterregion_file, 
         adata.obs["tumor_annotation"][adata.obs.index.isin(normal_barcodes)] = "normal"
         print( adata.obs["tumor_annotation"].value_counts() )
     
-    return adata, cell_snp_Aallele, cell_snp_Ballele, snp_gene_list, unique_snp_ids
+    return adata, cell_snp_Aallele.A, cell_snp_Ballele.A, snp_gene_list, unique_snp_ids
 
 
 def load_joint_data(input_filelist, snp_dir, alignment_files, filtergenelist_file, filterregion_file, normalidx_file, min_snpumis=50):
