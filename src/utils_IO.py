@@ -1300,17 +1300,94 @@ def generate_bedfile(sorted_chr_pos, outputfile):
         for x in bed_regions:
             fp.write(f"{x[0]}\t{x[1]}\t{x[2]}\n")
 
-# def simple_loop(bamfile, map_barcodes):
-#     barcodetag = "BX"
-#     fp = pysam.AlignmentFile(bamfile, "rb")
-#     for read in fp:
-#         if read.is_unmapped or read.is_secondary or read.is_duplicate or read.is_qcfail:
-#             continue
-#         this_chr = get_reference(read.reference_name)
-#         if (not this_chr is None) and (read.has_tag(barcodetag)) and (read.get_tag(barcodetag) in map_barcodes):
-#             idx_barcode = map_barcodes[ read.get_tag(barcodetag) ]
-#     fp.close()
 
-# import timeit
-# timeit.timeit(f'simple_loop(\"{bamfile}\", map_barcodes)', number=1, globals=globals())
-# pickle.dump([single_X, lengths, single_base_nb_mean, single_total_bb_RD, log_sitewise_transmat, coords], open("/u/congma/ragr-data/datasets/SlideDNAseq/allele_starch_results/human_colon_cancer_dna_4x_201027_12/hmminput.pkl", 'wb'))
+def strict_convert_copy_to_states(A_copy, B_copy, counts=None):
+    if counts is None:
+        tmp = A_copy + B_copy
+        tmp = tmp[~np.isnan(tmp)]
+    else:
+        tmp = np.concatenate([ np.ones(counts[i]) * (A_copy[i]+B_copy[i]) for i in range(len(counts)) if ~np.isnan(A_copy[i]+B_copy[i]) ])
+    base_ploidy = np.median(tmp)
+    is_homozygous = (A_copy == 0) | (B_copy == 0)
+    coarse_states = np.array(["neutral"] * A_copy.shape[0])
+    coarse_states[ (A_copy + B_copy < base_ploidy) & (A_copy != B_copy) ] = "del"
+    coarse_states[ (A_copy + B_copy < base_ploidy) & (A_copy == B_copy) ] = "bdel"
+    coarse_states[ (A_copy + B_copy > base_ploidy) & (A_copy != B_copy) ] = "amp"
+    coarse_states[ (A_copy + B_copy > base_ploidy) & (A_copy == B_copy) ] = "bamp"
+    coarse_states[ (A_copy + B_copy == base_ploidy) & (is_homozygous) ] = "loh"
+    coarse_states[coarse_states == "neutral"] = "neu"
+    return coarse_states
+
+
+def summary_events(cnv_segfile, rescombinefile, minlength=10):
+    # read CNV file
+    df_cnv = pd.read_csv(cnv_segfile, header=0, sep='\t')
+    # get clone names
+    calico_clones = np.array([ x.split(" ")[0][5:] for x in df_cnv.columns if x.endswith(" A") ])
+    # label CNV states per bin per clone into "neu", "del", "amp", "loh" states
+    for c in calico_clones:
+        counts = df_cnv.END.values-df_cnv.START.values
+        counts = np.maximum(1, counts / 1e4).astype(int)
+        tmp = strict_convert_copy_to_states(df_cnv[f"clone{c} A"].values, df_cnv[f"clone{c} B"].values, counts=counts)
+        tmp[tmp == "bdel"] = "del"
+        tmp[tmp == "bamp"] = "amp"
+        df_cnv[f"srt_cnstate_clone{c}"] = tmp
+
+    # partition the genome into segments such that the allele-specific CN across all clones are the same within each segment
+    segments, labs = get_intervals_nd(df_cnv[["CHR"] + [ f"clone{x} A" for x in calico_clones ] + [ f"clone{x} B" for x in calico_clones ]].values)
+    # collect event, that is labs and segments pair such that the cnstate is not normal
+    events = []
+    for i, seg in enumerate(segments):
+        if seg[1] - seg[0] < minlength:
+            continue
+        if np.all(df_cnv[[ f"srt_cnstate_clone{x}" for x in calico_clones ]].iloc[seg[0],:].values == "neu"):
+            continue
+        acn_list = [ (df_cnv[f"srt_cnstate_clone{c}"].values[seg[0]], df_cnv[f"clone{c} A"].values[seg[0]], df_cnv[f"clone{c} B"].values[seg[0]]) for c in calico_clones ]
+        acn_set = set(acn_list)
+        for e in acn_set:
+            if e[0] == "neu":
+                continue
+            involved_clones = [calico_clones[i] for i in range(len(calico_clones)) if acn_list[i] == e]
+            events.append( pd.DataFrame({"CHR":df_cnv.CHR.values[seg[0]], "START":df_cnv.START.values[seg[0]], "END":df_cnv.END.values[seg[1]-1], "BinSTART":seg[0], "BinEND":seg[1]-1,\
+                                         "CN":f"{e[1]}|{e[2]}", "Label":e[0], "involved_clones":",".join(involved_clones)}, index=[0]) )
+    df_events = pd.concat(events, ignore_index=True)
+    
+    # merge adjacent events if they have the same involved_clones and same CN
+    unique_ic = np.unique(df_events.involved_clones.values)
+    concise_events = []
+    for ic in unique_ic:    
+        tmpdf = df_events[df_events.involved_clones == ic]
+        # merge adjacent rows in tmpdf if they have the same CN END of the previous row is the same as the START of the next row
+        concise_events.append( tmpdf.iloc[0:1,:] )
+        for i in range(1, tmpdf.shape[0]):
+            if tmpdf.CN.values[i] == concise_events[-1].CN.values[0] and tmpdf.CHR.values[i] == concise_events[-1].CHR.values[0] and tmpdf.START.values[i] == concise_events[-1].END.values[0]:
+                concise_events[-1].END.values[0] = tmpdf.END.values[i]
+                concise_events[-1].BinEND.values[0] = tmpdf.BinEND.values[i]
+            else:
+                concise_events.append( tmpdf.iloc[i:(i+1),:] )
+    df_concise_events = pd.concat(concise_events, ignore_index=True)
+
+    # add the RDR abd BAF info
+    res_combine = dict(np.load(rescombinefile, allow_pickle=True))
+    pred_cnv = res_combine["pred_cnv"]
+    rdr = np.nan * np.ones(df_concise_events.shape[0])
+    baf = np.nan * np.ones(df_concise_events.shape[0])
+    rdr_diff = np.nan * np.ones(df_concise_events.shape[0])
+    baf_diff = np.nan * np.ones(df_concise_events.shape[0])
+    for i in range(df_concise_events.shape[0]):
+        involved_clones = np.array([int(x) for x in df_concise_events.involved_clones.values[i].split(",")])
+        bs = df_concise_events.BinSTART.values[i]
+        be = df_concise_events.BinEND.values[i]
+        rdr[i] = np.exp(np.mean(res_combine["new_log_mu"][ (pred_cnv[bs:be,:][:,involved_clones].flatten(), np.tile(involved_clones, be-bs)) ]))
+        baf[i] = np.mean(res_combine["new_p_binom"][ (pred_cnv[bs:be,:][:,involved_clones].flatten(), np.tile(involved_clones, be-bs)) ])
+        # get the uninvolved clones
+        uninvolved_clones = np.array([i for i in range(1, res_combine["new_log_mu"].shape[1]) if i not in involved_clones])
+        if len(uninvolved_clones) > 0:
+            rdr_diff[i] = np.exp(np.mean(res_combine["new_log_mu"][ (pred_cnv[bs:be,:][:,uninvolved_clones].flatten(), np.tile(uninvolved_clones, be-bs)) ])) - rdr[i]
+            baf_diff[i] = np.mean(res_combine["new_p_binom"][ (pred_cnv[bs:be,:][:,uninvolved_clones].flatten(), np.tile(uninvolved_clones, be-bs)) ]) - baf[i]
+    df_concise_events["RDR"] = rdr
+    df_concise_events["BAF"] = baf
+    df_concise_events["RDR_diff"] = rdr_diff
+    df_concise_events["BAF_diff"] = baf_diff
+
+    return df_concise_events[["CHR", "START", "END", "RDR", "BAF", "RDR_diff", "BAF_diff", "CN", "Label", "involved_clones"]]
