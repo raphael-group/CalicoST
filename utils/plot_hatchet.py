@@ -29,9 +29,12 @@ def get_best_r_hmrf(configuration_file):
         return None
     
 
-def convert_copy_to_states(A_copy, B_copy):
-    tmp = A_copy + B_copy
-    tmp = tmp[~np.isnan(tmp)]
+def convert_copy_to_states(A_copy, B_copy, counts=None):
+    if counts is None:
+        tmp = A_copy + B_copy
+        tmp = tmp[~np.isnan(tmp)]
+    else:
+        tmp = np.concatenate([ np.ones(counts[i]) * (A_copy[i]+B_copy[i]) for i in range(len(counts)) if ~np.isnan(A_copy[i]+B_copy[i]) ])
     base_ploidy = np.median(tmp)
     coarse_states = np.array(["neutral"] * A_copy.shape[0])
     coarse_states[ (A_copy + B_copy < base_ploidy) & (A_copy != B_copy) ] = "del"
@@ -43,9 +46,12 @@ def convert_copy_to_states(A_copy, B_copy):
     return coarse_states
 
 
-def convert_copy_to_totalcopy_states(A_copy, B_copy):
-    tmp = A_copy + B_copy
-    tmp = tmp[~np.isnan(tmp)]
+def convert_copy_to_totalcopy_states(A_copy, B_copy, counts=None):
+    if counts is None:
+        tmp = A_copy + B_copy
+        tmp = tmp[~np.isnan(tmp)]
+    else:
+        tmp = np.concatenate([ np.ones(counts[i]) * (A_copy[i]+B_copy[i]) for i in range(len(counts)) if ~np.isnan(A_copy[i]+B_copy[i]) ])
     base_ploidy = np.median(tmp)
     coarse_states = np.array(["neutral"] * A_copy.shape[0])
     coarse_states[ (A_copy + B_copy < base_ploidy) ] = "del"
@@ -136,11 +142,11 @@ def stateaccuracy_allele_starch(configuration_file, r_hmrf_initialization, hatch
     retained_hatchet_clones = [x[6:] for x in df_wes.columns if x.startswith("Acopy_")]
     percent_category = np.zeros( (len(clone_ids), len(retained_hatchet_clones)) )
     for s,sid in enumerate(retained_hatchet_clones):
-        coarse_states_wes = fun_hatchetconvert(df_wes[f"Acopy_{sid}"].values[snp_seg_index], df_wes[f"Bcopy_{sid}"].values[snp_seg_index])
+        coarse_states_wes = fun_hatchetconvert(df_wes[f"Acopy_{sid}"].values[snp_seg_index], df_wes[f"Bcopy_{sid}"].values[snp_seg_index], counts=df_wes.END.values-df_wes.START.values)
         # accuracy
         for c,cid in enumerate(clone_ids):
             # coarse
-            coarse_states_inferred = fun_hatchetconvert(df_starch_cnv[f"clone{cid} A"].values, df_starch_cnv[f"clone{cid} B"].values)
+            coarse_states_inferred = fun_hatchetconvert(df_starch_cnv[f"clone{cid} A"].values, df_starch_cnv[f"clone{cid} B"].values, counts=df_starch_cnv.END.values-df_starch_cnv.START.values)
             percent_category[c, s] = 1.0 * np.sum(coarse_states_inferred == coarse_states_wes) / len(coarse_states_inferred)
     return percent_category, sorted_chr_pos
 
@@ -185,6 +191,41 @@ def exactaccuracy_allele_starch(configuration_file, r_hmrf_initialization, hatch
     return percent_exact, sorted_chr_pos
 
 
+
+def precision_recall_genelevel_allele_starch(configuration_file, r_hmrf_initialization, hatchet_wes_file, midfix="", ordered_chr=[str(c) for c in range(1,23)]):
+    try:
+        config = read_configuration_file(configuration_file)
+    except:
+        config = read_joint_configuration_file(configuration_file)
+    
+    # calicost results
+    outdir = f"{config['output_dir']}/clone{config['n_clones']}_rectangle{r_hmrf_initialization}_w{config['spatial_weight']:.1f}"
+    df_calicost = pd.read_csv(f"{outdir}/cnv_{midfix}genelevel.tsv", sep="\t", header=0, index_col=0)
+    calico_clones = [x.split(" ")[0][5:] for x in df_calicost.columns if x.endswith(" A")]
+    for c in calico_clones:
+        tmp = convert_copy_to_states(df_calicost[f"clone{c} A"].values, df_calicost[f"clone{c} B"].values)
+        tmp[tmp == "bdel"] = "del"
+        tmp[tmp == "bamp"] = "amp"
+        df_calicost[f"srt_cnstate_clone{c}"] = tmp
+
+    # read hatchet results and join tables
+    df_hatchet = pd.read_csv(hatchet_wes_file, header=0, index_col=0, sep="\t")
+    hatchet_clones = [x[13:] for x in df_hatchet.columns if x.startswith("cnstate_clone")]
+    df_calicost = df_calicost.join( df_hatchet[[x for x in df_hatchet.columns if "cnstate_clone" in x]], how="inner" )
+
+    # precision and recall of DEL, AMP, LOH for each pair of clones
+    df_accuracy = []
+    for event in ["del", "amp", "loh"]:
+        for c in calico_clones:
+            for s in hatchet_clones:
+                precision = np.sum( (df_calicost[f"srt_cnstate_clone{c}"].values == event) & (df_calicost[f"cnstate_clone{s}"].values == event) ) / np.sum(df_calicost[f"srt_cnstate_clone{c}"].values == event)
+                recall = np.sum( (df_calicost[f"srt_cnstate_clone{c}"].values == event) & (df_calicost[f"cnstate_clone{s}"].values == event) ) / np.sum(df_calicost[f"cnstate_clone{s}"].values == event)
+                df_accuracy.append( pd.DataFrame({"clone_pair":f"{c},{s}", "event":event, "acc":[precision, recall], "acc_name":["precision", "recall"]}) )
+            
+    df_accuracy = pd.concat(df_accuracy, ignore_index=True)
+    return df_accuracy
+
+
 def plot_hatchet_acn(hatchet_dir, hatchet_cnfile, out_file, ordered_chr=[str(c) for c in range(1,23)]):
     # read in hatchet integer copy number file
     df_hatchet = pd.read_csv(f"{hatchet_dir}/results/{hatchet_cnfile}", sep='\t', index_col=None, header=0)
@@ -220,6 +261,64 @@ def plot_hatchet_acn(hatchet_dir, hatchet_cnfile, out_file, ordered_chr=[str(c) 
     fig.savefig(out_file, transparent=True, bbox_inches="tight")
 
 
+def add_cn_state(df_hatchet):
+    hatchet_clones = [x[8:] for x in df_hatchet.columns if x.startswith("cn_clone")]
+    assert ("START" in df_hatchet.columns) and ("END" in df_hatchet.columns)
+    for n in hatchet_clones:
+        # compute total copy number per bin
+        total_cn = np.array([ int(x.split("|")[0]) + int(x.split("|")[1]) for x in df_hatchet[f"cn_clone{n}"] ])
+        # check whether each bin is homozygous, i.e., either first cn is 0 or second cn is 0
+        is_homozygous = np.array([ (int(x.split("|")[0])==0) or (int(x.split("|")[1])==0) for x in df_hatchet[f"cn_clone{n}"] ])
+        # compute median total copy number weighted by END - START
+        median_cn = np.median(np.concatenate([ np.ones(df_hatchet.END.values[i]-df_hatchet.START.values[i]) * x for i,x in enumerate(total_cn) ]))
+        # get cn_state vector such that total_cn > median_cn is "amp", total_cn < median_cn is "del", and total_cn == median_cn is "neu"
+        cn_state = np.array(["neu"] * len(total_cn))
+        cn_state[total_cn > median_cn] = "amp"
+        cn_state[total_cn < median_cn] = "del"
+        cn_state[ (total_cn == median_cn) & (is_homozygous) ] = "loh"
+        # add cn_state to df_hatchet
+        df_hatchet[f"cnstate_clone{n}"] = cn_state
+    return df_hatchet
+
+
+def map_hatchet_to_genes(hatchet_resultfile, hgtable_file, out_file, ordered_chr=[str(c) for c in range(1,23)]):
+    # read in hatchet integer copy number file
+    df_hatchet = read_hatchet(hatchet_resultfile)
+    if df_hatchet.shape[0] == 0:
+        return
+    # get CN state from integer copy numbers
+    df_hatchet = add_cn_state(df_hatchet)
+    # hatchet clones
+    hatchet_clones = [x[8:] for x in df_hatchet.columns if x.startswith("cn_clone")]
+
+    # read hgtable file
+    ordered_chr_map = {ordered_chr[i]:i for i in range(len(ordered_chr))}
+    df_genes = pd.read_csv(hgtable_file, header=0, index_col=0, sep="\t")
+    if ~np.any( df_genes["chrom"].map(str).isin(ordered_chr) ):
+        df_genes["chrom"] = df_genes["chrom"].map(lambda x: x.replace("chr", ""))
+    df_genes = df_genes[df_genes.chrom.isin(ordered_chr)]
+    df_genes["int_chrom"] = df_genes.chrom.map(ordered_chr_map)
+    df_genes.sort_values(by=["int_chrom", "cdsStart"], inplace=True)
+
+    # find the row corresponding to each gene in df_genes
+    gene_names = []
+    gene_cns = []
+    gene_states = []
+    b = 0
+    for g in range(df_genes.shape[0]):
+        this_chrom = df_genes.int_chrom.values[g]
+        this_start = df_genes.cdsStart.values[g]
+        this_end = df_genes.cdsEnd.values[g]
+        while b < df_hatchet.shape[0] and (df_hatchet.int_chrom.values[b] < this_chrom or (df_hatchet.int_chrom.values[b] == this_chrom and df_hatchet.END.values[b] < this_start)):
+            b += 1
+        if b < df_hatchet.shape[0] and df_hatchet.int_chrom.values[b] == this_chrom and df_hatchet.START.values[b] <= this_start and df_hatchet.END.values[b] >= this_end:
+            gene_names.append(df_genes.name2.values[g])
+            gene_cns.append( np.array([ df_hatchet[f"cn_clone{c}"].values[b] for c in hatchet_clones ]) )
+            gene_states.append( np.array([ df_hatchet[f"cnstate_clone{c}"].values[b] for c in hatchet_clones ]) )
+    df_hatchet_genes = pd.DataFrame( np.hstack([ np.array(gene_cns), np.array(gene_states) ]), index=gene_names, columns=[f"cn_clone{x}" for x in hatchet_clones] + [f"cnstate_clone{x}" for x in hatchet_clones])
+    df_hatchet_genes.to_csv(out_file, sep="\t", header=True, index=True)
+
+
 if __name__ == "__main__":
     if len(sys.argv) == 1:
         print("python plot_hatchet.py <hatchet_dir> <hatchet_cnfile> <out_file>")
@@ -227,5 +326,9 @@ if __name__ == "__main__":
     
     hatchet_dir = sys.argv[1]
     hatchet_cnfile = sys.argv[2]
-    out_file = sys.argv[3]
-    plot_hatchet_acn(hatchet_dir, hatchet_cnfile, out_file)
+    out_plot = sys.argv[3]
+    out_file = sys.argv[4]
+    plot_hatchet_acn(hatchet_dir, hatchet_cnfile, out_plot)
+    # output gene-level file
+    hgtable_file = "/home/congma/congma/codes/locality-clustering-cnv/data/hgTables_hg38_gencode.txt"
+    map_hatchet_to_genes(f"{hatchet_dir}/results/{hatchet_cnfile}", hgtable_file, out_file)
