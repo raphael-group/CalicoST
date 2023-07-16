@@ -29,6 +29,24 @@ def get_best_r_hmrf(configuration_file):
         return None
     
 
+def strict_convert_copy_to_states(A_copy, B_copy, counts=None):
+    if counts is None:
+        tmp = A_copy + B_copy
+        tmp = tmp[~np.isnan(tmp)]
+    else:
+        tmp = np.concatenate([ np.ones(counts[i]) * (A_copy[i]+B_copy[i]) for i in range(len(counts)) if ~np.isnan(A_copy[i]+B_copy[i]) ])
+    base_ploidy = np.median(tmp)
+    is_homozygous = (A_copy == 0) | (B_copy == 0)
+    coarse_states = np.array(["neutral"] * A_copy.shape[0])
+    coarse_states[ (A_copy + B_copy < base_ploidy) & (A_copy != B_copy) ] = "del"
+    coarse_states[ (A_copy + B_copy < base_ploidy) & (A_copy == B_copy) ] = "bdel"
+    coarse_states[ (A_copy + B_copy > base_ploidy) & (A_copy != B_copy) ] = "amp"
+    coarse_states[ (A_copy + B_copy > base_ploidy) & (A_copy == B_copy) ] = "bamp"
+    coarse_states[ (A_copy + B_copy == base_ploidy) & (is_homozygous) ] = "loh"
+    coarse_states[coarse_states == "neutral"] = "neu"
+    return coarse_states
+
+
 def convert_copy_to_states(A_copy, B_copy, counts=None):
     if counts is None:
         tmp = A_copy + B_copy
@@ -203,7 +221,7 @@ def precision_recall_genelevel_allele_starch(configuration_file, r_hmrf_initiali
     df_calicost = pd.read_csv(f"{outdir}/cnv_{midfix}genelevel.tsv", sep="\t", header=0, index_col=0)
     calico_clones = [x.split(" ")[0][5:] for x in df_calicost.columns if x.endswith(" A")]
     for c in calico_clones:
-        tmp = convert_copy_to_states(df_calicost[f"clone{c} A"].values, df_calicost[f"clone{c} B"].values)
+        tmp = strict_convert_copy_to_states(df_calicost[f"clone{c} A"].values, df_calicost[f"clone{c} B"].values)
         tmp[tmp == "bdel"] = "del"
         tmp[tmp == "bamp"] = "amp"
         df_calicost[f"srt_cnstate_clone{c}"] = tmp
