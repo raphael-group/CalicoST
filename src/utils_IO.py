@@ -67,8 +67,6 @@ def load_data(spaceranger_dir, snp_dir, filtergenelist_file, filterregion_file, 
     adata = adata[indicator, :]
     cell_snp_Aallele = cell_snp_Aallele[indicator, :]
     cell_snp_Ballele = cell_snp_Ballele[indicator, :]
-    if not (across_slice_adjacency_mat is None):
-        across_slice_adjacency_mat = across_slice_adjacency_mat[indicator,:][:,indicator]
 
     # filter out genes that are expressed in <0.5% cells
     indicator = (np.sum(adata.X > 0, axis=0) >= 0.005 * adata.shape[0]).A.flatten()
