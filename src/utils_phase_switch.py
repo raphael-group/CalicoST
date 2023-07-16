@@ -249,6 +249,27 @@ def get_intervals(pred_cnv):
     return intervals, labs
 
 
+def get_intervals_nd(pred_cnv):
+    """
+    pred_cnv : np.array of shape (n_bins, n_clones)
+    """
+    intervals = []
+    labs = []
+    s = 0
+    while s < len(pred_cnv):
+        t = np.where(np.any(pred_cnv[s:] != pred_cnv[s], axis=1))[0]
+        if len(t) == 0:
+            intervals.append( (s, len(pred_cnv))  )
+            labs.append( pred_cnv[s] )
+            s = len(pred_cnv)
+        else:
+            t = t[0]
+            intervals.append( (s,s+t) )
+            labs.append( pred_cnv[s] )
+            s = s+t
+    return intervals, labs
+
+
 def postbinning_forvisual(X, base_nb_mean, total_bb_RD, lengths, res, binsize=2):
     # a list of intervals used in binning for transforming back to non-binned space
     intervals = []
