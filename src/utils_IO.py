@@ -1320,10 +1320,19 @@ def strict_convert_copy_to_states(A_copy, B_copy, counts=None):
 
 
 def summary_events(cnv_segfile, rescombinefile, minlength=10):
+    EPS_BAF = 0.07
+    # read rescombine file
+    res_combine = dict(np.load(rescombinefile, allow_pickle=True))
+    pred_cnv = res_combine["pred_cnv"]
+    logrdr_profile = np.vstack([ res_combine["new_log_mu"][pred_cnv[:,c], c] for c in range(pred_cnv.shape[1]) ])
+    baf_profile = np.vstack([ res_combine["new_p_binom"][pred_cnv[:,c], c] for c in range(pred_cnv.shape[1]) ])
+
     # read CNV file
     df_cnv = pd.read_csv(cnv_segfile, header=0, sep='\t')
     # get clone names
     calico_clones = np.array([ x.split(" ")[0][5:] for x in df_cnv.columns if x.endswith(" A") ])
+    # retain only the clones that are not entirely diploid
+    calico_clones = [c for c in calico_clones if np.sum(np.abs(baf_profile[int(c),:] - 0.5) > EPS_BAF) > minlength ]
     # label CNV states per bin per clone into "neu", "del", "amp", "loh" states
     for c in calico_clones:
         counts = df_cnv.END.values-df_cnv.START.values
@@ -1368,26 +1377,28 @@ def summary_events(cnv_segfile, rescombinefile, minlength=10):
     df_concise_events = pd.concat(concise_events, ignore_index=True)
 
     # add the RDR abd BAF info
-    res_combine = dict(np.load(rescombinefile, allow_pickle=True))
-    pred_cnv = res_combine["pred_cnv"]
     rdr = np.nan * np.ones(df_concise_events.shape[0])
     baf = np.nan * np.ones(df_concise_events.shape[0])
     rdr_diff = np.nan * np.ones(df_concise_events.shape[0])
     baf_diff = np.nan * np.ones(df_concise_events.shape[0])
     for i in range(df_concise_events.shape[0]):
-        involved_clones = np.array([int(x) for x in df_concise_events.involved_clones.values[i].split(",")])
+        involved_clones = np.array([int(c) for c in df_concise_events.involved_clones.values[i].split(",")])
         bs = df_concise_events.BinSTART.values[i]
         be = df_concise_events.BinEND.values[i]
-        rdr[i] = np.exp(np.mean(res_combine["new_log_mu"][ (pred_cnv[bs:be,:][:,involved_clones].flatten(), np.tile(involved_clones, be-bs)) ]))
-        baf[i] = np.mean(res_combine["new_p_binom"][ (pred_cnv[bs:be,:][:,involved_clones].flatten(), np.tile(involved_clones, be-bs)) ])
+        # rdr[i] = np.exp(np.mean(res_combine["new_log_mu"][ (pred_cnv[bs:be,:][:,involved_clones].flatten(), np.tile(involved_clones, be-bs)) ]))
+        # baf[i] = np.mean(res_combine["new_p_binom"][ (pred_cnv[bs:be,:][:,involved_clones].flatten(), np.tile(involved_clones, be-bs)) ])
+        rdr[i] = np.exp(np.mean( np.concatenate([logrdr_profile[i, bs:be] for i in involved_clones ]) ))
+        baf[i] = np.mean( np.concatenate([baf_profile[i, bs:be] for i in involved_clones ]) )
         # get the uninvolved clones
-        uninvolved_clones = np.array([i for i in range(1, res_combine["new_log_mu"].shape[1]) if i not in involved_clones])
+        uninvolved_clones = np.array([int(c)for c in calico_clones if int(c) not in involved_clones])
         if len(uninvolved_clones) > 0:
-            rdr_diff[i] = np.exp(np.mean(res_combine["new_log_mu"][ (pred_cnv[bs:be,:][:,uninvolved_clones].flatten(), np.tile(uninvolved_clones, be-bs)) ])) - rdr[i]
-            baf_diff[i] = np.mean(res_combine["new_p_binom"][ (pred_cnv[bs:be,:][:,uninvolved_clones].flatten(), np.tile(uninvolved_clones, be-bs)) ]) - baf[i]
+            # rdr_diff[i] = np.exp(np.mean(res_combine["new_log_mu"][ (pred_cnv[bs:be,:][:,uninvolved_clones].flatten(), np.tile(uninvolved_clones, be-bs)) ])) - rdr[i]
+            # baf_diff[i] = np.mean(res_combine["new_p_binom"][ (pred_cnv[bs:be,:][:,uninvolved_clones].flatten(), np.tile(uninvolved_clones, be-bs)) ]) - baf[i]
+            rdr_diff[i] = rdr[i] - np.exp(np.mean( np.concatenate([logrdr_profile[i, bs:be] for i in uninvolved_clones ]) ))
+            baf_diff[i] = baf[i] - np.mean( np.concatenate([baf_profile[i, bs:be] for i in uninvolved_clones ]) )
     df_concise_events["RDR"] = rdr
     df_concise_events["BAF"] = baf
     df_concise_events["RDR_diff"] = rdr_diff
     df_concise_events["BAF_diff"] = baf_diff
 
-    return df_concise_events[["CHR", "START", "END", "RDR", "BAF", "RDR_diff", "BAF_diff", "CN", "Label", "involved_clones"]]
+    return df_concise_events[["CHR", "START", "END", "BinSTART", "BinEND", "RDR", "BAF", "RDR_diff", "BAF_diff", "CN", "Label", "involved_clones"]]

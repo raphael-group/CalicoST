@@ -360,6 +360,201 @@ def plot_acn_legend(fig, shift_y=0.3):
     return fig
 
 
+def plot_acn_withhighlight(cn_file, df_highlight_events, ax_handle, clone_ids=None, clone_names=None, add_chrbar=True, chrbar_thickness=0.1, add_legend=True, remove_xticks=True):
+    """
+    df_highlight_events: dataframe with columns: ["BinSTART", "BinEND", "involved_clones"]
+    """
+    # full color palette
+    palette,_ = get_full_palette()
+
+    # read CN profiles
+    df_cnv = pd.read_csv(cn_file, header=0, sep="\t")
+    final_clone_ids = np.unique([ x.split(" ")[0][5:] for x in df_cnv.columns[3:] ])
+    print(final_clone_ids)
+    assert (clone_ids is None) or np.all([ (cid in final_clone_ids) for cid in clone_ids])
+
+    found = []
+    for cid in final_clone_ids:
+        major = np.maximum(df_cnv[f"clone{cid} A"].values, df_cnv[f"clone{cid} B"].values)
+        minor = np.minimum(df_cnv[f"clone{cid} A"].values, df_cnv[f"clone{cid} B"].values)
+        found += list(zip(major, minor))
+    found = list(set(found))
+    found.sort()
+
+    # map CN to single digit number
+    map_cn = {x:i for i,x in enumerate(found)}
+    cnv_mapped = []
+    ploidy = []
+    for cid in final_clone_ids:
+        major = np.maximum(df_cnv[f"clone{cid} A"].values, df_cnv[f"clone{cid} B"].values)
+        minor = np.minimum(df_cnv[f"clone{cid} A"].values, df_cnv[f"clone{cid} B"].values)
+        cnv_mapped.append( [map_cn[(major[i], minor[i])] for i in range(len(major))] )
+        ploidy.append( np.mean(major + minor) )
+    cnv_mapped = pd.DataFrame( np.array(cnv_mapped), index=[f"clone {cid}" for cid in final_clone_ids])
+    ploidy = pd.DataFrame(np.around(np.array(ploidy), decimals=2).reshape(-1,1), index=[f"clone {cid}" for cid in final_clone_ids])
+    chr_ids = df_cnv.CHR
+
+    colors = [palette[c] for c in found]
+    if clone_ids is None:
+        tmp_ploidy = [ploidy.loc[f"clone {cid}"].values[0] for cid in final_clone_ids]
+        rename_cnv_mapped = pd.DataFrame(cnv_mapped.values, index=[f"clone {cid}\nploidy {tmp_ploidy[c]}" for c,cid in enumerate(final_clone_ids)])
+        seaborn.heatmap(rename_cnv_mapped, cmap=LinearSegmentedColormap.from_list('multi-level', colors, len(colors)), linewidths=0, cbar=False, rasterized=True, ax=ax_handle)
+    else:
+        tmp_ploidy = [ploidy.loc[f"clone {cid}"].values[0] for cid in clone_ids]
+        if clone_names is None:
+            rename_cnv_mapped = pd.DataFrame(cnv_mapped.loc[[f"clone {cid}" for cid in clone_ids]].values, index=[f"clone {cid}\nploidy {tmp_ploidy[c]}" for c,cid in enumerate(clone_ids)])
+        else:
+            rename_cnv_mapped = pd.DataFrame(cnv_mapped.loc[[f"clone {cid}" for cid in clone_ids]].values, index=[f"{clone_names[c]}\nploidy {tmp_ploidy[c]}" for c,cid in enumerate(clone_ids)])
+        seaborn.heatmap(rename_cnv_mapped, cmap=LinearSegmentedColormap.from_list('multi-level', colors, len(colors)), linewidths=0, cbar=False, rasterized=True, ax=ax_handle)
+
+    for i in range(df_highlight_events.shape[0]):
+        involved_clones = df_highlight_events.involved_clones.values[i]
+        # interval start and end
+        interval = [df_highlight_events.BinSTART.values[i], df_highlight_events.BinEND.values[i]]
+        if clone_ids is None:
+            for c, cid in enumerate(final_clone_ids):
+                if not cid in involved_clones:
+                    continue
+                y1 = c
+                y2 = c+1
+                ax_handle.fill_between( np.arange(interval[0], interval[1]), y1, y2, color="none", edgecolor="black", linewidth=2)
+        else:
+            for c, cid in enumerate(clone_ids):
+                if not cid in involved_clones:
+                    continue
+                y1 = c
+                y2 = c+1
+                ax_handle.fill_between( np.arange(interval[0], interval[1]), y1, y2, color="none", edgecolor="black", linewidth=2)
+        
+    if add_chrbar:
+        # add chr color
+        chr_palette = cycle(['#525252', '#969696', '#cccccc'])
+        lut = {c:next(chr_palette) for c in np.unique(chr_ids.values)}
+        col_colors = chr_ids.map(lut)
+        for i, color in enumerate(col_colors):
+            ax_handle.add_patch(plt.Rectangle(xy=(i, 1.01), width=1, height=chrbar_thickness, color=color, lw=0, transform=ax_handle.get_xaxis_transform(), clip_on=False, rasterized=True))
+
+        for c in np.unique(chr_ids.values):
+            interval = np.where(chr_ids.values == c)[0]
+            mid = np.percentile(interval, 45)
+            ax_handle.text(mid-10, 1.04, str(c), transform=ax_handle.get_xaxis_transform())
+
+    ax_handle.set_yticklabels(ax_handle.get_yticklabels(), rotation=0)
+    if remove_xticks:
+        ax_handle.set_xticks([])
+
+    if add_legend:
+        a00 = plt.arrow(0,0, 0,0, 
+        color='darkblue')
+        a10 = plt.arrow(0,0, 0,0, color='lightblue')
+        a11 = plt.arrow(0,0, 0,0, color='lightgray')
+        a20 = plt.arrow(0,0, 0,0, color='dimgray')
+        a21 = plt.arrow(0,0, 0,0, color='lightgoldenrodyellow')
+        a30 = plt.arrow(0,0, 0,0, color='gold')
+        a22 = plt.arrow(0,0, 0,0, color='navajowhite')
+        a31 = plt.arrow(0,0, 0,0, color='orange')
+        a40 = plt.arrow(0,0, 0,0, color='darkorange')
+        a32 = plt.arrow(0,0, 0,0, color='salmon')
+        a41 = plt.arrow(0,0, 0,0, color='red')
+        a50 = plt.arrow(0,0, 0,0, color='darkred')
+        a33 = plt.arrow(0,0, 0,0, color='plum')
+        a42 = plt.arrow(0,0, 0,0, color='orchid')
+        a51 = plt.arrow(0,0, 0,0, color='purple')
+        a60 = plt.arrow(0,0, 0,0, color='indigo')
+        ax_handle.legend([a00, a10, a11, a20, a21, a30, a22, a31, a40, a32, a41, a50, a33, a42, a51, a60], \
+        ['(0, 0)','(1, 0)','(1, 1)','(2, 0)', '(2, 1)','(3, 0)', '(2, 2)','(3, 1)','(4, 0)','(3, 2)', \
+        '(4, 1)','(5, 0)', '(3, 3)','(4, 2)','(5, 1)','(6, 0)'], ncol=2, loc='upper left', bbox_to_anchor=(1,1 - 0.1 * min(0, rename_cnv_mapped.shape[0]-6)))
+    return ax_handle
+
+
+def plot_total_cn(df_cnv, ax_handle, df_highlight_events=None, palette_mode=6, clone_ids=None, clone_names=None, add_chrbar=True, chrbar_thickness=0.1, add_legend=True, remove_xticks=True):
+    """
+    df_cnv : pandas.DataFrame
+        Each row is a genomic bin, containing columns "CHR", "clone {cid}" for each clone id.
+    palette_mode : int
+        Either 6 for 6-state palette, or 3 for 3-state palette.
+    """
+    chr_ids = df_cnv.CHR
+
+    # create a cmap that map "amp" to #B44F3D, "bamp" to #E18073, "bdel" to #A0CEEA, "del" to #4F69DF, "loh" to #738B2D
+    if palette_mode == 6:
+        full_palette = {"amp":"#B44F3D", "bamp":"#E18073", "bdel":"#A0CEEA", "del":"#4F69DF", "loh":"#738B2D", "neu":"lightgrey"}
+    else:
+        full_palette = {"amp":"#B44F3D", "del":"#4F69DF", "neu":"lightgrey"}
+
+    if clone_ids is None:
+        found = np.unique(df_cnv.iloc[:, df_cnv.columns.str.startswith("clone")].values.flatten())
+        lut = {x:i for i,x in enumerate(found)}
+        palette = matplotlib.colors.ListedColormap([full_palette[x] for x in found])
+        df_cnv_mapped = pd.concat([ df_cnv[[x]].replace({x:lut}) for x in df_cnv.columns if x.startswith("clone") ], axis=1)
+        df_cnv_mapped = df_cnv_mapped.T
+        seaborn.heatmap(df_cnv_mapped, cmap=palette, linewidths=0, cbar=False, rasterized=True, ax=ax_handle)
+    else:
+        found = np.unique(df_cnv[[f"clone {cid}" for cid in clone_ids]].values.flatten())
+        lut = {x:i for i,x in enumerate(found)}
+        palette = matplotlib.colors.ListedColormap([full_palette[x] for x in found])
+        df_cnv_mapped = pd.concat([ df_cnv[[f"clone {cid}" for cid in clone_ids]].replace({f"clone {cid}":lut}) for cid in clone_ids ], axis=1)
+        df_cnv_mapped = df_cnv_mapped.T
+        if not clone_names is None:
+            df_cnv_mapped.rename(index={f"clone {cid}":clone_names[i] for i,cid in enumerate(clone_ids)}, inplace=True)
+        seaborn.heatmap(df_cnv_mapped, cmap=palette, linewidths=0, cbar=False, rasterized=True, ax=ax_handle)
+
+    if not df_highlight_events is None:
+        final_clone_ids = [x.split(" ")[1] for x in df_cnv.columns if x.startswith("clone")]
+        for i in range(df_highlight_events.shape[0]):
+            involved_clones = df_highlight_events.involved_clones.values[i]
+            # interval start and end
+            interval = [df_highlight_events.BinSTART.values[i], df_highlight_events.BinEND.values[i]]
+            if clone_ids is None:
+                for c, cid in enumerate(final_clone_ids):
+                    if not cid in involved_clones:
+                        continue
+                    y1 = c
+                    y2 = c+1
+                    ax_handle.fill_between( np.arange(interval[0], interval[1]), y1, y2, color="none", edgecolor="black", linewidth=2)
+            else:
+                for c, cid in enumerate(clone_ids):
+                    if not cid in involved_clones:
+                        continue
+                    y1 = c
+                    y2 = c+1
+                    ax_handle.fill_between( np.arange(interval[0], interval[1]), y1, y2, color="none", edgecolor="black", linewidth=2)
+
+    if add_chrbar:
+        # add chr color
+        chr_palette = cycle(['#525252', '#969696', '#cccccc'])
+        lut = {c:next(chr_palette) for c in np.unique(chr_ids.values)}
+        col_colors = chr_ids.map(lut)
+        for i, color in enumerate(col_colors):
+            ax_handle.add_patch(plt.Rectangle(xy=(i, 1 + 0.02*chrbar_thickness), width=1, height=chrbar_thickness, color=color, lw=0, transform=ax_handle.get_xaxis_transform(), clip_on=False, rasterized=True))
+
+        for c in np.unique(chr_ids.values):
+            interval = np.where(chr_ids.values == c)[0]
+            mid = np.percentile(interval, 45)
+            ax_handle.text(mid-10, 1 + 0.2*chrbar_thickness, str(c), transform=ax_handle.get_xaxis_transform())
+
+    ax_handle.set_yticklabels(ax_handle.get_yticklabels(), rotation=0)
+    if remove_xticks:
+        ax_handle.set_xticks([])
+
+    if add_legend:
+        if palette_mode == 6:
+            a0 = plt.arrow(0,0, 0,0, color='#B44F3D')
+            a1 = plt.arrow(0,0, 0,0, color='#E18073')
+            a2 = plt.arrow(0,0, 0,0, color='lightgrey')
+            a3 = plt.arrow(0,0, 0,0, color='#A0CEEA')
+            a4 = plt.arrow(0,0, 0,0, color='#4F69DF')
+            a5 = plt.arrow(0,0, 0,0, color='#738B2D')
+            ax_handle.legend([a0, a1, a2, a3, a4, a5], ["amp", "bamp", "neu", "bdel", "del", "loh"], loc='upper left', bbox_to_anchor=(1,1 - 0.1 * min(0, df_cnv_mapped.shape[0]-5)))
+        else:
+            a0 = plt.arrow(0,0, 0,0, color='#B44F3D')
+            a1 = plt.arrow(0,0, 0,0, color='lightgrey')
+            a2 = plt.arrow(0,0, 0,0, color='#4F69DF')
+            ax_handle.legend([a0, a1, a2], ["amp", "neu", "del"], loc='upper left', bbox_to_anchor=(1,1 - 0.1 * min(0, df_cnv_mapped.shape[0]-2)))
+
+    return ax_handle
+
+
 def plot_amp_del(cn_file, ax_handle, clone_ids=None, clone_names=None, add_chrbar=True, chrbar_thickness=0.1, add_legend=True, remove_xticks=True):
     # define color palette that maps 0 to lightgrey, -2 and -1 to blues with increasing intensity, and 1 and 2 to reds with increasing intensity
     palette_map = {-2+i:x for i,x in enumerate(seaborn.color_palette("coolwarm", 5).as_hex())}
