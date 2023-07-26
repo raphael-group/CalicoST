@@ -364,10 +364,10 @@ def main(configuration_file):
                     pred_cnv = res["pred_cnv"][ (c*n_obs):(c*n_obs+n_obs) ].reshape((-1,1))
                 else:
                     if config["tumorprop_file"] is None:
-                        X, base_nb_mean, total_bb_RD = merge_pseudobulk_by_index(single_X[:,:,idx_spots], single_base_nb_mean[:,idx_spots], single_total_bb_RD[:,idx_spots], [np.where(res["new_assignment"]==c)[0] for c in range(config['n_clones_rdr'])])
+                        X, base_nb_mean, total_bb_RD = merge_pseudobulk_by_index(single_X[:,:,idx_spots], single_base_nb_mean[:,idx_spots], single_total_bb_RD[:,idx_spots], [np.where(res["new_assignment"]==c)[0] for c in np.sort(np.unique(res["new_assignment"])) ])
                         tumor_prop = None
                     else:
-                        X, base_nb_mean, total_bb_RD, tumor_prop = merge_pseudobulk_by_index_mix(single_X[:,:,idx_spots], single_base_nb_mean[:,idx_spots], single_total_bb_RD[:,idx_spots], [np.where(res["new_assignment"]==c)[0] for c in range(config['n_clones_rdr'])], single_tumor_prop[idx_spots], threshold=config["tumorprop_threshold"])
+                        X, base_nb_mean, total_bb_RD, tumor_prop = merge_pseudobulk_by_index_mix(single_X[:,:,idx_spots], single_base_nb_mean[:,idx_spots], single_total_bb_RD[:,idx_spots], [np.where(res["new_assignment"]==c)[0] for c in np.sort(np.unique(res["new_assignment"])) ], single_tumor_prop[idx_spots], threshold=config["tumorprop_threshold"])
                         tumor_prop = np.repeat(tumor_prop, X.shape[0]).reshape(-1,1)
                     merging_groups, merged_res = similarity_components_rdrbaf_neymanpearson(X, base_nb_mean, total_bb_RD, res, threshold=config["np_threshold"], minlength=config["np_eventminlen"], params="smp", tumor_prop=tumor_prop, hmmclass=hmm_nophasing_v2)
                     print(f"part {bafc} merging_groups: {merging_groups}")
@@ -454,7 +454,6 @@ def main(configuration_file):
             if not (0 in final_clone_ids):
                 final_clone_ids = np.append(0, final_clone_ids)
             # chr position
-            sorted_chr_pos = list(zip(df_bininfo.CHR.values, df_bininfo.START.values))
             medfix = ["", "_diploid", "_triploid", "_tetraploid"]
             for o,max_medploidy in enumerate([None, 2, 3, 4]):
                 # A/B copy number per bin
@@ -499,8 +498,7 @@ def main(configuration_file):
                 df_genelevel_cnv.to_csv(f"{outdir}/cnv{medfix[o]}_genelevel.tsv", header=True, index=True, sep="\t")
                 # output segment-level copy number
                 allele_specific_copy = pd.concat(allele_specific_copy)
-                df_seglevel_cnv = pd.DataFrame({"CHR":[x[0] for x in sorted_chr_pos], "START":[x[1] for x in sorted_chr_pos], \
-                    "END":[ (sorted_chr_pos[i+1][1] if i+1 < len(sorted_chr_pos) and x[0]==sorted_chr_pos[i+1][0] else -1) for i,x in enumerate(sorted_chr_pos)] })
+                df_seglevel_cnv = pd.DataFrame({"CHR":df_bininfo.CHR.values, "START":df_bininfo.START.values, "END":df_bininfo.END.values })
                 df_seglevel_cnv = df_seglevel_cnv.join( allele_specific_copy.T )
                 df_seglevel_cnv.to_csv(f"{outdir}/cnv{medfix[o]}_seglevel.tsv", header=True, index=False, sep="\t")
                 # output per-state copy number
@@ -524,6 +522,46 @@ def main(configuration_file):
             if not config["tumorprop_file"] is None:
                 df_clone_label["tumor_proportion"] = single_tumor_prop
             df_clone_label.to_csv(f"{outdir}/clone_labels.tsv", header=True, index=True, sep="\t")
+
+            ##### plotting #####
+            # make a directory for plots
+            p = subprocess.Popen(f"mkdir -p {outdir}/plots", shell=True)
+            out, err = p.communicate()
+
+            # plot RDR and BAF
+            cn_file = f"{outdir}/cnv_seglevel.tsv"
+            fig = plot_rdr_baf(configuration_file, r_hmrf_initialization, cn_file, clone_ids=None, remove_xticks=True, rdr_ylim=5, chrtext_shift=-0.3, base_height=3.2, pointsize=30, palette="tab10")
+            fig.savefig(f"{outdir}/plots/rdr_baf_defaultcolor.pdf", transparent=True, bbox_inches="tight")
+            # plot allele-specific copy number
+            for o,max_medploidy in enumerate([2, 3, 4]):
+                cn_file = f"{outdir}/cnv{medfix[o+1]}_seglevel.tsv"
+                fig, axes = plt.subplots(1, 1, figsize=(15, 0.9*len(final_clone_ids) + 0.6), dpi=200, facecolor="white")
+                axes = plot_acn(cn_file, axes, add_chrbar=True, add_arrow=True, chrbar_thickness=0.4/(0.6*len(final_clone_ids) + 0.4), add_legend=True, remove_xticks=True)
+                fig.tight_layout()
+                fig.savefig(f"{outdir}/plots/acn_genome{medfix[o+1]}.pdf", transparent=True, bbox_inches="tight")
+                # additionally plot the allele-specific copy number per region
+                if not config["supervision_clone_file"] is None:
+                    fig, axes = plt.subplots(1, 1, figsize=(15, 0.6*len(unique_clone_ids) + 0.4), dpi=200, facecolor="white")
+                    merged_df_cnv = pd.read_csv(cn_file, header=0, sep="\t")
+                    df_cnv = merged_df_cnv[["CHR", "START", "END"]]
+                    df_cnv = df_cnv.join( pd.DataFrame({f"clone{x} A":merged_df_cnv[f"clone{res_combine['new_assignment'][i]} A"] for i,x in enumerate(unique_clone_ids)}) )
+                    df_cnv = df_cnv.join( pd.DataFrame({f"clone{x} B":merged_df_cnv[f"clone{res_combine['new_assignment'][i]} B"] for i,x in enumerate(unique_clone_ids)}) )
+                    clone_ids = np.concatenate([ unique_clone_ids[res_combine["new_assignment"]==c].astype(str) for c in final_clone_ids ])
+                    axes = plot_acn_from_df(df_cnv, axes, clone_ids=clone_ids, clone_names=[f"region {x}" for x in clone_ids], add_chrbar=True, add_arrow=False, chrbar_thickness=0.4/(0.6*len(unique_clone_ids) + 0.4), add_legend=True, remove_xticks=True)
+                    fig.tight_layout()
+                    fig.savefig(f"{outdir}/plots/acn_genome{medfix[o+1]}_per_region.pdf", transparent=True, bbox_inches="tight")
+            # plot clones in space
+            if not config["supervision_clone_file"] is None:
+                before_assignments = pd.Series([None] * before_coords.shape[0])
+                for i,c in enumerate(unique_clone_ids):
+                    before_assignments.iloc[before_df_clones.clone_id.isin([c])] = f"clone {res_combine['new_assignment'][i]}"
+                fig = plot_clones_in_space(before_coords, before_assignments, sample_list, before_sample_ids, palette="Set2", labels=unique_clone_ids, label_coords=coords, label_sample_ids=sample_ids)
+                fig.savefig(f"{outdir}/plots/clone_spatial.pdf", transparent=True, bbox_inches="tight")
+            else:
+                assignment = pd.Series([f"clone {x}" for x in res_combine["new_assignment"]])
+                fig = plot_clones_in_space(coords, assignment, axes, palette="Set2")
+                fig.savefig(f"{outdir}/plots/clone_spatial.pdf", transparent=True, bbox_inches="tight")
+
             
 
 if __name__ == "__main__":

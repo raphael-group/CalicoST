@@ -93,27 +93,35 @@ def read_hatchet(hatchet_wes_file, ordered_chr=[str(c) for c in range(1,23)], pu
     # sort by int_chrom and START
     df_hatchet = df_hatchet.sort_values(by=["int_chrom", "START"])
 
-    # find samples in hatchet results for which tumor purity > purity_threshold
+    # find tumor clones that are > purity_threshold in any samples
     samples = np.unique(df_hatchet["SAMPLE"].values)
-    tumor_purity = np.array([1-df_hatchet[df_hatchet["SAMPLE"]==s].u_normal.values[0] for s in samples])
-    df_hatchet = df_hatchet[df_hatchet["SAMPLE"].isin(samples[tumor_purity > purity_threshold])]
+    passed_hatchet_clones = []
+    for x in df_hatchet.columns:
+        if not x.startswith("u_clone"):
+            continue
+        pu = np.array([ df_hatchet[df_hatchet["SAMPLE"]==s][f"u_clone{x[7:]}"].values[0] for s in samples ])
+        if np.max(pu) > purity_threshold:
+            passed_hatchet_clones.append(x[7:])
 
-    # make a copy of df_hatchet for the sample with highest tumor purity
-    df_wes = df_hatchet[df_hatchet["SAMPLE"]==samples[np.argmax(tumor_purity)]].copy()
+    # get the sample with largest tumor purity
+    sample_tumor_purity = np.array([1-df_hatchet[df_hatchet["SAMPLE"]==s].u_normal.values[0] for s in samples])
+    df_wes = df_hatchet[df_hatchet["SAMPLE"]==samples[np.argmax(sample_tumor_purity)]].copy()
 
-    # find hatchet clone with the highest proportion within each sample (with purity > purity_threshold)
-    indexes = []
-    for s in samples[tumor_purity > purity_threshold]:
-        hatchet_clones = [x[7:] for x in df_hatchet.columns if x.startswith("u_clone")]
-        prop = [ df_hatchet[df_hatchet["SAMPLE"]==s][f"u_clone{n}"].values[0] for n in hatchet_clones ]
-        indexes.append( hatchet_clones[np.argmax(prop)] )
-    indexes = np.unique(indexes)
+    # drop the clones in df_wes that are not in passed_hatchet_clones
+    columns_to_drop = [x for x in df_wes.columns if x.startswith("u_clone") and x[7:] not in passed_hatchet_clones] + \
+                      [x for x in df_wes.columns if x.startswith("cn_clone") and x[8:] not in passed_hatchet_clones]
+    df_wes = df_wes.drop(columns=columns_to_drop)
+    hatchet_clones = [x[7:] for x in df_wes.columns if x.startswith("u_clone")]
 
     # parse A copy and B copy for each clone for each segment
-    for i,idx in enumerate(indexes):
-        df_wes[f"Acopy_{i}"] = [int(x.split("|")[0]) for x in df_wes[f"cn_clone{idx}"].values]
-        df_wes[f"Bcopy_{i}"] = [int(x.split("|")[1]) for x in df_wes[f"cn_clone{idx}"].values]
-    return df_wes
+    for c in hatchet_clones:
+        df_wes[f"Acopy_{c}"] = [int(x.split("|")[0]) for x in df_wes[f"cn_clone{c}"].values]
+        df_wes[f"Bcopy_{c}"] = [int(x.split("|")[1]) for x in df_wes[f"cn_clone{c}"].values]
+    
+    if len(passed_hatchet_clones) > 0:
+        return df_wes
+    else:
+        return df_wes.iloc[0:0,:]
 
 
 def map_hatchet_to_bins(df_wes, sorted_chr_pos):
@@ -244,7 +252,7 @@ def precision_recall_genelevel_allele_starch(configuration_file, r_hmrf_initiali
     return df_accuracy
 
 
-def plot_hatchet_acn(hatchet_dir, hatchet_cnfile, out_file, ordered_chr=[str(c) for c in range(1,23)]):
+def plot_hatchet_acn(hatchet_dir, hatchet_cnfile, out_file, binsize=1e6, ordered_chr=[str(c) for c in range(1,23)]):
     # read in hatchet integer copy number file
     df_hatchet = pd.read_csv(f"{hatchet_dir}/results/{hatchet_cnfile}", sep='\t', index_col=None, header=0)
     # rename the "#CHR" column to "CHR"
@@ -259,6 +267,18 @@ def plot_hatchet_acn(hatchet_dir, hatchet_cnfile, out_file, ordered_chr=[str(c) 
     # sort by int_chrom and START
     df_hatchet = df_hatchet.sort_values(by=["int_chrom", "START"])
 
+    # expand each row in df_hatchet to multiple rows such that the new row has END - START = binsize
+    df_expand = []
+    for i in range(df_hatchet.shape[0]):
+        # repeat the row i for int(END - START / binsize) times and save to a new dataframe
+        n_bins = max(1, int(1.0*(df_hatchet.iloc[i].END - df_hatchet.iloc[i].START) / binsize))
+        tmp = pd.DataFrame(np.repeat(df_hatchet.iloc[i:(i+1),:].values, n_bins, axis=0), columns=df_hatchet.columns)
+        for k in range(n_bins):
+            tmp.END.iloc[k] = df_hatchet.START.iloc[i]+ k*binsize
+        tmp.END.iloc[-1] = df_hatchet.END.iloc[i]
+        df_expand.append(tmp)
+    df_hatchet = pd.concat(df_expand, ignore_index=True)
+
     # create another dataframe df_cnv, and apply to plot_acn_from_df function for plotting
     df_cnv = df_hatchet[["CHR", "START", "END"]]
     # for each clone in df_hatchet, split the A allele copy and B allele copy to separate columns
@@ -269,12 +289,57 @@ def plot_hatchet_acn(hatchet_dir, hatchet_cnfile, out_file, ordered_chr=[str(c) 
         B_copy = [int(x.split("|")[1]) for x in df_hatchet[f"cn_clone{n}"]]
         df_cnv[f"clone{n} A"] = A_copy
         df_cnv[f"clone{n} B"] = B_copy
-        prop = df_hatchet[f"u_clone{n}"].values[0]
+        prop = df_cnv[f"u_clone{n}"].values[0]
         clone_names.append(f"clone{n} ({prop:.2f})")
 
     # plot
     fig, axes = plt.subplots(1, 1, figsize=(20, 0.6*len(hatchet_clones)+0.4), dpi=200, facecolor="white")
     plot_acn_from_df(df_cnv, axes, clone_ids=hatchet_clones, clone_names=clone_names, add_chrbar=True, chrbar_thickness=0.4/(0.6*len(hatchet_clones) + 0.4), add_legend=True, remove_xticks=True)
+    fig.tight_layout()
+    fig.savefig(out_file, transparent=True, bbox_inches="tight")
+
+
+def plot_hatchet_totalcn(hatchet_dir, hatchet_cnfile, out_file, binsize=1e6, ordered_chr=[str(c) for c in range(1,23)]):
+    # read in hatchet integer copy number file
+    df_hatchet = read_hatchet(f"{hatchet_dir}/results/{hatchet_cnfile}", purity_threshold=0.1)
+    if df_hatchet.shape[0] == 0:
+        return
+    # get CN state from integer copy numbers
+    df_hatchet = add_cn_state(df_hatchet)
+    # hatchet clones
+    hatchet_clones = [x[8:] for x in df_hatchet.columns if x.startswith("cn_clone")]
+
+    # check agreement with ordered_chr
+    ordered_chr_map = {ordered_chr[i]:i for i in range(len(ordered_chr))}
+    if ~np.any( df_hatchet.CHR.isin(ordered_chr) ):
+        df_hatchet["CHR"] = df_hatchet.CHR.map(lambda x: x.replace("chr", ""))
+    df_hatchet = df_hatchet[df_hatchet.CHR.isin(ordered_chr)]
+    df_hatchet["int_chrom"] = df_hatchet.CHR.map(ordered_chr_map)
+    # sort by int_chrom and START
+    df_hatchet = df_hatchet.sort_values(by=["int_chrom", "START"])
+
+    # expand each row in df_hatchet to multiple rows such that the new row has END - START = binsize
+    df_expand = []
+    for i in range(df_hatchet.shape[0]):
+        # repeat the row i for int(END - START / binsize) times and save to a new dataframe
+        n_bins = max(1, int(1.0*(df_hatchet.iloc[i].END - df_hatchet.iloc[i].START) / binsize))
+        tmp = pd.DataFrame(np.repeat(df_hatchet.iloc[i:(i+1),:].values, n_bins, axis=0), columns=df_hatchet.columns)
+        for k in range(n_bins):
+            tmp.END.iloc[k] = df_hatchet.START.iloc[i]+ k*binsize
+        tmp.END.iloc[-1] = df_hatchet.END.iloc[i]
+        df_expand.append(tmp)
+    df_hatchet = pd.concat(df_expand, ignore_index=True)
+
+    # create another dataframe df_cnv, and apply to plot_acn_from_df function for plotting
+    df_cnv = df_hatchet[["CHR", "START", "END"]]
+    # for each clone in df_hatchet, split the A allele copy and B allele copy to separate columns
+    clone_names = []
+    for n in hatchet_clones:
+        df_cnv[f"clone {n}"] = df_hatchet[f"cnstate_clone{n}"]
+
+    # plot
+    fig, axes = plt.subplots(1, 1, figsize=(15,0.9*2+0.6), dpi=200, facecolor="white")
+    plot_total_cn(df_cnv, axes, palette_mode=6, add_chrbar=True, chrbar_thickness=0.4/(0.6*2 + 0.4), add_legend=True, remove_xticks=True)
     fig.tight_layout()
     fig.savefig(out_file, transparent=True, bbox_inches="tight")
 
@@ -288,7 +353,10 @@ def add_cn_state(df_hatchet):
         # check whether each bin is homozygous, i.e., either first cn is 0 or second cn is 0
         is_homozygous = np.array([ (int(x.split("|")[0])==0) or (int(x.split("|")[1])==0) for x in df_hatchet[f"cn_clone{n}"] ])
         # compute median total copy number weighted by END - START
-        median_cn = np.median(np.concatenate([ np.ones(df_hatchet.END.values[i]-df_hatchet.START.values[i]) * x for i,x in enumerate(total_cn) ]))
+        counts = df_hatchet.END.values-df_hatchet.START.values
+        counts = np.maximum(1, counts / 1e4).astype(int)
+        tmp = np.concatenate([ np.ones(counts[i]) * (total_cn[i]) for i in range(len(counts)) if ~np.isnan(total_cn[i]) ])
+        median_cn = np.median(tmp)
         # get cn_state vector such that total_cn > median_cn is "amp", total_cn < median_cn is "del", and total_cn == median_cn is "neu"
         cn_state = np.array(["neu"] * len(total_cn))
         cn_state[total_cn > median_cn] = "amp"
@@ -299,9 +367,47 @@ def add_cn_state(df_hatchet):
     return df_hatchet
 
 
+def add_log2cnratio(df_hatchet):
+    hatchet_clones = [x[8:] for x in df_hatchet.columns if x.startswith("cn_clone")]
+    assert ("START" in df_hatchet.columns) and ("END" in df_hatchet.columns)
+    for n in hatchet_clones:
+        # compute total copy number per bin
+        total_cn = np.array([ int(x.split("|")[0]) + int(x.split("|")[1]) for x in df_hatchet[f"cn_clone{n}"] ])
+        # check whether each bin is homozygous, i.e., either first cn is 0 or second cn is 0
+        is_homozygous = np.array([ (int(x.split("|")[0])==0) or (int(x.split("|")[1])==0) for x in df_hatchet[f"cn_clone{n}"] ])
+        # compute median total copy number weighted by END - START
+        counts = df_hatchet.END.values-df_hatchet.START.values
+        counts = np.maximum(1, counts / 1e4).astype(int)
+        tmp = np.concatenate([ np.ones(counts[i]) * (total_cn[i]) for i in range(len(counts)) if ~np.isnan(total_cn[i]) ])
+        median_cn = np.median(tmp)
+        # compute log2 CNV ratio
+        df_hatchet[f"log2_cnratio_clone{n}"] = np.log2(total_cn / median_cn)
+    return df_hatchet
+
+
+def map_hatchet_to_states(hatchet_resultfile, out_file, ordered_chr=[str(c) for c in range(1,23)]):
+    # read in hatchet integer copy number file
+    df_hatchet = read_hatchet(hatchet_resultfile, purity_threshold=0.1)
+    if df_hatchet.shape[0] == 0:
+        return
+    # get CN state from integer copy numbers
+    df_hatchet = add_cn_state(df_hatchet)
+    # add log2 CNV ratio
+    df_hatchet = add_log2cnratio(df_hatchet)
+    # hatchet clones
+    hatchet_clones = [x[8:] for x in df_hatchet.columns if x.startswith("cn_clone")]
+
+    # re-order df_hatchet_columns
+    ordered_columns = ["CHR", "START", "END"]
+    for n in hatchet_clones:
+        ordered_columns += [f"cn_clone{n}", f"cnstate_clone{n}", f"log2_cnratio_clone{n}"]
+
+    df_hatchet[ordered_columns].to_csv(out_file, sep="\t", header=True, index=False)
+
+
 def map_hatchet_to_genes(hatchet_resultfile, hgtable_file, out_file, ordered_chr=[str(c) for c in range(1,23)]):
     # read in hatchet integer copy number file
-    df_hatchet = read_hatchet(hatchet_resultfile)
+    df_hatchet = read_hatchet(hatchet_resultfile, purity_threshold=0.1)
     if df_hatchet.shape[0] == 0:
         return
     # get CN state from integer copy numbers
@@ -344,9 +450,15 @@ if __name__ == "__main__":
     
     hatchet_dir = sys.argv[1]
     hatchet_cnfile = sys.argv[2]
-    out_plot = sys.argv[3]
-    out_file = sys.argv[4]
-    plot_hatchet_acn(hatchet_dir, hatchet_cnfile, out_plot)
+    out_plot_acn = sys.argv[3]
+    out_plot_tcn = sys.argv[4]
+    out_file_seg = sys.argv[5]
+    out_file_gene = sys.argv[6]
+    plot_hatchet_acn(hatchet_dir, hatchet_cnfile, out_plot_acn)
+    # plot total copy number
+    plot_hatchet_totalcn(hatchet_dir, hatchet_cnfile, out_plot_tcn)
+    # output log2 CNV ratio and copy number state of hatchet
+    map_hatchet_to_states(f"{hatchet_dir}/results/{hatchet_cnfile}", out_file_seg)
     # output gene-level file
     hgtable_file = "/home/congma/congma/codes/locality-clustering-cnv/data/hgTables_hg38_gencode.txt"
-    map_hatchet_to_genes(f"{hatchet_dir}/results/{hatchet_cnfile}", hgtable_file, out_file)
+    map_hatchet_to_genes(f"{hatchet_dir}/results/{hatchet_cnfile}", hgtable_file, out_file_gene)
