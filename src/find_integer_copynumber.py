@@ -75,6 +75,8 @@ def hill_climbing_integer_copynumber_oneclone(new_log_mu, base_nb_mean, new_p_bi
     lambd = base_nb_mean / np.sum(base_nb_mean)
     weight_per_state = np.array([ np.sum(lambd[pred_cnv == s]) for s in range(n_states)])
     mu = np.exp(new_log_mu)
+    #
+    EPS_POINTS = 0.1
     def f(params, ploidy):
         # params of size (n_states, 2)
         if np.any( np.sum(params, axis=1) == 0 ):
@@ -82,7 +84,7 @@ def hill_climbing_integer_copynumber_oneclone(new_log_mu, base_nb_mean, new_p_bi
         denom = weight_per_state.dot( np.sum(params, axis=1) )
         frac_rdr = np.sum(params, axis=1) / denom
         frac_baf = params[:,0] / np.sum(params, axis=1)
-        points_per_state = np.bincount(pred_cnv, minlength=params.shape[0] )
+        points_per_state = np.bincount(pred_cnv, minlength=params.shape[0] ) + EPS_POINTS
         ### temp penalty ###
         mu_threshold = 0.3
         crucial_ordered_pairs_1 = (mu[:,None] - mu[None,:] > mu_threshold) * (np.sum(params, axis=1)[:,None] - np.sum(params, axis=1)[None,:] < 0)

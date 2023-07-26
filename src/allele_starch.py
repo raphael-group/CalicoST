@@ -363,10 +363,10 @@ def main(configuration_file):
                     pred_cnv = res["pred_cnv"][ (c*n_obs):(c*n_obs+n_obs) ].reshape((-1,1))
                 else:
                     if config["tumorprop_file"] is None:
-                        X, base_nb_mean, total_bb_RD = merge_pseudobulk_by_index(single_X[:,:,idx_spots], single_base_nb_mean[:,idx_spots], single_total_bb_RD[:,idx_spots], [np.where(res["new_assignment"]==c)[0] for c in range(config['n_clones_rdr'])])
+                        X, base_nb_mean, total_bb_RD = merge_pseudobulk_by_index(single_X[:,:,idx_spots], single_base_nb_mean[:,idx_spots], single_total_bb_RD[:,idx_spots], [np.where(res["new_assignment"]==c)[0] for c in np.sort(np.unique(res["new_assignment"])) ])
                         tumor_prop = None
                     else:
-                        X, base_nb_mean, total_bb_RD, tumor_prop = merge_pseudobulk_by_index_mix(single_X[:,:,idx_spots], single_base_nb_mean[:,idx_spots], single_total_bb_RD[:,idx_spots], [np.where(res["new_assignment"]==c)[0] for c in range(config['n_clones_rdr'])], single_tumor_prop[idx_spots], threshold=config["tumorprop_threshold"])
+                        X, base_nb_mean, total_bb_RD, tumor_prop = merge_pseudobulk_by_index_mix(single_X[:,:,idx_spots], single_base_nb_mean[:,idx_spots], single_total_bb_RD[:,idx_spots], [np.where(res["new_assignment"]==c)[0] for c in np.sort(np.unique(res["new_assignment"])) ], single_tumor_prop[idx_spots], threshold=config["tumorprop_threshold"])
                         tumor_prop = np.repeat(tumor_prop, X.shape[0]).reshape(-1,1)
                     merging_groups, merged_res = similarity_components_rdrbaf_neymanpearson(X, base_nb_mean, total_bb_RD, res, threshold=config["np_threshold"], minlength=config["np_eventminlen"], params="smp", tumor_prop=tumor_prop, hmmclass=hmm_nophasing_v2)
                     print(f"part {bafc} merging_groups: {merging_groups}")
@@ -451,7 +451,6 @@ def main(configuration_file):
             if not (0 in final_clone_ids):
                 final_clone_ids = np.append(0, final_clone_ids)
             # chr position
-            sorted_chr_pos = list(zip(df_bininfo.CHR.values, df_bininfo.START.values))
             medfix = ["", "_diploid", "_triploid", "_tetraploid"]
             for o,max_medploidy in enumerate([None, 2, 3, 4]):
                 # A/B copy number per bin
@@ -496,8 +495,7 @@ def main(configuration_file):
                 df_genelevel_cnv.to_csv(f"{outdir}/cnv{medfix[o]}_genelevel.tsv", header=True, index=True, sep="\t")
                 # output segment-level copy number
                 allele_specific_copy = pd.concat(allele_specific_copy)
-                df_seglevel_cnv = pd.DataFrame({"CHR":[x[0] for x in sorted_chr_pos], "START":[x[1] for x in sorted_chr_pos], \
-                    "END":[ (sorted_chr_pos[i+1][1] if i+1 < len(sorted_chr_pos) and x[0]==sorted_chr_pos[i+1][0] else -1) for i,x in enumerate(sorted_chr_pos)] })
+                df_seglevel_cnv = pd.DataFrame({"CHR":df_bininfo.CHR.values, "START":df_bininfo.START.values, "END":df_bininfo.END.values })
                 df_seglevel_cnv = df_seglevel_cnv.join( allele_specific_copy.T )
                 df_seglevel_cnv.to_csv(f"{outdir}/cnv{medfix[o]}_seglevel.tsv", header=True, index=False, sep="\t")
                 # output per-state copy number
