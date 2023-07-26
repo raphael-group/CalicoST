@@ -247,25 +247,41 @@ def merge_by_minspots(assignment, res, single_total_bb_RD, min_spots_thresholds=
     n_clones = len(np.unique(assignment))
     n_obs = int(len(res["pred_cnv"]) / n_clones)
     new_assignment = copy.copy(assignment)
-    merging_groups = [[i] for i in range(n_clones)]
     if single_tumor_prop is None:
         tmp_single_tumor_prop = np.array([1] * len(assignment))
     else:
         tmp_single_tumor_prop = single_tumor_prop
     unique_assignment = np.unique(new_assignment)
-    while np.min(np.bincount(new_assignment[tmp_single_tumor_prop > threshold])) < min_spots_thresholds or \
-        np.min([ np.sum(single_total_bb_RD[:, (new_assignment == c)&(tmp_single_tumor_prop > threshold)]) for c in unique_assignment ]) < min_umicount_thresholds:
-        idx_min = np.argmin(np.bincount(new_assignment[tmp_single_tumor_prop > threshold]))
-        idx_max = np.argmax(np.bincount(new_assignment[tmp_single_tumor_prop > threshold]))
-        merging_groups = [ [i] for i in range(n_clones) if (i!=idx_min) and (i!=idx_max)] + [[idx_min, idx_max]]
-        merging_groups.sort(key = lambda x:np.min(x))
-        # clone assignment after merging
-        map_clone_id = {}
-        for i,x in enumerate(merging_groups):
-            for z in x:
-                map_clone_id[z] = i
-        new_assignment = np.array([map_clone_id[x] for x in new_assignment])
-        unique_assignment = np.unique(new_assignment)
+    # find entries in unique_assignment such that either min_spots_thresholds or min_umicount_thresholds is not satisfied
+    failed_clones = [ c for c in unique_assignment if (np.sum(new_assignment[tmp_single_tumor_prop > threshold] == c) < min_spots_thresholds) or \
+                     (np.sum(single_total_bb_RD[:, (new_assignment == c)&(tmp_single_tumor_prop > threshold)]) < min_umicount_thresholds) ]
+    # find the remaining unique_assigment that satisfies both thresholds
+    successful_clones = [ c for c in unique_assignment if not c in failed_clones ]
+    # initial merging groups: each successful clone is its own group
+    merging_groups = [[i] for i in successful_clones]
+    # for each failed clone, assign them to the closest successful clone
+    if len(failed_clones) > 0:
+        for c in failed_clones:
+            idx_max = np.argmax([np.sum(single_total_bb_RD[:, (new_assignment == c_prime)&(tmp_single_tumor_prop > threshold)]) for c_prime in successful_clones])
+            merging_groups[idx_max].append(c)
+    map_clone_id = {}
+    for i,x in enumerate(merging_groups):
+        for z in x:
+            map_clone_id[z] = i
+    new_assignment = np.array([map_clone_id[x] for x in new_assignment])
+    # while np.min(np.bincount(new_assignment[tmp_single_tumor_prop > threshold])) < min_spots_thresholds or \
+    #     np.min([ np.sum(single_total_bb_RD[:, (new_assignment == c)&(tmp_single_tumor_prop > threshold)]) for c in unique_assignment ]) < min_umicount_thresholds:
+    #     idx_min = np.argmin(np.bincount(new_assignment[tmp_single_tumor_prop > threshold]))
+    #     idx_max = np.argmax(np.bincount(new_assignment[tmp_single_tumor_prop > threshold]))
+    #     merging_groups = [ [i] for i in range(n_clones) if (i!=idx_min) and (i!=idx_max)] + [[idx_min, idx_max]]
+    #     merging_groups.sort(key = lambda x:np.min(x))
+    #     # clone assignment after merging
+    #     map_clone_id = {}
+    #     for i,x in enumerate(merging_groups):
+    #         for z in x:
+    #             map_clone_id[z] = i
+    #     new_assignment = np.array([map_clone_id[x] for x in new_assignment])
+    #     unique_assignment = np.unique(new_assignment)
     merged_res = copy.copy(res)
     merged_res["new_assignment"] = new_assignment
     merged_res["total_llf"] = np.NAN
