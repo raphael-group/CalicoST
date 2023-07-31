@@ -882,7 +882,7 @@ def perform_binning_new(lengths, single_X, single_base_nb_mean, single_total_bb_
             this_genes = [z for z in this_genes if z!=""]
             idx_A = np.where(phase_indicator[s:t])[0]
             idx_B = np.where(~phase_indicator[s:t])[0]
-            if np.sum(per_snp_umi[s:t]) >= secondary_min_umi:
+            if np.sum(per_snp_umi[s:t]) >= secondary_min_umi or sorted_chr_pos[s][0] != bin_sorted_chr_pos_last[-1][0]:
                 bin_single_X_rdr.append( np.sum(single_X[s:t, 0, :], axis=0) )
                 bin_single_X_baf.append( np.sum(single_X[s:t, 1, :][idx_A,:], axis=0) + np.sum(single_total_bb_RD[s:t, :][idx_B,:] - single_X[s:t, 1, :][idx_B,:], axis=0) )
                 bin_single_base_nb_mean.append( np.sum(single_base_nb_mean[s:t, :], axis=0) )
@@ -1177,23 +1177,19 @@ def get_lengths_by_arm(sorted_chr_pos, centromere_file):
     return armlengths
 
 
-# def count_reads_from_bam(sorted_chr_pos, barcodes, bamfile):
-#     dic_counts = {}
-#     map_barcodes = {barcodes[i]:i for i in range(len(barcodes))}
-#     map_snp = {f"{x[0]}_{x[1]}":i for i,x in enumerate(sorted_chr_pos)}
-#     # partition genome such that each region contains ont SNP in sorted_chr_pos
-#     # the region boundary is set to the position right before each SNP
-#     for i,x in enumerate(sorted_chr_pos):
-#         if i > 0 and sorted_chr_pos[i-1][0] == sorted_chr_pos[i][0] and i+1 < len(sorted_chr_pos) and sorted_chr_pos[i+1][0] == sorted_chr_pos[i][0]:
-#             cmd_samtools = f"samtools view -F 1796 -q 13 {bamfile} chr{x[0]}:{x[1]}-{sorted_chr_pos[i+1][1]-1}"
-#         elif i+1 < len(sorted_chr_pos) and sorted_chr_pos[i+1][0] == sorted_chr_pos[i][0]:
-#             cmd_samtools = f"samtools view -F 1796 -q 13 {bamfile} chr{x[0]}:0-{sorted_chr_pos[i+1][1]-1}"
-#         else:
-#             cmd_samtools = f"samtools view -F 1796 -q 13 {bamfile} chr{x[0]}:{x[1]}"
-#         p = subprocess.Popen(cmd_samtools, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-#         out,err = p.communicate()
-#         # split by barcodes and count the number of reads
-#     return NotImplemented
+def expand_df_cnv(df_cnv, binsize=1e6):
+    df_expand = []
+    for i in range(df_cnv.shape[0]):
+        # repeat the row i for int(END - START / binsize) times and save to a new dataframe
+        n_bins = max(1, int(1.0*(df_cnv.iloc[i].END - df_cnv.iloc[i].START) / binsize))
+        tmp = pd.DataFrame(np.repeat(df_cnv.iloc[i:(i+1),:].values, n_bins, axis=0), columns=df_cnv.columns)
+        for k in range(n_bins):
+            tmp.END.iloc[k] = df_cnv.START.iloc[i]+ k*binsize
+        tmp.END.iloc[-1] = df_cnv.END.iloc[i]
+        df_expand.append(tmp)
+    df_expand = pd.concat(df_expand, ignore_index=True)
+    return df_expand
+
 
 
 import pysam

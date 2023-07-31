@@ -254,9 +254,13 @@ def precision_recall_genelevel_allele_starch(configuration_file, r_hmrf_initiali
 
 def plot_hatchet_acn(hatchet_dir, hatchet_cnfile, out_file, binsize=1e6, ordered_chr=[str(c) for c in range(1,23)]):
     # read in hatchet integer copy number file
-    df_hatchet = pd.read_csv(f"{hatchet_dir}/results/{hatchet_cnfile}", sep='\t', index_col=None, header=0)
-    # rename the "#CHR" column to "CHR"
-    df_hatchet = df_hatchet.rename(columns={'#CHR': 'CHR'})
+    df_hatchet = read_hatchet(f"{hatchet_dir}/results/{hatchet_cnfile}", purity_threshold=0.1)
+    if df_hatchet.shape[0] == 0:
+        return
+    # get CN state from integer copy numbers
+    df_hatchet = add_cn_state(df_hatchet)
+    # hatchet clones
+    hatchet_clones = [x[8:] for x in df_hatchet.columns if x.startswith("cn_clone")]
 
     # check agreement with ordered_chr
     ordered_chr_map = {ordered_chr[i]:i for i in range(len(ordered_chr))}
@@ -289,7 +293,7 @@ def plot_hatchet_acn(hatchet_dir, hatchet_cnfile, out_file, binsize=1e6, ordered
         B_copy = [int(x.split("|")[1]) for x in df_hatchet[f"cn_clone{n}"]]
         df_cnv[f"clone{n} A"] = A_copy
         df_cnv[f"clone{n} B"] = B_copy
-        prop = df_cnv[f"u_clone{n}"].values[0]
+        prop = df_hatchet[f"u_clone{n}"].values[0]
         clone_names.append(f"clone{n} ({prop:.2f})")
 
     # plot
