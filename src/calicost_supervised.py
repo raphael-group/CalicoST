@@ -632,7 +632,6 @@ def main(configuration_file):
             if not (0 in final_clone_ids):
                 final_clone_ids = np.append(0, final_clone_ids)
             # chr position
-            sorted_chr_pos = list(zip(df_bininfo.CHR.values, df_bininfo.START.values))
             medfix = ["", "_diploid", "_triploid", "_tetraploid"]
             for o,max_medploidy in enumerate([None, 2, 3, 4]):
                 # A/B copy number per bin
@@ -677,8 +676,7 @@ def main(configuration_file):
                 df_genelevel_cnv.to_csv(f"{outdir}/cnv{medfix[o]}_genelevel.tsv", header=True, index=True, sep="\t")
                 # output segment-level copy number
                 allele_specific_copy = pd.concat(allele_specific_copy)
-                df_seglevel_cnv = pd.DataFrame({"CHR":[x[0] for x in sorted_chr_pos], "START":[x[1] for x in sorted_chr_pos], \
-                    "END":[ (sorted_chr_pos[i+1][1] if i+1 < len(sorted_chr_pos) and x[0]==sorted_chr_pos[i+1][0] else -1) for i,x in enumerate(sorted_chr_pos)] })
+                df_seglevel_cnv = pd.DataFrame({"CHR":df_bininfo.CHR.values, "START":df_bininfo.START.values, "END":df_bininfo.END.values })
                 df_seglevel_cnv = df_seglevel_cnv.join( allele_specific_copy.T )
                 df_seglevel_cnv.to_csv(f"{outdir}/cnv{medfix[o]}_seglevel.tsv", header=True, index=False, sep="\t")
                 # output per-state copy number
@@ -718,8 +716,10 @@ def main(configuration_file):
             # plot allele-specific copy number
             for o,max_medploidy in enumerate([2, 3, 4]):
                 cn_file = f"{outdir}/cnv{medfix[o+1]}_seglevel.tsv"
+                df_cnv = pd.read_csv(cn_file, header=0, sep="\t")
+                df_cnv = expand_df_cnv(df_cnv)
                 fig, axes = plt.subplots(1, 1, figsize=(15, 0.9*len(final_clone_ids) + 0.6), dpi=200, facecolor="white")
-                axes = plot_acn(cn_file, axes, add_chrbar=True, add_arrow=True, chrbar_thickness=0.4/(0.6*len(final_clone_ids) + 0.4), add_legend=True, remove_xticks=True)
+                axes = plot_acn_from_df(df_cnv, axes, add_chrbar=True, add_arrow=True, chrbar_thickness=0.4/(0.6*len(final_clone_ids) + 0.4), add_legend=True, remove_xticks=True)
                 fig.tight_layout()
                 fig.savefig(f"{outdir}/plots/acn_genome{medfix[o+1]}.pdf", transparent=True, bbox_inches="tight")
                 # additionally plot the allele-specific copy number per region
@@ -729,6 +729,7 @@ def main(configuration_file):
                     df_cnv = merged_df_cnv[["CHR", "START", "END"]]
                     df_cnv = df_cnv.join( pd.DataFrame({f"clone{x} A":merged_df_cnv[f"clone{res_combine['new_assignment'][i]} A"] for i,x in enumerate(unique_clone_ids)}) )
                     df_cnv = df_cnv.join( pd.DataFrame({f"clone{x} B":merged_df_cnv[f"clone{res_combine['new_assignment'][i]} B"] for i,x in enumerate(unique_clone_ids)}) )
+                    df_cnv = expand_df_cnv(df_cnv)
                     clone_ids = np.concatenate([ unique_clone_ids[res_combine["new_assignment"]==c].astype(str) for c in final_clone_ids ])
                     axes = plot_acn_from_df(df_cnv, axes, clone_ids=clone_ids, clone_names=[f"region {x}" for x in clone_ids], add_chrbar=True, add_arrow=False, chrbar_thickness=0.4/(0.6*len(unique_clone_ids) + 0.4), add_legend=True, remove_xticks=True)
                     fig.tight_layout()
