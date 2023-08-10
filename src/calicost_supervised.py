@@ -84,7 +84,10 @@ def read_configuration_file(filename):
         "tol" : 1e-3,
         "gmm_random_state" : 0,
         "np_threshold" : 2.0,
-        "np_eventminlen" : 10
+        "np_eventminlen" : 10,
+        # integer copy number
+        "nonbalance_bafdist" : 1.0,
+        "nondiploid_rdrdist" : 10.0
     }
 
     argument_type = {
@@ -136,7 +139,10 @@ def read_configuration_file(filename):
         "tol" : "float",
         "gmm_random_state" : "int",
         "np_threshold" : "float",
-        "np_eventminlen" : "int"
+        "np_eventminlen" : "int",
+        # integer copy number
+        "nonbalance_bafdist" : "float",
+        "nondiploid_rdrdist" : "float"
     }
 
     ##### [ read configuration file to update settings ] #####
@@ -221,7 +227,10 @@ def read_joint_configuration_file(filename):
         "tol" : 1e-3,
         "gmm_random_state" : 0,
         "np_threshold" : 2.0,
-        "np_eventminlen" : 10
+        "np_eventminlen" : 10,
+        # integer copy number
+        "nonbalance_bafdist" : 1.0,
+        "nondiploid_rdrdist" : 10.0
     }
 
     argument_type = {
@@ -274,7 +283,10 @@ def read_joint_configuration_file(filename):
         "tol" : "float",
         "gmm_random_state" : "int",
         "np_threshold" : "float",
-        "np_eventminlen" : "int"
+        "np_eventminlen" : "int",
+        # integer copy number
+        "nonbalance_bafdist" : "float",
+        "nondiploid_rdrdist" : "float"
     }
 
     ##### [ read configuration file to update settings ] #####
@@ -369,10 +381,14 @@ def main(configuration_file):
     # run HMRF
     for r_hmrf_initialization in range(config["num_hmrf_initialization_start"], config["num_hmrf_initialization_end"]):
         outdir = f"{config['output_dir']}/clone{config['n_clones']}_rectangle{r_hmrf_initialization}_w{config['spatial_weight']:.1f}"
-        if config["tumorprop_file"] is None:
-            initial_clone_index = rectangle_initialize_initial_clone(coords, min(coords.shape[0],config["n_clones"]), random_state=r_hmrf_initialization)
+        if config["initialization_method"] == "rectangle":
+            if config["tumorprop_file"] is None:
+                initial_clone_index = rectangle_initialize_initial_clone(coords, min(coords.shape[0],config["n_clones"]), random_state=r_hmrf_initialization)
+            else:
+                initial_clone_index = rectangle_initialize_initial_clone_mix(coords, min(coords.shape[0],config["n_clones"]), single_tumor_prop, threshold=config["tumorprop_threshold"], random_state=r_hmrf_initialization)
         else:
-            initial_clone_index = rectangle_initialize_initial_clone_mix(coords, min(coords.shape[0],config["n_clones"]), single_tumor_prop, threshold=config["tumorprop_threshold"], random_state=r_hmrf_initialization)
+            kmeans = KMeans(n_clusters = config["n_clones"], max_iter=1, init="random", random_state=config["num_hmrf_initialization_start"]).fit(coords)
+            initial_clone_index = [np.where(kmeans.labels_ == i)[0] for i in range(config["n_clones"])]
 
         # create directory
         p = subprocess.Popen(f"mkdir -p {outdir}", stdout=subprocess.PIPE, stderr=subprocess.PIPE, shell=True)
@@ -659,7 +675,8 @@ def main(configuration_file):
                     if not max_medploidy is None:
                         best_integer_copies, _ = hill_climbing_integer_copynumber_oneclone(adjusted_log_mu, base_nb_mean[:,s], res_combine["new_p_binom"][:,s], this_pred_cnv, max_medploidy=max_medploidy)
                     else:
-                        best_integer_copies, _ = hill_climbing_integer_copynumber_oneclone(adjusted_log_mu, base_nb_mean[:,s], res_combine["new_p_binom"][:,s], this_pred_cnv)
+                        best_integer_copies, _ = hill_climbing_integer_copynumber_fixdiploid(adjusted_log_mu, base_nb_mean[:,s], res_combine["new_p_binom"][:,s], this_pred_cnv, nonbalance_bafdist=config["nonbalance_bafdist"], nondiploid_rdrdist=config["nondiploid_rdrdist"])
+
                     print(f"max med ploidy = {max_medploidy}, clone {s}, integer copy inference loss = {_}")
                     
                     allele_specific_copy.append( pd.DataFrame( best_integer_copies[res_combine["pred_cnv"][:,s], 0].reshape(1,-1), index=[f"clone{cid} A"], columns=np.arange(n_obs) ) )
@@ -718,14 +735,14 @@ def main(configuration_file):
             fig = plot_rdr_baf(configuration_file, r_hmrf_initialization, cn_file, clone_ids=None, remove_xticks=True, rdr_ylim=5, chrtext_shift=-0.3, base_height=3.2, pointsize=30, palette="tab10")
             fig.savefig(f"{outdir}/plots/rdr_baf_defaultcolor.pdf", transparent=True, bbox_inches="tight")
             # plot allele-specific copy number
-            for o,max_medploidy in enumerate([2, 3, 4]):
-                cn_file = f"{outdir}/cnv{medfix[o+1]}_seglevel.tsv"
+            for o,max_medploidy in enumerate([None, 2, 3, 4]):
+                cn_file = f"{outdir}/cnv{medfix[o]}_seglevel.tsv"
                 df_cnv = pd.read_csv(cn_file, header=0, sep="\t")
                 df_cnv = expand_df_cnv(df_cnv)
                 fig, axes = plt.subplots(1, 1, figsize=(15, 0.9*len(final_clone_ids) + 0.6), dpi=200, facecolor="white")
                 axes = plot_acn_from_df(df_cnv, axes, add_chrbar=True, add_arrow=True, chrbar_thickness=0.4/(0.6*len(final_clone_ids) + 0.4), add_legend=True, remove_xticks=True)
                 fig.tight_layout()
-                fig.savefig(f"{outdir}/plots/acn_genome{medfix[o+1]}.pdf", transparent=True, bbox_inches="tight")
+                fig.savefig(f"{outdir}/plots/acn_genome{medfix[o]}.pdf", transparent=True, bbox_inches="tight")
                 # additionally plot the allele-specific copy number per region
                 if not config["supervision_clone_file"] is None:
                     fig, axes = plt.subplots(1, 1, figsize=(15, 0.6*len(unique_clone_ids) + 0.4), dpi=200, facecolor="white")
@@ -737,7 +754,7 @@ def main(configuration_file):
                     clone_ids = np.concatenate([ unique_clone_ids[res_combine["new_assignment"]==c].astype(str) for c in final_clone_ids ])
                     axes = plot_acn_from_df(df_cnv, axes, clone_ids=clone_ids, clone_names=[f"region {x}" for x in clone_ids], add_chrbar=True, add_arrow=False, chrbar_thickness=0.4/(0.6*len(unique_clone_ids) + 0.4), add_legend=True, remove_xticks=True)
                     fig.tight_layout()
-                    fig.savefig(f"{outdir}/plots/acn_genome{medfix[o+1]}_per_region.pdf", transparent=True, bbox_inches="tight")
+                    fig.savefig(f"{outdir}/plots/acn_genome{medfix[o]}_per_region.pdf", transparent=True, bbox_inches="tight")
             # plot clones in space
             if not config["supervision_clone_file"] is None:
                 before_assignments = pd.Series([None] * before_coords.shape[0])

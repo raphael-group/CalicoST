@@ -78,7 +78,10 @@ def read_joint_configuration_file(filename):
         "tol" : 1e-3,
         "gmm_random_state" : 0,
         "np_threshold" : 2.0,
-        "np_eventminlen" : 10
+        "np_eventminlen" : 10,
+        # integer copy number
+        "nonbalance_bafdist" : 1.0,
+        "nondiploid_rdrdist" : 10.0
     }
 
     argument_type = {
@@ -131,7 +134,10 @@ def read_joint_configuration_file(filename):
         "tol" : "float",
         "gmm_random_state" : "int",
         "np_threshold" : "float",
-        "np_eventminlen" : "int"
+        "np_eventminlen" : "int",
+        # integer copy number
+        "nonbalance_bafdist" : "float",
+        "nondiploid_rdrdist" : "float"
     }
 
     ##### [ read configuration file to update settings ] #####
