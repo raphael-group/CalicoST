@@ -97,7 +97,8 @@ def parse_visium(config):
     
     # remove bins where normal spots have imbalanced SNPs
     if not config["tumorprop_file"] is None:
-        index_normal = np.where(single_tumor_prop < 0.01)[0]
+        # index_normal = np.where(single_tumor_prop < 0.01)[0]
+        index_normal = np.argsort(single_tumor_prop)[:100]
         lengths, single_X, single_base_nb_mean, single_total_bb_RD, log_sitewise_transmat, sorted_chr_pos, sorted_chr_pos_last, x_gene_list, index_remaining = bin_selection_basedon_normal(single_X, \
                 single_base_nb_mean, single_total_bb_RD, sorted_chr_pos, sorted_chr_pos_last, x_gene_list, config["nu"], config["logphase_shift"], index_normal)
         n_snps = [n_snps[i] for i in index_remaining]
