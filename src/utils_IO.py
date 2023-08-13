@@ -582,7 +582,7 @@ def convert_to_hmm_input_new(adata, cell_snp_Aallele, cell_snp_Ballele, snp_gene
     sorted_chr = np.array([x[0] for x in tmp_sorted_chr_pos])
     position_cM = get_position_cM_table( tmp_sorted_chr_pos, genome_build=genome_build )
     phase_switch_prob = compute_phase_switch_probability_position(position_cM, tmp_sorted_chr_pos, nu)
-    log_sitewise_transmat = np.log(phase_switch_prob) - logphase_shift
+    log_sitewise_transmat = np.maximum(np.log(0.5), np.log(phase_switch_prob) - logphase_shift)
     # log_sitewise_transmat = log_sitewise_transmat[np.arange(0, len(log_sitewise_transmat), 2)]
     log_sitewise_transmat = log_sitewise_transmat[np.arange(1, len(log_sitewise_transmat), 2)]
 
@@ -1004,7 +1004,7 @@ def perform_binning(lengths, single_X, single_base_nb_mean, single_total_bb_RD, 
     return lengths, single_X, single_base_nb_mean, single_total_bb_RD, log_sitewise_transmat, sorted_chr_pos, x_gene_list
 
 
-def bin_selection_basedon_normal(single_X, single_base_nb_mean, single_total_bb_RD, sorted_chr_pos, sorted_chr_pos_last, x_gene_list, nu, logphase_shift, index_normal, genome_build="hg38", confidence_interval=[0.05, 0.95]):
+def bin_selection_basedon_normal(single_X, single_base_nb_mean, single_total_bb_RD, sorted_chr_pos, sorted_chr_pos_last, x_gene_list, nu, logphase_shift, index_normal, genome_build="hg38", confidence_interval=[0.05, 0.95], min_betabinom_tau=30):
     """
     Filter out bins that potential contain somatic mutations based on BAF of normal spots.
     """
@@ -1013,9 +1013,12 @@ def bin_selection_basedon_normal(single_X, single_base_nb_mean, single_total_bb_
     tmptotal_bb_RD = np.sum(single_total_bb_RD[:, index_normal], axis=1)
     model = Weighted_BetaBinom(tmpX, np.ones(len(tmpX)), weights=np.ones(len(tmpX)), exposure=tmptotal_bb_RD)
     tmpres = model.fit(disp=0)
+    tmpres.params[0] = 0.5
+    tmpres.params[-1] = max(tmpres.params[-1], min_betabinom_tau)
     # remove bins if normal B allele frequencies fall out of 5%-95% probability range
     removal_indicator1 = (tmpX < scipy.stats.betabinom.ppf(confidence_interval[0], tmptotal_bb_RD, tmpres.params[0] * tmpres.params[1], (1-tmpres.params[0]) * tmpres.params[1]))
     removal_indicator2 = (tmpX > scipy.stats.betabinom.ppf(confidence_interval[1], tmptotal_bb_RD, tmpres.params[0] * tmpres.params[1], (1-tmpres.params[0]) * tmpres.params[1]))
+    print( np.sum(removal_indicator1 | removal_indicator2) )
     index_remaining = np.where(~(removal_indicator1 | removal_indicator2))[0]
     #
     # change the related data matrices
