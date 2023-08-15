@@ -582,7 +582,7 @@ def convert_to_hmm_input_new(adata, cell_snp_Aallele, cell_snp_Ballele, snp_gene
     sorted_chr = np.array([x[0] for x in tmp_sorted_chr_pos])
     position_cM = get_position_cM_table( tmp_sorted_chr_pos, genome_build=genome_build )
     phase_switch_prob = compute_phase_switch_probability_position(position_cM, tmp_sorted_chr_pos, nu)
-    log_sitewise_transmat = np.maximum(np.log(0.5), np.log(phase_switch_prob) - logphase_shift)
+    log_sitewise_transmat = np.minimum(np.log(0.5), np.log(phase_switch_prob) - logphase_shift)
     # log_sitewise_transmat = log_sitewise_transmat[np.arange(0, len(log_sitewise_transmat), 2)]
     log_sitewise_transmat = log_sitewise_transmat[np.arange(1, len(log_sitewise_transmat), 2)]
 
