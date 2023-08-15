@@ -13,6 +13,7 @@ import copy
 from pathlib import Path
 import functools
 import subprocess
+from arg_parse import *
 from hmm_NB_BB_phaseswitch import *
 from utils_distribution_fitting import *
 from utils_hmrf import *
@@ -24,151 +25,6 @@ from parse_input import *
 
 import mkl
 mkl.set_num_threads(1)
-
-
-def read_joint_configuration_file(filename):
-    ##### [Default settings] #####
-    config = {
-        "input_filelist" : None,
-        "snp_dir" : None,
-        "output_dir" : None,
-        # supporting files and preprocessing arguments
-        "hgtable_file" : None,
-        "normalidx_file" : None,
-        "tumorprop_file" : None,
-        "supervision_clone_file" : None,
-        "alignment_files" : [],
-        "filtergenelist_file" : None,
-        "filterregion_file" : None,
-        "binsize" : 1,
-        "rdrbinsize" : 1,
-        # "secondbinning_min_umi" : 500,
-        "max_nbins" : 1200,
-        "avg_umi_perbinspot" : 1.5,
-        "bafonly" : True,
-        # phase switch probability
-        "nu" : 1,
-        "logphase_shift" : 1,
-        "npart_phasing" : 2,
-        # HMRF configurations
-        "n_clones" : None,
-        "n_clones_rdr" : 2,
-        "min_spots_per_clone" : 100,
-        "min_avgumi_per_clone" : 10,
-        "maxspots_pooling" : 7,
-        "tumorprop_threshold" : 0.5, 
-        "max_iter_outer" : 20,
-        "nodepotential" : "max", # max or weighted_sum
-        "initialization_method" : "rectangle", # rectangle or datadrive
-        "num_hmrf_initialization_start" : 0, 
-        "num_hmrf_initialization_end" : 10,
-        "spatial_weight" : 2.0,
-        "construct_adjacency_method" : "hexagon",
-        "construct_adjacency_w" : 1.0,
-        # HMM configurations
-        "n_states" : None,
-        "params" : None,
-        "t" : None,
-        "t_phaseing" : 1-1e-4,
-        "fix_NB_dispersion" : False,
-        "shared_NB_dispersion" : True,
-        "fix_BB_dispersion" : False,
-        "shared_BB_dispersion" : True,
-        "max_iter" : 30,
-        "tol" : 1e-3,
-        "gmm_random_state" : 0,
-        "np_threshold" : 2.0,
-        "np_eventminlen" : 10,
-        # integer copy number
-        "nonbalance_bafdist" : 1.0,
-        "nondiploid_rdrdist" : 10.0
-    }
-
-    argument_type = {
-        "input_filelist" : "str",
-        "snp_dir" : "str",
-        "output_dir" : "str",
-        # supporting files and preprocessing arguments
-        "hgtable_file" : "str",
-        "normalidx_file" : "str",
-        "tumorprop_file" : "str",
-        "supervision_clone_file" : "str",
-        "alignment_files" : "list_str",
-        "filtergenelist_file" : "str",
-        "filterregion_file" : "str",
-        "binsize" : "int",
-        "rdrbinsize" : "int",
-        # "secondbinning_min_umi" : "int",
-        "max_nbins" : "int",
-        "avg_umi_perbinspot" : "float",
-        "bafonly" : "bool",
-        # phase switch probability
-        "nu" : "float",
-        "logphase_shift" : "float",
-        "npart_phasing" : "int",
-        # HMRF configurations
-        "n_clones" : "int",
-        "n_clones_rdr" : "int",
-        "min_spots_per_clone" : "int",
-        "min_avgumi_per_clone" : "int",
-        "maxspots_pooling" : "int",
-        "tumorprop_threshold" : "float", 
-        "max_iter_outer" : "int",
-        "nodepotential" : "str",
-        "initialization_method" : "str",
-        "num_hmrf_initialization_start" : "int", 
-        "num_hmrf_initialization_end" : "int",
-        "spatial_weight" : "float",
-        "construct_adjacency_method" : "str",
-        "construct_adjacency_w" : "float",
-        # HMM configurations
-        "n_states" : "int",
-        "params" : "str",
-        "t" : "eval",
-        "t_phaseing" : "eval",
-        "fix_NB_dispersion" : "bool",
-        "shared_NB_dispersion" : "bool",
-        "fix_BB_dispersion" : "bool",
-        "shared_BB_dispersion" : "bool",
-        "max_iter" : "int",
-        "tol" : "float",
-        "gmm_random_state" : "int",
-        "np_threshold" : "float",
-        "np_eventminlen" : "int",
-        # integer copy number
-        "nonbalance_bafdist" : "float",
-        "nondiploid_rdrdist" : "float"
-    }
-
-    ##### [ read configuration file to update settings ] #####
-    with open(filename, 'r') as fp:
-        for line in fp:
-            if line.strip() == "" or line[0] == "#":
-                continue
-            strs = [x.strip() for x in line.strip().split(":") if x != ""]
-            assert strs[0] in config.keys(), f"{strs[0]} is not a valid configuration parameter! Configuration parameters are: {list(config.keys())}"
-            if len(strs) == 1:
-                config[strs[0]] = []
-            elif strs[1].upper() == "NONE":
-                config[strs[0]] = None
-            elif argument_type[strs[0]] == "str":
-                config[strs[0]] = strs[1]
-            elif argument_type[strs[0]] == "int":
-                config[strs[0]] = int(strs[1])
-            elif argument_type[strs[0]] == "float":
-                config[strs[0]] = float(strs[1])
-            elif argument_type[strs[0]] == "eval":
-                config[strs[0]] = eval(strs[1])
-            elif argument_type[strs[0]] == "bool":
-                config[strs[0]] = (strs[1].upper() == "TRUE")
-            elif argument_type[strs[0]] == "list_str":
-                config[strs[0]] = strs[1].split(" ")
-    # assertions
-    assert not config["input_filelist"] is None, "No input file list!"
-    assert not config["snp_dir"] is None, "No SNP directory!"
-    assert not config["output_dir"] is None, "No output directory!"
-
-    return config
 
 
 def main(configuration_file):
@@ -485,7 +341,8 @@ def main(configuration_file):
                     if not max_medploidy is None:
                         best_integer_copies, _ = hill_climbing_integer_copynumber_oneclone(adjusted_log_mu, base_nb_mean[:,s], res_combine["new_p_binom"][:,s], this_pred_cnv, max_medploidy=max_medploidy)
                     else:
-                        best_integer_copies, _ = hill_climbing_integer_copynumber_oneclone(adjusted_log_mu, base_nb_mean[:,s], res_combine["new_p_binom"][:,s], this_pred_cnv)
+                        best_integer_copies, _ = hill_climbing_integer_copynumber_fixdiploid(adjusted_log_mu, base_nb_mean[:,s], res_combine["new_p_binom"][:,s], this_pred_cnv, nonbalance_bafdist=config["nonbalance_bafdist"], nondiploid_rdrdist=config["nondiploid_rdrdist"])
+                        # best_integer_copies, _ = hill_climbing_integer_copynumber_oneclone(adjusted_log_mu, base_nb_mean[:,s], res_combine["new_p_binom"][:,s], this_pred_cnv)
                     print(f"max med ploidy = {max_medploidy}, clone {s}, integer copy inference loss = {_}")
                     #
                     allele_specific_copy.append( pd.DataFrame( best_integer_copies[res_combine["pred_cnv"][:,s], 0].reshape(1,-1), index=[f"clone{cid} A"], columns=np.arange(n_obs) ) )
@@ -541,14 +398,14 @@ def main(configuration_file):
             fig = plot_rdr_baf(configuration_file, r_hmrf_initialization, cn_file, clone_ids=None, remove_xticks=True, rdr_ylim=5, chrtext_shift=-0.3, base_height=3.2, pointsize=30, palette="tab10")
             fig.savefig(f"{outdir}/plots/rdr_baf_defaultcolor.pdf", transparent=True, bbox_inches="tight")
             # plot allele-specific copy number
-            for o,max_medploidy in enumerate([2, 3, 4]):
-                cn_file = f"{outdir}/cnv{medfix[o+1]}_seglevel.tsv"
+            for o,max_medploidy in enumerate([None, 2, 3, 4]):
+                cn_file = f"{outdir}/cnv{medfix[o]}_seglevel.tsv"
                 df_cnv = pd.read_csv(cn_file, header=0, sep="\t")
                 df_cnv = expand_df_cnv(df_cnv)
                 fig, axes = plt.subplots(1, 1, figsize=(15, 0.9*len(final_clone_ids) + 0.6), dpi=200, facecolor="white")
                 axes = plot_acn_from_df(df_cnv, axes, add_chrbar=True, add_arrow=True, chrbar_thickness=0.4/(0.6*len(final_clone_ids) + 0.4), add_legend=True, remove_xticks=True)
                 fig.tight_layout()
-                fig.savefig(f"{outdir}/plots/acn_genome{medfix[o+1]}.pdf", transparent=True, bbox_inches="tight")
+                fig.savefig(f"{outdir}/plots/acn_genome{medfix[o]}.pdf", transparent=True, bbox_inches="tight")
                 # additionally plot the allele-specific copy number per region
                 if not config["supervision_clone_file"] is None:
                     fig, axes = plt.subplots(1, 1, figsize=(15, 0.6*len(unique_clone_ids) + 0.4), dpi=200, facecolor="white")
@@ -560,7 +417,7 @@ def main(configuration_file):
                     clone_ids = np.concatenate([ unique_clone_ids[res_combine["new_assignment"]==c].astype(str) for c in final_clone_ids ])
                     axes = plot_acn_from_df(df_cnv, axes, clone_ids=clone_ids, clone_names=[f"region {x}" for x in clone_ids], add_chrbar=True, add_arrow=False, chrbar_thickness=0.4/(0.6*len(unique_clone_ids) + 0.4), add_legend=True, remove_xticks=True)
                     fig.tight_layout()
-                    fig.savefig(f"{outdir}/plots/acn_genome{medfix[o+1]}_per_region.pdf", transparent=True, bbox_inches="tight")
+                    fig.savefig(f"{outdir}/plots/acn_genome{medfix[o]}_per_region.pdf", transparent=True, bbox_inches="tight")
             # plot clones in space
             if not config["supervision_clone_file"] is None:
                 before_assignments = pd.Series([None] * before_coords.shape[0])
