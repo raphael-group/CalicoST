@@ -22,6 +22,7 @@ from phasing import *
 from utils_IO import *
 from find_integer_copynumber import *
 from parse_input import *
+from utils_plotting import *
 
 import mkl
 mkl.set_num_threads(1)
