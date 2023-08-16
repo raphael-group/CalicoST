@@ -148,11 +148,15 @@ def hill_climbing_integer_copynumber_fixdiploid(new_log_mu, base_nb_mean, new_p_
     best_obj = np.inf
     best_integer_copies = np.zeros((n_states, 2), dtype=int)
     for ploidy in range(1, max_medploidy+1):
-        initial_params = np.array([ [1,1] if not is_nondiploidnormal(k) else [1,0] for k in range(n_states)], dtype=int) #np.ones((n_states, 2), dtype=int)
-        params, obj = hill_climb(initial_params, ploidy, idx_diploid_normal)
-        if obj < best_obj:
-            best_obj = obj
-            best_integer_copies = copy.copy(params)
+        # initial_params = np.array([ [1,1] if not is_nondiploidnormal(k) else [1,0] for k in range(n_states)], dtype=int)
+        np.random.seed(0)
+        for r in range(20):
+            initial_params = candidates[ np.random.randint(low=0, high=candidates.shape[0], size=n_states), : ]
+            initial_params[idx_diploid_normal] = np.array([1,1])
+            params, obj = hill_climb(initial_params, ploidy, idx_diploid_normal)
+            if obj < best_obj:
+                best_obj = obj
+                best_integer_copies = copy.copy(params)
     return best_integer_copies, best_obj
 
 
