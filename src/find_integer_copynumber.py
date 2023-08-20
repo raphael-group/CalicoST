@@ -7,7 +7,7 @@ import scipy
 import copy
 
 
-# def hill_climbing_integer_copynumber_oneclone(new_log_mu, base_nb_mean, new_p_binom, pred_cnv, max_allele_copy=4, max_total_copy=6, max_medploidy=4):
+# def hill_climbing_integer_copynumber_oneclone(new_log_mu, base_nb_mean, new_p_binom, pred_cnv, max_allele_copy=5, max_total_copy=6, max_medploidy=4):
 #     n_states = len(new_log_mu)
 #     lambd = base_nb_mean / np.sum(base_nb_mean)
 #     weight_per_state = np.array([ np.sum(lambd[pred_cnv == s]) for s in range(n_states)])
@@ -81,8 +81,8 @@ def find_diploid_balanced_state(new_log_mu, new_p_binom, pred_cnv, min_prop_thre
         return candidate[ np.argmin(new_log_mu[candidate]) ]
 
 
-def hill_climbing_integer_copynumber_fixdiploid(new_log_mu, base_nb_mean, new_p_binom, pred_cnv, max_allele_copy=4, max_total_copy=6, max_medploidy=4, \
-                                                min_prop_threshold=0.1, EPS_BAF=0.05, nonbalance_bafdist=None, nondiploid_rdrdist=None):
+def hill_climbing_integer_copynumber_fixdiploid(new_log_mu, base_nb_mean, new_p_binom, pred_cnv, max_allele_copy=5, max_total_copy=6, max_medploidy=4, \
+                                                min_prop_threshold=0.1, EPS_BAF=0.05, nonbalance_bafdist=None, nondiploid_rdrdist=None, enforce_states={}):
     n_states = len(new_log_mu)
     lambd = base_nb_mean / np.sum(base_nb_mean)
     weight_per_state = np.array([ np.sum(lambd[pred_cnv == s]) for s in range(n_states)])
@@ -98,12 +98,11 @@ def hill_climbing_integer_copynumber_fixdiploid(new_log_mu, base_nb_mean, new_p_
         return False
     #
     EPS_POINTS = 0.1
-    def f(params, ploidy):
+    def f(params, ploidy, scalefactor):
         # params of size (n_states, 2)
         if np.any( np.sum(params, axis=1) == 0 ):
             return len(pred_cnv) * 1e6
-        denom = weight_per_state.dot( np.sum(params, axis=1) )
-        frac_rdr = np.sum(params, axis=1) / denom
+        frac_rdr = np.sum(params, axis=1) / scalefactor
         frac_baf = params[:,0] / np.sum(params, axis=1)
         points_per_state = np.bincount(pred_cnv, minlength=params.shape[0] ) + EPS_POINTS
         ### temp penalty ###
@@ -116,13 +115,14 @@ def hill_climbing_integer_copynumber_fixdiploid(new_log_mu, base_nb_mean, new_p_
             np.sum(crucial_ordered_pairs_1) * len(pred_cnv) + np.sum(crucial_ordered_pairs_2) * len(pred_cnv) + np.sum(derived_ploidy > ploidy + 0.5) * len(pred_cnv)
     #
     def hill_climb(initial_params, ploidy, idx_diploid_normal, max_iter=10):
-        best_obj = f(initial_params, ploidy)
+        scalefactor = 2.0 / mu[idx_diploid_normal]
+        best_obj = f(initial_params, ploidy, scalefactor)
         params = copy.copy(initial_params)
         increased = True
         for counter in range(max_iter):
             increased = False
             for k in range(params.shape[0]):
-                if k == idx_diploid_normal:
+                if k == idx_diploid_normal or k in enforce_states:
                     continue
                 this_best_obj = best_obj
                 this_best_k = copy.copy(params[k,:])
@@ -130,7 +130,7 @@ def hill_climbing_integer_copynumber_fixdiploid(new_log_mu, base_nb_mean, new_p_
                     if is_nondiploidnormal(k) and candi[0] == 1 and candi[1] == 1:
                         continue
                     params[k,:] = candi
-                    obj = f(params, ploidy)
+                    obj = f(params, ploidy, scalefactor)
                     if obj < this_best_obj:
                         this_best_obj = obj
                         this_best_k = candi
@@ -143,7 +143,7 @@ def hill_climbing_integer_copynumber_fixdiploid(new_log_mu, base_nb_mean, new_p_
     # diploid normal state
     idx_diploid_normal = find_diploid_balanced_state(new_log_mu, new_p_binom, pred_cnv, min_prop_threshold=min_prop_threshold, EPS_BAF=EPS_BAF)
     # candidate integer copy states
-    candidates = np.array([ [i,j] for i in range(max_allele_copy + 1) for j in range(max_allele_copy) if (not (i == 0 and j == 0)) and (i + j <= max_total_copy)])
+    candidates = np.array([ [i,j] for i in range(max_allele_copy + 1) for j in range(max_allele_copy+1) if (not (i == 0 and j == 0)) and (i + j <= max_total_copy)])
     # find the best copy number states starting from various ploidy
     best_obj = np.inf
     best_integer_copies = np.zeros((n_states, 2), dtype=int)
@@ -153,6 +153,8 @@ def hill_climbing_integer_copynumber_fixdiploid(new_log_mu, base_nb_mean, new_p_
         for r in range(20):
             initial_params = candidates[ np.random.randint(low=0, high=candidates.shape[0], size=n_states), : ]
             initial_params[idx_diploid_normal] = np.array([1,1])
+            for k,v in enforce_states.items():
+                initial_params[k] = v
             params, obj = hill_climb(initial_params, ploidy, idx_diploid_normal)
             if obj < best_obj:
                 best_obj = obj
@@ -160,7 +162,7 @@ def hill_climbing_integer_copynumber_fixdiploid(new_log_mu, base_nb_mean, new_p_
     return best_integer_copies, best_obj
 
 
-def hill_climbing_integer_copynumber_oneclone(new_log_mu, base_nb_mean, new_p_binom, pred_cnv, max_allele_copy=4, max_total_copy=6, max_medploidy=4):
+def hill_climbing_integer_copynumber_oneclone(new_log_mu, base_nb_mean, new_p_binom, pred_cnv, max_allele_copy=5, max_total_copy=6, max_medploidy=4, enforce_states={}):
     n_states = len(new_log_mu)
     lambd = base_nb_mean / np.sum(base_nb_mean)
     weight_per_state = np.array([ np.sum(lambd[pred_cnv == s]) for s in range(n_states)])
@@ -192,6 +194,8 @@ def hill_climbing_integer_copynumber_oneclone(new_log_mu, base_nb_mean, new_p_bi
         for counter in range(max_iter):
             increased = False
             for k in range(params.shape[0]):
+                if k in enforce_states:
+                    continue
                 this_best_obj = best_obj
                 this_best_k = copy.copy(params[k,:])
                 for candi in candidates:
@@ -208,13 +212,15 @@ def hill_climbing_integer_copynumber_oneclone(new_log_mu, base_nb_mean, new_p_bi
                 break
         return params, best_obj
     # candidate integer copy states
-    candidates = np.array([ [i,j] for i in range(max_allele_copy + 1) for j in range(max_allele_copy) if (not (i == 0 and j == 0)) and (i + j <= max_total_copy)])
+    candidates = np.array([ [i,j] for i in range(max_allele_copy + 1) for j in range(max_allele_copy+1) if (not (i == 0 and j == 0)) and (i + j <= max_total_copy)])
     # find the best copy number states starting from various ploidy
     best_obj = np.inf
     best_integer_copies = np.zeros((n_states, 2), dtype=int)
     for ploidy in range(1, max_medploidy+1):
         initial_params = np.ones((n_states, 2), dtype=int) * int(ploidy / 2)
         initial_params[:, 1] = ploidy - initial_params[:, 0]
+        for k,v in enforce_states.items():
+            initial_params[k] = v
         params, obj = hill_climb(initial_params, ploidy)
         if obj < best_obj:
             best_obj = obj
@@ -222,7 +228,7 @@ def hill_climbing_integer_copynumber_oneclone(new_log_mu, base_nb_mean, new_p_bi
     return best_integer_copies, best_obj
 
 
-def hill_climbing_integer_copynumber_joint(new_log_mu, base_nb_mean, new_p_binom, pred_cnv, max_allele_copy=4, max_total_copy=6, max_medploidy=4):
+def hill_climbing_integer_copynumber_joint(new_log_mu, base_nb_mean, new_p_binom, pred_cnv, max_allele_copy=5, max_total_copy=6, max_medploidy=4):
     """
     Jointly infer copy numbers across multiple clones, given they share the same set of new_log_mu and new_p_binom parameters.
     
@@ -286,7 +292,7 @@ def hill_climbing_integer_copynumber_joint(new_log_mu, base_nb_mean, new_p_binom
                 break
         return params, best_obj
     # candidate integer copy states
-    candidates = np.array([ [i,j] for i in range(max_allele_copy + 1) for j in range(max_allele_copy) if (not (i == 0 and j == 0)) and (i + j <= max_total_copy)])
+    candidates = np.array([ [i,j] for i in range(max_allele_copy + 1) for j in range(max_allele_copy+1) if (not (i == 0 and j == 0)) and (i + j <= max_total_copy)])
     # find the best copy number states starting from various ploidy
     best_obj = np.inf
     best_integer_copies = np.zeros((n_states, 2), dtype=int)
