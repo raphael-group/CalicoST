@@ -380,6 +380,7 @@ def main(configuration_file):
                 else:
                     X, base_nb_mean, total_bb_RD, tumor_prop = merge_pseudobulk_by_index_mix(single_X, single_base_nb_mean, single_total_bb_RD, [np.where(res_combine["new_assignment"]==cid)[0] for cid in final_clone_ids], single_tumor_prop, threshold=config["tumorprop_threshold"])
 
+                finding_distate_failed=False
                 for s, cid in enumerate(final_clone_ids):
                     if np.sum(base_nb_mean[:,s]) == 0:
                         continue
@@ -390,7 +391,14 @@ def main(configuration_file):
                     if not max_medploidy is None:
                         best_integer_copies, _ = hill_climbing_integer_copynumber_oneclone(adjusted_log_mu, base_nb_mean[:,s], res_combine["new_p_binom"][:,s], this_pred_cnv, max_medploidy=max_medploidy)
                     else:
-                        best_integer_copies, _ = hill_climbing_integer_copynumber_fixdiploid(adjusted_log_mu, base_nb_mean[:,s], res_combine["new_p_binom"][:,s], this_pred_cnv, nonbalance_bafdist=config["nonbalance_bafdist"], nondiploid_rdrdist=config["nondiploid_rdrdist"])
+                        try:
+                            best_integer_copies, _ = hill_climbing_integer_copynumber_fixdiploid(adjusted_log_mu, base_nb_mean[:,s], res_combine["new_p_binom"][:,s], this_pred_cnv, nonbalance_bafdist=config["nonbalance_bafdist"], nondiploid_rdrdist=config["nondiploid_rdrdist"])
+                        except:
+                            try:
+                                best_integer_copies, _ = hill_climbing_integer_copynumber_fixdiploid(adjusted_log_mu, base_nb_mean[:,s], res_combine["new_p_binom"][:,s], this_pred_cnv, nonbalance_bafdist=config["nonbalance_bafdist"], nondiploid_rdrdist=config["nondiploid_rdrdist"], min_prop_threshold=0.05)
+                            except:
+                                finding_distate_failed = True
+                                continue
 
                     print(f"max med ploidy = {max_medploidy}, clone {s}, integer copy inference loss = {_}")
                     
@@ -408,6 +416,10 @@ def main(configuration_file):
                         df_genelevel_cnv = copy.copy(tmpdf)
                     else:
                         df_genelevel_cnv = df_genelevel_cnv.join(tmpdf)
+
+                if finding_distate_failed:
+                    continue
+
                 # output gene-level copy number
                 df_genelevel_cnv.to_csv(f"{outdir}/cnv{medfix[o]}_genelevel.tsv", header=True, index=True, sep="\t")
                 # output segment-level copy number
@@ -421,18 +433,6 @@ def main(configuration_file):
                 # summarize to cna events 
                 df_event = summary_events(f"{outdir}/cnv{medfix[o]}_seglevel.tsv", f"{outdir}/rdrbaf_final_nstates{config['n_states']}_smp.npz")
                 df_event.to_csv(f"{outdir}/cnv{medfix[o]}_event.tsv", header=True, index=False, sep="\t")
-                #
-                # # posterior using integer-copy numbers
-                # log_persample_weights = np.zeros((len(nonempty_clone_ids), len(sample_list)))
-                # for sidx in range(len(sample_list)):
-                #     index = np.where(sample_ids == sidx)[0]
-                #     this_persample_weight = np.array([ np.sum(res_combine["new_assignment"][index] == cid) for cid in nonempty_clone_ids]) / len(index)
-                #     log_persample_weights[:, sidx] = np.where(this_persample_weight > 0, np.log(this_persample_weight), -50)
-                #     log_persample_weights[:, sidx] = log_persample_weights[:, sidx] - scipy.special.logsumexp(log_persample_weights[:, sidx])
-                # pred = np.vstack([ np.argmax(res_combine["log_gamma"][:,:,cid], axis=0) for cid in nonempty_clone_ids ]).T
-                # df_posterior = clonelabel_posterior_withinteger(single_X, single_base_nb_mean, single_total_bb_RD, single_tumor_prop, state_cnv, res_combine, pred, \
-                #     smooth_mat, adjacency_mat, res_combine["new_assignment"], sample_ids, base_nb_mean, log_persample_weights, config["spatial_weight"], hmmclass=hmm_nophasing_v2)
-                # df_posterior.to_pickle(f"{outdir}/posterior{medfix[o]}.pkl")
             
             ##### output clone label #####
             df_clone_label = pd.DataFrame({"clone_label":res_combine["new_assignment"]}, index=barcodes)
@@ -446,12 +446,14 @@ def main(configuration_file):
             out, err = p.communicate()
 
             # plot RDR and BAF
-            cn_file = f"{outdir}/cnv_seglevel.tsv"
+            cn_file = f"{outdir}/cnv_diploid_seglevel.tsv"
             fig = plot_rdr_baf(configuration_file, r_hmrf_initialization, cn_file, clone_ids=None, remove_xticks=True, rdr_ylim=5, chrtext_shift=-0.3, base_height=3.2, pointsize=30, palette="tab10")
             fig.savefig(f"{outdir}/plots/rdr_baf_defaultcolor.pdf", transparent=True, bbox_inches="tight")
             # plot allele-specific copy number
             for o,max_medploidy in enumerate([None, 2, 3, 4]):
                 cn_file = f"{outdir}/cnv{medfix[o]}_seglevel.tsv"
+                if not Path(cn_file).exists():
+                    continue
                 df_cnv = pd.read_csv(cn_file, header=0, sep="\t")
                 df_cnv = expand_df_cnv(df_cnv)
                 fig, axes = plt.subplots(1, 1, figsize=(15, 0.9*len(final_clone_ids) + 0.6), dpi=200, facecolor="white")
