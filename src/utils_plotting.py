@@ -170,7 +170,7 @@ def plot_acn(cn_file, ax_handle, clone_ids=None, clone_names=None, add_chrbar=Tr
     return ax_handle
 
 
-def plot_acn_from_df(df_cnv, ax_handle, clone_ids=None, clone_names=None, add_chrbar=True, add_arrow=True, chrbar_thickness=0.1, add_legend=True, remove_xticks=True):
+def plot_acn_from_df(df_cnv, ax_handle, clone_ids=None, clone_names=None, add_chrbar=True, add_arrow=True, chrbar_thickness=0.1, add_legend=True, remove_xticks=True, rasterized=True):
     # full color palette
     palette,_ = get_full_palette()
 
@@ -204,14 +204,14 @@ def plot_acn_from_df(df_cnv, ax_handle, clone_ids=None, clone_names=None, add_ch
     if clone_ids is None:
         tmp_ploidy = [ploidy.loc[f"clone {cid}"].values[0] for cid in final_clone_ids]
         rename_cnv_mapped = pd.DataFrame(cnv_mapped.values, index=[f"clone {cid}\nploidy {tmp_ploidy[c]}" for c,cid in enumerate(final_clone_ids)])
-        seaborn.heatmap(rename_cnv_mapped, cmap=LinearSegmentedColormap.from_list('multi-level', colors, len(colors)), linewidths=0, cbar=False, rasterized=True, ax=ax_handle)
+        seaborn.heatmap(rename_cnv_mapped, cmap=LinearSegmentedColormap.from_list('multi-level', colors, len(colors)), linewidths=0, cbar=False, rasterized=rasterized, ax=ax_handle)
     else:
         tmp_ploidy = [ploidy.loc[f"clone {cid}"].values[0] for cid in clone_ids]
         if clone_names is None:
             rename_cnv_mapped = pd.DataFrame(cnv_mapped.loc[[f"clone {cid}" for cid in clone_ids]].values, index=[f"clone {cid}\nploidy {tmp_ploidy[c]}" for c,cid in enumerate(clone_ids)])
         else:
             rename_cnv_mapped = pd.DataFrame(cnv_mapped.loc[[f"clone {cid}" for cid in clone_ids]].values, index=[f"{clone_names[c]}\nploidy {tmp_ploidy[c]}" for c,cid in enumerate(clone_ids)])
-        seaborn.heatmap(rename_cnv_mapped, cmap=LinearSegmentedColormap.from_list('multi-level', colors, len(colors)), linewidths=0, cbar=False, rasterized=True, ax=ax_handle)
+        seaborn.heatmap(rename_cnv_mapped, cmap=LinearSegmentedColormap.from_list('multi-level', colors, len(colors)), linewidths=0, cbar=False, rasterized=rasterized, ax=ax_handle)
 
     # indicate allele switches
     if add_arrow:
@@ -270,7 +270,7 @@ def plot_acn_from_df(df_cnv, ax_handle, clone_ids=None, clone_names=None, add_ch
         lut = {c:next(chr_palette) for c in np.unique(chr_ids.values)}
         col_colors = chr_ids.map(lut)
         for i, color in enumerate(col_colors):
-            ax_handle.add_patch(plt.Rectangle(xy=(i, 1 + 0.02*chrbar_thickness), width=1, height=chrbar_thickness, color=color, lw=0, transform=ax_handle.get_xaxis_transform(), clip_on=False, rasterized=True))
+            ax_handle.add_patch(plt.Rectangle(xy=(i, 1 + 0.02*chrbar_thickness), width=1, height=chrbar_thickness, color=color, lw=0, transform=ax_handle.get_xaxis_transform(), clip_on=False, rasterized=rasterized))
 
         for c in np.unique(chr_ids.values):
             interval = np.where(chr_ids.values == c)[0]
@@ -467,7 +467,7 @@ def plot_acn_withhighlight(cn_file, df_highlight_events, ax_handle, clone_ids=No
     return ax_handle
 
 
-def plot_total_cn(df_cnv, ax_handle, df_highlight_events=None, palette_mode=6, clone_ids=None, clone_names=None, add_chrbar=True, chrbar_thickness=0.1, add_legend=True, remove_xticks=True):
+def plot_total_cn(df_cnv, ax_handle, df_highlight_events=None, palette_mode=6, clone_ids=None, clone_names=None, add_chrbar=True, chrbar_thickness=0.1, add_legend=True, legend_position="upper left", remove_xticks=True):
     """
     df_cnv : pandas.DataFrame
         Each row is a genomic bin, containing columns "CHR", "clone {cid}" for each clone id.
@@ -486,14 +486,14 @@ def plot_total_cn(df_cnv, ax_handle, df_highlight_events=None, palette_mode=6, c
         found = np.unique(df_cnv.iloc[:, df_cnv.columns.str.startswith("clone")].values.flatten())
         lut = {x:i for i,x in enumerate(found)}
         palette = matplotlib.colors.ListedColormap([full_palette[x] for x in found])
-        df_cnv_mapped = pd.concat([ df_cnv[[x]].replace({x:lut}) for x in df_cnv.columns if x.startswith("clone") ], axis=1)
+        df_cnv_mapped = df_cnv.iloc[:, df_cnv.columns.str.startswith("clone")].replace(lut)
         df_cnv_mapped = df_cnv_mapped.T
         seaborn.heatmap(df_cnv_mapped, cmap=palette, linewidths=0, cbar=False, rasterized=True, ax=ax_handle)
     else:
         found = np.unique(df_cnv[[f"clone {cid}" for cid in clone_ids]].values.flatten())
         lut = {x:i for i,x in enumerate(found)}
         palette = matplotlib.colors.ListedColormap([full_palette[x] for x in found])
-        df_cnv_mapped = pd.concat([ df_cnv[[f"clone {cid}" for cid in clone_ids]].replace({f"clone {cid}":lut}) for cid in clone_ids ], axis=1)
+        df_cnv_mapped = df_cnv[[f"clone {cid}" for cid in clone_ids]].replace(lut)
         df_cnv_mapped = df_cnv_mapped.T
         if not clone_names is None:
             df_cnv_mapped.rename(index={f"clone {cid}":clone_names[i] for i,cid in enumerate(clone_ids)}, inplace=True)
@@ -545,12 +545,18 @@ def plot_total_cn(df_cnv, ax_handle, df_highlight_events=None, palette_mode=6, c
             a3 = plt.arrow(0,0, 0,0, color='#A0CEEA')
             a4 = plt.arrow(0,0, 0,0, color='#4F69DF')
             a5 = plt.arrow(0,0, 0,0, color='#738B2D')
-            ax_handle.legend([a0, a1, a2, a3, a4, a5], ["amp", "bamp", "neu", "bdel", "del", "loh"], loc='upper left', bbox_to_anchor=(1,1 - 0.1 * min(0, df_cnv_mapped.shape[0]-5)))
+            if legend_position == "upper left":
+                ax_handle.legend([a0, a1, a2, a3, a4, a5], ["amp", "bamp", "neu", "bdel", "del", "loh"], loc='upper left', bbox_to_anchor=(1,1 - 0.1 * min(0, df_cnv_mapped.shape[0]-5)))
+            else:
+                ax_handle.legend([a0, a1, a2, a3, a4, a5], ["amp", "bamp", "neu", "bdel", "del", "loh"], loc='lower center', bbox_to_anchor=(0.5, -0.25), ncol=6)
         else:
             a0 = plt.arrow(0,0, 0,0, color='#B44F3D')
             a1 = plt.arrow(0,0, 0,0, color='lightgrey')
             a2 = plt.arrow(0,0, 0,0, color='#4F69DF')
-            ax_handle.legend([a0, a1, a2], ["amp", "neu", "del"], loc='upper left', bbox_to_anchor=(1,1 - 0.1 * min(0, df_cnv_mapped.shape[0]-2)))
+            if legend_position == "upper left":
+                ax_handle.legend([a0, a1, a2], ["amp", "neu", "del"], loc='upper left', bbox_to_anchor=(1,1 - 0.1 * min(0, df_cnv_mapped.shape[0]-2)))
+            else:
+                ax_handle.legend([a0, a1, a2], ["amp", "neu", "del"], loc='lower center', bbox_to_anchor=(0.5, -0.25), ncol=3)
 
     return ax_handle
 

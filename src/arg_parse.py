@@ -209,13 +209,17 @@ def read_joint_configuration_file(filename):
 
 
 def write_config_file(outputfilename, config):
-    _,_,_,_,_,_, category_names, category_elements = load_default_config()
+    _,_,_, argtype_shared, argtype_joint, argtype_single, category_names, category_elements = load_default_config()
+    argument_type = {**argtype_shared, **argtype_joint, **argtype_single}
     with open(outputfilename, 'w') as fp:
         for i in range(len(category_names)):
             fp.write(f"{category_names[i]}\n")
             for k in category_elements[i]:
                 if k in config:
-                    fp.write(f"{k} : {config[k]}\n")
+                    if argument_type[k] == "list_str":
+                        fp.write(f"{k} : {' '.join(config[k])}\n")
+                    else:
+                        fp.write(f"{k} : {config[k]}\n")
             fp.write("\n")
 
     # with open(outputfilename, 'w') as fp:
