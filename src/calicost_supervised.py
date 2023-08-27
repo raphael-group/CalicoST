@@ -53,7 +53,8 @@ def main(configuration_file):
         q = np.sort(single_tumor_prop)[ int(EXPECTED_NORMAL_PROP * len(barcodes)) ]
         normal_candidate = ( single_tumor_prop <= q )
         
-        copy_single_X_rdr,_ = filter_de_genes(exp_counts, x_gene_list, normal_candidate, sample_list=sample_list, sample_ids=sample_ids)
+        # copy_single_X_rdr,_ = filter_de_genes(exp_counts, x_gene_list, normal_candidate, sample_list=sample_list, sample_ids=sample_ids)
+        copy_single_X_rdr, _ = filter_de_genes_tri(exp_counts, x_gene_list, normal_candidate, sample_list=sample_list, sample_ids=sample_ids)
         MIN_NORMAL_COUNT_PERBIN = 20
         bidx_inconfident = np.where( np.sum(copy_single_X_rdr[:, (normal_candidate==True)], axis=1) < MIN_NORMAL_COUNT_PERBIN )[0]
         rdr_normal = np.sum(copy_single_X_rdr[:, (normal_candidate==True)], axis=1)
@@ -181,7 +182,8 @@ def main(configuration_file):
                     if np.sum(copy_single_X_rdr[:, (normal_candidate==True)]) > single_X.shape[0] * 200 or PERCENT_NORMAL == 100:
                         break
                     PERCENT_NORMAL += 10
-                copy_single_X_rdr, _ = filter_de_genes(exp_counts, x_gene_list, normal_candidate)
+                # copy_single_X_rdr, _ = filter_de_genes(exp_counts, x_gene_list, normal_candidate)
+                copy_single_X_rdr, _ = filter_de_genes_tri(exp_counts, x_gene_list, normal_candidate, sample_list=sample_list, sample_ids=sample_ids)
                 MIN_NORMAL_COUNT_PERBIN = 20
                 bidx_inconfident = np.where( np.sum(copy_single_X_rdr[:, (normal_candidate==True)], axis=1) < MIN_NORMAL_COUNT_PERBIN )[0]
                 rdr_normal = np.sum(copy_single_X_rdr[:, (normal_candidate==True)], axis=1)
@@ -303,6 +305,7 @@ def main(configuration_file):
                             fix_NB_dispersion=config["fix_NB_dispersion"], shared_NB_dispersion=config["shared_NB_dispersion"], fix_BB_dispersion=config["fix_BB_dispersion"], shared_BB_dispersion=config["shared_BB_dispersion"], \
                             is_diag=True, init_log_mu=res["new_log_mu"], init_p_binom=res["new_p_binom"], init_alphas=res["new_alphas"], init_taus=res["new_taus"], max_iter=config["max_iter"], tol=config["tol"], lambd=np.sum(base_nb_mean,axis=1)/np.sum(base_nb_mean), sample_length=np.ones(X.shape[2],dtype=int)*X.shape[0])
                     merged_res["new_assignment"] = copy.copy(tmp)
+                    merged_res = combine_similar_states_across_clones(X, base_nb_mean, total_bb_RD, merged_res, params="smp", tumor_prop=tumor_prop, hmmclass=hmm_nophasing_v2, merge_threshold=0.1)
                     log_gamma = np.stack([ merged_res["log_gamma"][:,(c*n_obs):(c*n_obs+n_obs)] for c in range(n_merged_clones) ], axis=-1)
                     pred_cnv = np.vstack([ merged_res["pred_cnv"][(c*n_obs):(c*n_obs+n_obs)] for c in range(n_merged_clones) ]).T
                 

@@ -1047,8 +1047,6 @@ def bin_selection_basedon_normal(single_X, single_base_nb_mean, single_total_bb_
     return lengths, single_X, single_base_nb_mean, single_total_bb_RD, log_sitewise_transmat, sorted_chr_pos, sorted_chr_pos_last, x_gene_list, index_remaining
 
 
-# def filter_de_genes(adata, x_gene_list, sample_list=None, logfcthreshold=4, quantile_threshold=80):
-#     assert "normal_candidate" in adata.obs
 def filter_de_genes(exp_counts, x_gene_list, normal_candidate, sample_list=None, sample_ids=None, logfcthreshold=4, quantile_threshold=80):
     adata = anndata.AnnData(exp_counts)
     adata.layers["count"] = exp_counts.values
@@ -1106,59 +1104,78 @@ def filter_de_genes(exp_counts, x_gene_list, normal_candidate, sample_list=None,
     return new_single_X_rdr, filtered_out_set
 
 
-# def filter_de_genes(adata, x_gene_list, sample_list=None, logfcthreshold=4, quantile_threshold=80):
-#     assert "normal_candidate" in adata.obs
-#     #
-#     map_gene_adatavar = {}
-#     map_gene_umi = {}
-#     list_gene_umi = np.sum(adata.layers["count"], axis=0).A.flatten()
-#     for i,x in enumerate(adata.var.index):
-#         map_gene_adatavar[x] = i
-#         map_gene_umi[x] = list_gene_umi[i]
-#     #
-#     if sample_list is None:
-#         sample_list = [None]
-#     #
-#     filtered_out_set = set()
-#     for s,sname in enumerate(sample_list):
-#         if sname is None:
-#             index = np.arange(adata.shape[0])
-#         else:
-#             index = np.where(sample_ids == s)[0]
-#         tmpadata = adata[index, :].copy()
-#         #
-#         umi_threshold = np.percentile( np.sum(tmpadata.layers["count"], axis=0), quantile_threshold )
-#         #
-#         sc.pp.filter_cells(tmpadata, min_genes=200)
-#         sc.pp.filter_genes(tmpadata, min_cells=10)
-#         med = np.median( np.sum(tmpadata.layers["count"], axis=1) )
-#         # sc.pp.normalize_total(tmpadata, target_sum=1e4)
-#         sc.pp.normalize_total(tmpadata, target_sum=med)
-#         sc.pp.log1p(tmpadata)
-#         # new added
-#         sc.pp.pca(tmpadata, n_comps=4)
-#         kmeans = KMeans(n_clusters=2, random_state=0).fit(tmpadata.X)
-#         kmeans_labels = kmeans.predict(tmpadata.X)
-#         idx_kmeans_label = np.argmax(np.bincount( kmeans_labels[tmpadata.obs["normal_candidate"]], minlength=2 ))
-#         clone = np.array(["normal"] * tmpadata.shape[0])
-#         clone[ (kmeans_labels != idx_kmeans_label) & (~tmpadata.obs["normal_candidate"]) ] = "tumor"
-#         tmpadata.obs["clone"] = clone
-#         # end added
-#         sc.tl.rank_genes_groups(tmpadata, 'clone', groups=["tumor"], reference="normal", method='wilcoxon')
-#         genenames = np.array([ x[0] for x in tmpadata.uns["rank_genes_groups"]["names"] ])
-#         logfc = np.array([ x[0] for x in tmpadata.uns["rank_genes_groups"]["logfoldchanges"] ])
-#         geneumis = np.array([ map_gene_umi[x] for x in genenames])
-#         this_filtered_out_set = set(list(genenames[ (np.abs(logfc) > logfcthreshold) & (geneumis > umi_threshold) ]))
-#         filtered_out_set = filtered_out_set | this_filtered_out_set
-#         print(f"Filter out {len(filtered_out_set)} DE genes")
-#     #
-#     new_single_X_rdr = np.zeros((len(x_gene_list), adata.shape[0]))
-#     for i,x in enumerate(x_gene_list):
-#         g_list = [z for z in x.split() if z != ""]
-#         idx_genes = np.array([ map_gene_adatavar[g] for g in g_list if (not g in filtered_out_set) and (g in map_gene_adatavar)])
-#         if len(idx_genes) > 0:
-#             new_single_X_rdr[i, :] = np.sum(adata.layers["count"][:, idx_genes], axis=1)
-#     return new_single_X_rdr, filtered_out_set
+def filter_de_genes_tri(exp_counts, x_gene_list, normal_candidate, sample_list=None, sample_ids=None, logfcthreshold_u=2, logfcthreshold_t=4, quantile_threshold=80):
+    adata = anndata.AnnData(exp_counts)
+    adata.layers["count"] = exp_counts.values
+    adata.obs["normal_candidate"] = normal_candidate
+    #
+    map_gene_adatavar = {}
+    map_gene_umi = {}
+    list_gene_umi = np.sum(adata.layers["count"], axis=0)
+    for i,x in enumerate(adata.var.index):
+        map_gene_adatavar[x] = i
+        map_gene_umi[x] = list_gene_umi[i]
+    #
+    if sample_list is None:
+        sample_list = [None]
+    #
+    filtered_out_set = set()
+    for s,sname in enumerate(sample_list):
+        if sname is None:
+            index = np.arange(adata.shape[0])
+        else:
+            index = np.where(sample_ids == s)[0]
+        tmpadata = adata[index, :].copy()
+        if np.sum(tmpadata.layers["count"][tmpadata.obs["normal_candidate"], :]) < tmpadata.shape[1] * 10:
+            continue
+        #
+        umi_threshold = np.percentile( np.sum(tmpadata.layers["count"], axis=0), quantile_threshold )
+        #
+        sc.pp.filter_cells(tmpadata, min_genes=200)
+        sc.pp.filter_genes(tmpadata, min_cells=10)
+        med = np.median( np.sum(tmpadata.layers["count"], axis=1) )
+        # sc.pp.normalize_total(tmpadata, target_sum=1e4)
+        sc.pp.normalize_total(tmpadata, target_sum=med)
+        sc.pp.log1p(tmpadata)
+        # new added
+        sc.pp.pca(tmpadata, n_comps=4)
+        kmeans = KMeans(n_clusters=2, random_state=0).fit(tmpadata.obsm["X_pca"])
+        kmeans_labels = kmeans.predict(tmpadata.obsm["X_pca"])
+        idx_kmeans_label = np.argmax(np.bincount( kmeans_labels[tmpadata.obs["normal_candidate"]], minlength=2 ))
+        clone = np.array(["normal"] * tmpadata.shape[0])
+        clone[ (kmeans_labels != idx_kmeans_label) & (~tmpadata.obs["normal_candidate"]) ] = "tumor"
+        ### third part ###
+        clone[ (kmeans_labels == idx_kmeans_label) & (~tmpadata.obs["normal_candidate"]) ] = "unsure"
+        tmpadata.obs["clone"] = clone
+        # end added
+        # sc.tl.rank_genes_groups(tmpadata, 'clone', groups=["tumor", "unsure"], reference="normal", method='wilcoxon')
+        # # DE and log fold change comparing tumor and normal
+        # genenames_t = np.array([ x[0] for x in tmpadata.uns["rank_genes_groups"]["names"] ])
+        # logfc_t = np.array([ x[0] for x in tmpadata.uns["rank_genes_groups"]["logfoldchanges"] ])
+        # geneumis_t = np.array([ map_gene_umi[x] for x in genenames_t])
+        # # DE and log fold change comparing unsure and normal
+        # genenames_u = np.array([ x[1] for x in tmpadata.uns["rank_genes_groups"]["names"] ])
+        # logfc_u = np.array([ x[1] for x in tmpadata.uns["rank_genes_groups"]["logfoldchanges"] ])
+        # geneumis_u = np.array([ map_gene_umi[x] for x in genenames_u])
+        # this_filtered_out_set = set(list(genenames_t[ (np.abs(logfc_t) > logfcthreshold) & (geneumis_t > umi_threshold) ])) | set(list(genenames_u[ (np.abs(logfc_u) > logfcthreshold) & (geneumis_u > umi_threshold) ]))
+        #
+        agg_counts = np.vstack([ np.sum(tmpadata.layers["count"][tmpadata.obs['clone']==c,:], axis=0) for c in ['normal', 'unsure', 'tumor'] ])
+        agg_counts = agg_counts / np.sum(agg_counts, axis=1, keepdims=True) * 1e6
+        geneumis = np.array([ map_gene_umi[x] for x in tmpadata.var.index])
+        logfc_u = np.where( ((agg_counts[1,:]==0) | (agg_counts[0,:]==0)), 10, np.log2(agg_counts[1,:] / agg_counts[0,:]) )
+        logfc_t = np.where( ((agg_counts[2,:]==0) | (agg_counts[0,:]==0)), 10, np.log2(agg_counts[2,:] / agg_counts[0,:]) )
+        this_filtered_out_set = set(list(tmpadata.var.index[ (np.abs(logfc_u)>logfcthreshold_u) & (geneumis>umi_threshold) ])) | set(list(tmpadata.var.index[ (np.abs(logfc_t)>logfcthreshold_t) & (geneumis>umi_threshold) ]))
+        filtered_out_set = filtered_out_set | this_filtered_out_set
+        print(f"Filter out {len(filtered_out_set)} DE genes")
+    #
+    new_single_X_rdr = np.zeros((len(x_gene_list), adata.shape[0]))
+    for i,x in enumerate(x_gene_list):
+        g_list = [z for z in x.split() if z != ""]
+        idx_genes = np.array([ map_gene_adatavar[g] for g in g_list if (not g in filtered_out_set) and (g in map_gene_adatavar)])
+        if len(idx_genes) > 0:
+            new_single_X_rdr[i, :] = np.sum(adata.layers["count"][:, idx_genes], axis=1)
+        # x_gene_list[i] = " ".join([g for g in g_list if (not g in filtered_out_set) and (g in map_gene_adatavar)])
+    return new_single_X_rdr, filtered_out_set
 
 
 def get_lengths_by_arm(sorted_chr_pos, centromere_file):
