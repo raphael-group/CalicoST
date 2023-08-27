@@ -124,7 +124,8 @@ def main(configuration_file):
                     if np.sum(copy_single_X_rdr[:, (normal_candidate==True)]) > single_X.shape[0] * 200 or PERCENT_NORMAL == 100:
                         break
                     PERCENT_NORMAL += 10
-                copy_single_X_rdr, _ = filter_de_genes(exp_counts, x_gene_list, normal_candidate, sample_list=sample_list, sample_ids=sample_ids)
+                # copy_single_X_rdr, _ = filter_de_genes(exp_counts, x_gene_list, normal_candidate, sample_list=sample_list, sample_ids=sample_ids)
+                copy_single_X_rdr, _ = filter_de_genes_tri(exp_counts, x_gene_list, normal_candidate, sample_list=sample_list, sample_ids=sample_ids)
                 MIN_NORMAL_COUNT_PERBIN = 20
                 bidx_inconfident = np.where( np.sum(copy_single_X_rdr[:, (normal_candidate==True)], axis=1) < MIN_NORMAL_COUNT_PERBIN )[0]
                 rdr_normal = np.sum(copy_single_X_rdr[:, (normal_candidate==True)], axis=1)
@@ -152,7 +153,8 @@ def main(configuration_file):
                     normal_candidate = (single_tumor_prop < prop_threshold)
                     if np.sum(copy_single_X_rdr[:, (normal_candidate==True)]) > single_X.shape[0] * 200:
                         break
-                copy_single_X_rdr,_ = filter_de_genes(exp_counts, x_gene_list, normal_candidate, sample_list=sample_list, sample_ids=sample_ids)
+                # copy_single_X_rdr,_ = filter_de_genes(exp_counts, x_gene_list, normal_candidate, sample_list=sample_list, sample_ids=sample_ids)
+                copy_single_X_rdr, _ = filter_de_genes_tri(exp_counts, x_gene_list, normal_candidate, sample_list=sample_list, sample_ids=sample_ids)
                 MIN_NORMAL_COUNT_PERBIN = 20
                 bidx_inconfident = np.where( np.sum(copy_single_X_rdr[:, (normal_candidate==True)], axis=1) < MIN_NORMAL_COUNT_PERBIN )[0]
                 rdr_normal = np.sum(copy_single_X_rdr[:, (normal_candidate==True)], axis=1)
@@ -198,7 +200,7 @@ def main(configuration_file):
                         is_diag=True, max_iter=config["max_iter"], tol=config["tol"], spatial_weight=config["spatial_weight"])
                 else:
                     hmrfmix_concatenate_pipeline(outdir, prefix, single_X[:,:,idx_spots], lengths, single_base_nb_mean[:,idx_spots], single_total_bb_RD[:,idx_spots], single_tumor_prop[idx_spots], initial_clone_index, n_states=config["n_states"], \
-                        log_sitewise_transmat=log_sitewise_transmat, smooth_mat=smooth_mat[np.ix_(idx_spots,idx_spots)], adjacency_mat=adjacency_mat[np.ix_(idx_spots,idx_spots)], sample_ids=copy_slice_sample_ids, max_iter_outer=10, nodepotential=config["nodepotential"], \
+                        log_sitewise_transmat=log_sitewise_transmat, smooth_mat=smooth_mat[np.ix_(idx_spots,idx_spots)], adjacency_mat=adjacency_mat[np.ix_(idx_spots,idx_spots)], sample_ids=copy_slice_sample_ids, max_iter_outer=0, nodepotential=config["nodepotential"], \
                         hmmclass=hmm_nophasing_v2, params="smp", t=config["t"], random_state=config["gmm_random_state"], \
                         fix_NB_dispersion=config["fix_NB_dispersion"], shared_NB_dispersion=config["shared_NB_dispersion"], \
                         fix_BB_dispersion=config["fix_BB_dispersion"], shared_BB_dispersion=config["shared_BB_dispersion"], \
@@ -258,6 +260,7 @@ def main(configuration_file):
                             fix_NB_dispersion=config["fix_NB_dispersion"], shared_NB_dispersion=config["shared_NB_dispersion"], fix_BB_dispersion=config["fix_BB_dispersion"], shared_BB_dispersion=config["shared_BB_dispersion"], \
                             is_diag=True, init_log_mu=res["new_log_mu"], init_p_binom=res["new_p_binom"], init_alphas=res["new_alphas"], init_taus=res["new_taus"], max_iter=config["max_iter"], tol=config["tol"], lambd=np.sum(base_nb_mean,axis=1)/np.sum(base_nb_mean), sample_length=np.ones(X.shape[2],dtype=int)*X.shape[0])
                     merged_res["new_assignment"] = copy.copy(tmp)
+                    merged_res = combine_similar_states_across_clones(X, base_nb_mean, total_bb_RD, merged_res, params="smp", tumor_prop=tumor_prop, hmmclass=hmm_nophasing_v2, merge_threshold=0.1)
                     log_gamma = np.stack([ merged_res["log_gamma"][:,(c*n_obs):(c*n_obs+n_obs)] for c in range(n_merged_clones) ], axis=-1)
                     pred_cnv = np.vstack([ merged_res["pred_cnv"][(c*n_obs):(c*n_obs+n_obs)] for c in range(n_merged_clones) ]).T
                 #
@@ -272,9 +275,9 @@ def main(configuration_file):
                         "log_gamma":np.dstack([res_combine["log_gamma"], log_gamma ]), "pred_cnv":np.hstack([res_combine["pred_cnv"], pred_cnv])})
                 res_combine["prev_assignment"][idx_spots] = merged_res["new_assignment"] + offset_clone
                 offset_clone += n_merged_clones
-            # # temp: make dispersions the same across all clones
-            # res_combine["new_alphas"][:,:] = np.max(res_combine["new_alphas"])
-            # res_combine["new_taus"][:,:] = np.min(res_combine["new_taus"])
+            # temp: make dispersions the same across all clones
+            res_combine["new_alphas"][:,:] = np.max(res_combine["new_alphas"])
+            res_combine["new_taus"][:,:] = np.min(res_combine["new_taus"])
             # # end temp
             n_final_clones = len(np.unique(res_combine["prev_assignment"]))
             # per-sample weights across clones
