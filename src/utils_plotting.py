@@ -304,6 +304,168 @@ def plot_acn_from_df(df_cnv, ax_handle, clone_ids=None, clone_names=None, add_ch
     return ax_handle
 
 
+def plot_acn_from_df_anotherscheme(df_cnv, ax_handle, clone_ids=None, clone_names=None, chrbar_pos=None, add_arrow=True, chrbar_thickness=0.1, add_legend=True, remove_xticks=True, rasterized=True):
+    # full color palette
+    palette,_ = get_full_palette()
+
+    # read CN profiles
+    final_clone_ids = np.unique([ x.split(" ")[0][5:] for x in df_cnv.columns[3:] ])
+    print(final_clone_ids)
+    assert (clone_ids is None) or np.all([ (cid in final_clone_ids) for cid in clone_ids])
+
+    found = []
+    for cid in final_clone_ids:
+        major = np.maximum(df_cnv[f"clone{cid} A"].values, df_cnv[f"clone{cid} B"].values)
+        minor = np.minimum(df_cnv[f"clone{cid} A"].values, df_cnv[f"clone{cid} B"].values)
+        found += list(zip(major, minor))
+    found = list(set(found))
+    found.sort()
+
+    # map CN to single digit number
+    map_cn = {x:i for i,x in enumerate(found)}
+    cnv_mapped = []
+    ploidy = []
+    for cid in final_clone_ids:
+        major = np.maximum(df_cnv[f"clone{cid} A"].values, df_cnv[f"clone{cid} B"].values)
+        minor = np.minimum(df_cnv[f"clone{cid} A"].values, df_cnv[f"clone{cid} B"].values)
+        cnv_mapped.append( [map_cn[(major[i], minor[i])] for i in range(len(major))] )
+        ploidy.append( np.mean(major + minor) )
+    cnv_mapped = pd.DataFrame( np.array(cnv_mapped), index=[f"clone {cid}" for cid in final_clone_ids])
+    ploidy = pd.DataFrame(np.around(np.array(ploidy), decimals=2).reshape(-1,1), index=[f"clone {cid}" for cid in final_clone_ids])
+    chr_ids = df_cnv.CHR
+
+    colors = [palette[c] for c in found]
+    if clone_ids is None:
+        tmp_ploidy = [ploidy.loc[f"clone {cid}"].values[0] for cid in final_clone_ids]
+        rename_cnv_mapped = pd.DataFrame(cnv_mapped.values, index=[f"clone {cid}\nploidy {tmp_ploidy[c]}" for c,cid in enumerate(final_clone_ids)])
+        seaborn.heatmap(rename_cnv_mapped, cmap=LinearSegmentedColormap.from_list('multi-level', colors, len(colors)), linewidths=0, cbar=False, rasterized=rasterized, ax=ax_handle)
+    else:
+        tmp_ploidy = [ploidy.loc[f"clone {cid}"].values[0] for cid in clone_ids]
+        if clone_names is None:
+            rename_cnv_mapped = pd.DataFrame(cnv_mapped.loc[[f"clone {cid}" for cid in clone_ids]].values, index=[f"clone {cid}\nploidy {tmp_ploidy[c]}" for c,cid in enumerate(clone_ids)])
+        else:
+            rename_cnv_mapped = pd.DataFrame(cnv_mapped.loc[[f"clone {cid}" for cid in clone_ids]].values, index=[f"{clone_names[c]}\nploidy {tmp_ploidy[c]}" for c,cid in enumerate(clone_ids)])
+        seaborn.heatmap(rename_cnv_mapped, cmap=LinearSegmentedColormap.from_list('multi-level', colors, len(colors)), linewidths=0, cbar=False, rasterized=rasterized, ax=ax_handle)
+
+    # indicate allele switches
+    if add_arrow:
+        if clone_ids is None:
+            # find regions where there exist both clones with A > B and clones with A < B
+            has_up = np.any(np.vstack([ df_cnv[f"clone{cid} A"].values > df_cnv[f"clone{cid} B"].values for cid in final_clone_ids]), axis=0)
+            has_down = np.any(np.vstack([ df_cnv[f"clone{cid} A"].values < df_cnv[f"clone{cid} B"].values for cid in final_clone_ids]), axis=0)
+            intervals, labs = get_intervals( (has_up & has_down) )
+            # for each intervals, find the corresponding clones with A > B to plot up-arrow, and corresponding clones with A < B to plot down-arrow
+            for i in range(len(intervals)):
+                if not labs[i]:
+                    continue
+                for c,cid in enumerate(final_clone_ids):
+                    y1 = c
+                    y2 = c+1
+                    # up-arrow
+                    sub_intervals, sub_labs = get_intervals( df_cnv[f"clone{cid} A"].values[intervals[i][0]:intervals[i][1]] > df_cnv[f"clone{cid} B"].values[intervals[i][0]:intervals[i][1]] )
+                    for j, sub_int in enumerate(sub_intervals):
+                        if sub_labs[j]:
+                            ax_handle.fill_between( np.arange(intervals[i][0]+sub_int[0], intervals[i][0]+sub_int[1]), y1, y2, color="none", edgecolor="black")
+                            # ax_handle.arrow(x=intervals[i][0]+np.mean(sub_int), y=0.9*y2+0.1*y1, dx=0, dy=0.7*(y1-y2), head_width=0.3*(sub_int[1] - sub_int[0]), head_length=0.1*np.abs(y1-y2), fc="black")
+                            # ax_handle.plot([intervals[i][0]+sub_int[0], intervals[i][0]+sub_int[1]], [0.9*y2+0.1*y1, 0.9*y1+0.1*y2], color="black")
+                            ax_handle.fill_between( np.arange(intervals[i][0]+sub_int[0], intervals[i][0]+sub_int[1]), y2-0.2, y2, color="black", edgecolor="black")
+                    # down-arrow
+                    sub_intervals, sub_labs = get_intervals( df_cnv[f"clone{cid} A"].values[intervals[i][0]:intervals[i][1]] < df_cnv[f"clone{cid} B"].values[intervals[i][0]:intervals[i][1]] )
+                    for j, sub_int in enumerate(sub_intervals):
+                        if sub_labs[j]:
+                            ax_handle.fill_between( np.arange(intervals[i][0]+sub_int[0], intervals[i][0]+sub_int[1]), y1, y2, color="none", edgecolor="black")
+                            # ax_handle.arrow(x=intervals[i][0]+np.mean(sub_int), y=0.9*y1+0.1*y2, dx=0, dy=-0.7*(y1-y2), head_width=0.3*(sub_int[1]-sub_int[0]), head_length=0.1*np.abs(y1-y2), fc="black")
+                            # ax_handle.plot([intervals[i][0]+sub_int[0], intervals[i][0]+sub_int[1]], [0.9*y1+0.1*y2, 0.9*y2+0.1*y1], color="black")
+                            ax_handle.fill_between( np.arange(intervals[i][0]+sub_int[0], intervals[i][0]+sub_int[1]), y1, y1+0.2, color="black", edgecolor="black")
+            # # horizontal separation between clones
+            # for c,cid in enumerate(final_clone_ids[:-1]):
+            #     ax_handle.axhline(y=c+1, color="black", lw=0.5)
+        else:
+            # find regions where there exist both clones with A > B and clones with A < B
+            has_up = np.any(np.vstack([ df_cnv[f"clone{cid} A"].values > df_cnv[f"clone{cid} B"].values for cid in clone_ids]), axis=0)
+            has_down = np.any(np.vstack([ df_cnv[f"clone{cid} A"].values < df_cnv[f"clone{cid} B"].values for cid in clone_ids]), axis=0)
+            intervals, labs = get_intervals( (has_up & has_down) )
+            # for each intervals, find the corresponding clones with A > B to plot up-arrow, and corresponding clones with A < B to plot down-arrow
+            for i in range(len(intervals)):
+                if not labs[i]:
+                    continue
+                for c,cid in enumerate(clone_ids):
+                    y1 = c
+                    y2 = c+1
+                    # up-arrow
+                    sub_intervals, sub_labs = get_intervals( df_cnv[f"clone{cid} A"].values[intervals[i][0]:intervals[i][1]] > df_cnv[f"clone{cid} B"].values[intervals[i][0]:intervals[i][1]] )
+                    for j, sub_int in enumerate(sub_intervals):
+                        if sub_labs[j]:
+                            ax_handle.fill_between( np.arange(intervals[i][0]+sub_int[0], intervals[i][0]+sub_int[1]), y1, y2, color="none", edgecolor="black")
+                            # ax_handle.arrow(x=intervals[i][0]+np.mean(sub_int), y=0.9*y2+0.1*y1, dx=0, dy=0.7*(y1-y2), head_width=0.3*(sub_int[1] - sub_int[0]), head_length=0.1*np.abs(y1-y2), fc="black")
+                            # ax_handle.plot([intervals[i][0]+sub_int[0], intervals[i][0]+sub_int[1]], [0.9*y2+0.1*y1, 0.9*y1+0.1*y2], color="black")
+                            ax_handle.fill_between( np.arange(intervals[i][0]+sub_int[0], intervals[i][0]+sub_int[1]), y2-0.2, y2, color="black", edgecolor="black")
+                    # down-arrow
+                    sub_intervals, sub_labs = get_intervals( df_cnv[f"clone{cid} A"].values[intervals[i][0]:intervals[i][1]] < df_cnv[f"clone{cid} B"].values[intervals[i][0]:intervals[i][1]] )
+                    for j, sub_int in enumerate(sub_intervals):
+                        if sub_labs[j]:
+                            ax_handle.fill_between( np.arange(intervals[i][0]+sub_int[0], intervals[i][0]+sub_int[1]), y1, y2, color="none", edgecolor="black")
+                            # ax_handle.arrow(x=intervals[i][0]+np.mean(sub_int), y=0.9*y1+0.1*y2, dx=0, dy=-0.7*(y1-y2), head_width=0.3*(sub_int[1] - sub_int[0]), head_length=0.1*np.abs(y1-y2), fc="black")
+                            # ax_handle.plot([intervals[i][0]+sub_int[0], intervals[i][0]+sub_int[1]], [0.9*y1+0.1*y2, 0.9*y2+0.1*y1], color="black")
+                            ax_handle.fill_between( np.arange(intervals[i][0]+sub_int[0], intervals[i][0]+sub_int[1]), y1, y1+0.2, color="black", edgecolor="black")
+
+            # # horizontal separation between clones
+            # for c,cid in enumerate(clone_ids[:-1]):
+            #     ax_handle.axhline(y=c+1, color="black", lw=0.5)
+
+    if chrbar_pos == "bottom":
+        chr_ids = df_cnv.CHR
+        h = len(final_clone_ids) if clone_ids is None else len(clone_ids)
+        # ax_handle.add_patch(plt.Rectangle(xy=(0, h + chrbar_thickness), width=df_cnv.shape[0], height=chrbar_thickness, color='white', lw=0, transform=ax_handle.transData, clip_on=False, rasterized=rasterized))
+
+        for c in np.unique(chr_ids.values):
+            interval = np.where(chr_ids.values == c)[0]
+            # add vertical separation between chromosomes
+            if not np.max(interval) + 1 >= df_cnv.shape[0]:
+                ax_handle.axvline(x=np.max(interval), color='black', lw=0.5, ymin=-0.5/(h+1), clip_on = False)
+            mid = np.percentile(interval, 45)
+            ax_handle.text(mid-10, h + chrbar_thickness, str(c), transform=ax_handle.transData)
+    elif chrbar_pos == "top":
+        chr_ids = df_cnv.CHR
+        h = len(final_clone_ids) if clone_ids is None else len(clone_ids)
+        # ax_handle.add_patch(plt.Rectangle(xy=(0, h + chrbar_thickness), width=df_cnv.shape[0], height=chrbar_thickness, color='white', lw=0, transform=ax_handle.transData, clip_on=False, rasterized=rasterized))
+
+        for c in np.unique(chr_ids.values):
+            interval = np.where(chr_ids.values == c)[0]
+            # add vertical separation between chromosomes
+            if not np.max(interval) + 1 >= df_cnv.shape[0]:
+                ax_handle.axvline(x=np.max(interval), color='black', lw=0.5, ymax=1+0.5/(h+1), clip_on = False)
+            mid = np.percentile(interval, 45)
+            ax_handle.text(mid-10, -0.1*chrbar_thickness, str(c), transform=ax_handle.transData)
+
+    ax_handle.set_yticklabels(ax_handle.get_yticklabels(), rotation=0)
+    if remove_xticks:
+        ax_handle.set_xticks([])
+
+    if add_legend:
+        a00 = plt.arrow(0,0, 0,0, color='darkblue')
+        a10 = plt.arrow(0,0, 0,0, color='lightblue')
+        a11 = plt.arrow(0,0, 0,0, color='lightgray')
+        a20 = plt.arrow(0,0, 0,0, color='dimgray')
+        a21 = plt.arrow(0,0, 0,0, color='lightgoldenrodyellow')
+        a30 = plt.arrow(0,0, 0,0, color='gold')
+        a22 = plt.arrow(0,0, 0,0, color='navajowhite')
+        a31 = plt.arrow(0,0, 0,0, color='orange')
+        a40 = plt.arrow(0,0, 0,0, color='darkorange')
+        a32 = plt.arrow(0,0, 0,0, color='salmon')
+        a41 = plt.arrow(0,0, 0,0, color='red')
+        a50 = plt.arrow(0,0, 0,0, color='darkred')
+        a33 = plt.arrow(0,0, 0,0, color='plum')
+        a42 = plt.arrow(0,0, 0,0, color='orchid')
+        a51 = plt.arrow(0,0, 0,0, color='purple')
+        a60 = plt.arrow(0,0, 0,0, color='indigo')
+        ax_handle.legend([a00, a10, a11, a20, a21, a30, a22, a31, a40, a32, a41, a50, a33, a42, a51, a60], \
+        ['(0, 0)','(1, 0)','(1, 1)','(2, 0)', '(2, 1)','(3, 0)', '(2, 2)','(3, 1)','(4, 0)','(3, 2)', \
+        '(4, 1)','(5, 0)', '(3, 3)','(4, 2)','(5, 1)','(6, 0)'], ncol=2, loc='upper left', bbox_to_anchor=(1,1))
+    return ax_handle
+
+
+
 def plot_acn_legend(fig, shift_y=0.3):
     # full palette
     palette, ordered_acn = get_full_palette()
@@ -624,7 +786,7 @@ def plot_amp_del(cn_file, ax_handle, clone_ids=None, clone_names=None, add_chrba
 
 
 
-def plot_rdr_baf(configuration_file, r_hmrf_initialization, cn_file, clone_ids=None, remove_xticks=True, rdr_ylim=5, chrtext_shift=-0.3, base_height=3.2, pointsize=15, palette="chisel"):
+def plot_rdr_baf(configuration_file, r_hmrf_initialization, cn_file, clone_ids=None, clone_names=None, remove_xticks=True, rdr_ylim=5, chrtext_shift=-0.3, base_height=3.2, pointsize=15, linewidth=1, palette="chisel"):
     # full palette
     chisel_palette, ordered_acn = get_full_palette()
     map_cn = {x:i for i,x in enumerate(ordered_acn)}
@@ -637,11 +799,8 @@ def plot_rdr_baf(configuration_file, r_hmrf_initialization, cn_file, clone_ids=N
     
     # load allele specific integer copy numbers
     df_cnv = pd.read_csv(cn_file, header=0, sep="\t")
-    final_clone_ids = np.unique([ int(x.split(" ")[0][5:]) for x in df_cnv.columns[3:] ])
+    final_clone_ids = np.unique([ x.split(" ")[0][5:] for x in df_cnv.columns[3:] ])
     assert (clone_ids is None) or np.all([ (cid in final_clone_ids) for cid in clone_ids])
-    # add normal clone
-    if not 0 in final_clone_ids:
-        final_clone_ids = np.append(0, final_clone_ids)
     unique_chrs = np.unique(df_cnv.CHR.values)
 
     # load data
@@ -658,7 +817,7 @@ def plot_rdr_baf(configuration_file, r_hmrf_initialization, cn_file, clone_ids=N
 
     assert single_X.shape[0] == df_cnv.shape[0]
 
-    clone_index = [np.where(res_combine["new_assignment"] == cid)[0] for cid in final_clone_ids]
+    clone_index = [np.where(res_combine["new_assignment"] == c)[0] for c,cid in enumerate(final_clone_ids)]
     if config["tumorprop_file"] is None:
         X, base_nb_mean, total_bb_RD = merge_pseudobulk_by_index(single_X, single_base_nb_mean, single_total_bb_RD, clone_index)
         tumor_prop = None
@@ -681,11 +840,11 @@ def plot_rdr_baf(configuration_file, r_hmrf_initialization, cn_file, clone_ids=N
             if palette == "chisel":
                 seaborn.scatterplot(x=np.arange(X[:,1,c].shape[0]), y=X[:,0,c]/base_nb_mean[:,c], \
                     hue=pd.Categorical([map_cn[(major[i], minor[i])] for i in range(len(major))], categories=np.arange(len(ordered_acn)), ordered=True), \
-                    palette=seaborn.color_palette(colors), s=pointsize, edgecolor="black", alpha=0.8, legend=False, ax=axes[2*s])
+                    palette=seaborn.color_palette(colors), s=pointsize, edgecolor="black", linewidth=linewidth, alpha=1, legend=False, ax=axes[2*s])
             else:
                 seaborn.scatterplot(x=np.arange(X[:,1,c].shape[0]), y=X[:,0,c]/base_nb_mean[:,c], \
                     hue=pd.Categorical(res_combine["pred_cnv"][:,cid], categories=np.arange(n_states), ordered=True), \
-                    palette=palette, s=pointsize, edgecolor="black", alpha=0.8, legend=False, ax=axes[2*s])
+                    palette=palette, s=pointsize, edgecolor="black", linewidth=linewidth, alpha=1, legend=False, ax=axes[2*s])
             axes[2*s].set_ylabel(f"clone {cid}\nRDR")
             axes[2*s].set_yticks(np.arange(1, rdr_ylim, 1))
             axes[2*s].set_ylim([0,rdr_ylim])
@@ -737,7 +896,7 @@ def plot_rdr_baf(configuration_file, r_hmrf_initialization, cn_file, clone_ids=N
                 seaborn.scatterplot(x=np.arange(X[:,1,c].shape[0]), y=X[:,0,c]/base_nb_mean[:,c], \
                     hue=pd.Categorical(res_combine["pred_cnv"][:,cid], categories=np.arange(n_states), ordered=True), \
                     palette=palette, s=pointsize, edgecolor="black", alpha=0.8, legend=False, ax=axes[2*s])
-            axes[2*s].set_ylabel(f"clone {cid}\nRDR")
+            axes[2*s].set_ylabel(f"clone {cid}\nRDR" if clone_names is None else f"clone {clone_names[s]}\nRDR")
             axes[2*s].set_yticks(np.arange(1, rdr_ylim, 1))
             axes[2*s].set_ylim([0,5])
             axes[2*s].set_xlim([0, n_obs])
@@ -751,7 +910,7 @@ def plot_rdr_baf(configuration_file, r_hmrf_initialization, cn_file, clone_ids=N
                 seaborn.scatterplot(x=np.arange(X[:,1,c].shape[0]), y=X[:,1,c]/total_bb_RD[:,c], \
                     hue=pd.Categorical(res_combine["pred_cnv"][:,cid], categories=np.arange(n_states), ordered=True), \
                     palette=palette, s=pointsize, edgecolor="black", alpha=0.8, legend=False, ax=axes[2*s+1])
-            axes[2*s+1].set_ylabel(f"clone {cid}\nphased AF")
+            axes[2*s+1].set_ylabel(f"clone {cid}\nphased AF" if clone_names is None else f"clone {clone_names[s]}\nphased AF")
             axes[2*s+1].set_ylim([-0.1, 1.1])
             axes[2*s+1].set_yticks([0, 0.5, 1])
             axes[2*s+1].set_xlim([0, n_obs])

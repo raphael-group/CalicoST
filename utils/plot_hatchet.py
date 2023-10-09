@@ -203,6 +203,7 @@ def exactaccuracy_allele_starch(configuration_file, r_hmrf_initialization, hatch
 
     # hatchet results
     df_wes = read_hatchet(hatchet_wes_file)
+    df_mapped_wes = pd.DataFrame({"CHR":df_starch_cnv.CHR, "START":df_starch_cnv.START, "END":df_starch_cnv.END})
     if df_wes.shape[0] == 0:
         return None, None
     snp_seg_index = map_hatchet_to_bins(df_wes, sorted_chr_pos)
@@ -211,12 +212,13 @@ def exactaccuracy_allele_starch(configuration_file, r_hmrf_initialization, hatch
     for s,sid in enumerate(retained_hatchet_clones):
         minor_copy_wes = np.minimum(df_wes[f"Acopy_{sid}"].values[snp_seg_index], df_wes[f"Bcopy_{sid}"].values[snp_seg_index])
         major_copy_wes = np.maximum(df_wes[f"Acopy_{sid}"].values[snp_seg_index], df_wes[f"Bcopy_{sid}"].values[snp_seg_index])
+        df_mapped_wes[[f'clone{s} A', f'clone{s} B']] = np.vstack([minor_copy_wes, major_copy_wes]).T
         for c, cid in enumerate(clone_ids):
             # exact
             minor_copy_inferred = np.minimum(df_starch_cnv[f"clone{cid} A"].values, df_starch_cnv[f"clone{cid} B"].values)
             major_copy_inferred = np.maximum(df_starch_cnv[f"clone{cid} A"].values, df_starch_cnv[f"clone{cid} B"].values)
             percent_exact[c, s] = 1.0 * np.sum((minor_copy_inferred==minor_copy_wes) & (major_copy_inferred==major_copy_wes)) / len(minor_copy_inferred)
-    return percent_exact, sorted_chr_pos
+    return percent_exact, sorted_chr_pos, df_mapped_wes
 
 
 def stateaccuracy_numbat(numbat_dirs, hatchet_wes_file, sorted_chr_pos, ordered_chr=[str(c) for c in range(1,23)], fun_hatchetconvert=convert_copy_to_states, binsize=1e5):
@@ -231,6 +233,7 @@ def stateaccuracy_numbat(numbat_dirs, hatchet_wes_file, sorted_chr_pos, ordered_
     coarse_states_wes = np.array([fun_hatchetconvert(df_wes[f"Acopy_{sid}"].values, df_wes[f"Bcopy_{sid}"].values, counts=((df_wes.END.values-df_wes.START.values) / binsize).astype(int)) for sid in retained_hatchet_clones])
 
     percent_category = []
+    states_numbat = []
     for dirname in numbat_dirs:
         tmpdf_numbat = pd.read_csv(f"{dirname}/bulk_clones_final.tsv.gz", header=0, sep="\t")
         n_numbat_samples = len( np.unique(tmpdf_numbat["sample"]) )
@@ -257,10 +260,13 @@ def stateaccuracy_numbat(numbat_dirs, hatchet_wes_file, sorted_chr_pos, ordered_
                     index[i] = j -1
             for c in range(len(retained_hatchet_clones)):
                 this_percent_category[sidx, c] = 1.0 * np.sum(tmpdf_sample["cnv_state"].values[index] == coarse_states_wes[c][snp_seg_index]) / len(snp_seg_index)
-        
+
+            states_numbat.append( tmpdf_sample["cnv_state"].values[index] )
         percent_category.append(this_percent_category)
+
     percent_category = np.vstack(percent_category)
-    return percent_category
+    states_numbat = np.array(states_numbat)
+    return percent_category, coarse_states_wes[:,snp_seg_index], states_numbat
 
 
 def stateaccuracy_infercnv(infercnv_dirs, hatchet_wes_file, sorted_chr_pos, ordered_chr=[str(c) for c in range(1,23)], fun_hatchetconvert=convert_copy_to_states, binsize=1e5):

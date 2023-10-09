@@ -467,3 +467,20 @@ def output_integer_CN():
         adata.obs[["clone_label"]].to_csv(f"{outdir}/clone_labels.tsv", header=True, index=True, sep="\t")
     else:
         adata.obs[["tumor_proportion", "clone_label"]].to_csv(f"{outdir}/clone_labels.tsv", header=True, index=True, sep="\t")
+
+
+def set_bin_exp_to_zero():
+    # remove bins for which RDR > MAX_RDR in any smoothed spot
+    MAX_RDR = 15
+    N_STEP = 2
+    multi_step_smooth = copy.copy(smooth_mat)
+    for _ in range(N_STEP):
+        multi_step_smooth = (multi_step_smooth + multi_step_smooth @ smooth_mat)
+    multi_step_smooth = (multi_step_smooth > 0).astype(int)
+    rdr = (copy_single_X_rdr @ multi_step_smooth) / (copy_single_base_nb_mean @ multi_step_smooth)
+    rdr[np.sum(copy_single_base_nb_mean,axis=1) == 0] = 0
+    bidx_inconfident = np.where(~np.all(rdr <= MAX_RDR, axis=1))[0] 
+    rdr_normal[bidx_inconfident] = 0
+    rdr_normal = rdr_normal / np.sum(rdr_normal)
+    copy_single_X_rdr[bidx_inconfident, :] = 0 # avoid ill-defined distributions if normal has 0 count in that bin.
+    copy_single_base_nb_mean = rdr_normal.reshape(-1,1) @ np.sum(copy_single_X_rdr, axis=0).reshape(1,-1)

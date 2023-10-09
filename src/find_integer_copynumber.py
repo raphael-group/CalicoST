@@ -162,7 +162,7 @@ def hill_climbing_integer_copynumber_fixdiploid(new_log_mu, base_nb_mean, new_p_
     return best_integer_copies, best_obj
 
 
-def hill_climbing_integer_copynumber_oneclone(new_log_mu, base_nb_mean, new_p_binom, pred_cnv, max_allele_copy=5, max_total_copy=6, max_medploidy=4, enforce_states={}):
+def hill_climbing_integer_copynumber_oneclone(new_log_mu, base_nb_mean, new_p_binom, pred_cnv, max_allele_copy=5, max_total_copy=6, max_medploidy=4, enforce_states={}, EPS_BAF=0.05):
     n_states = len(new_log_mu)
     lambd = base_nb_mean / np.sum(base_nb_mean)
     weight_per_state = np.array([ np.sum(lambd[pred_cnv == s]) for s in range(n_states)])
@@ -181,10 +181,17 @@ def hill_climbing_integer_copynumber_oneclone(new_log_mu, base_nb_mean, new_p_bi
         mu_threshold = 0.3
         crucial_ordered_pairs_1 = (mu[:,None] - mu[None,:] > mu_threshold) * (np.sum(params, axis=1)[:,None] - np.sum(params, axis=1)[None,:] < 0)
         crucial_ordered_pairs_2 = (mu[:,None] - mu[None,:] < -mu_threshold) * (np.sum(params, axis=1)[:,None] - np.sum(params, axis=1)[None,:] > 0)
+        # penalty on setting unbalanced states when BAF is close to 0.5
+        if np.sum(params[:,0] == params[:,1]) > 0:
+            baf_threshold = max(EPS_BAF, np.max(np.abs(new_p_binom[(params[:,0]==params[:,1])] - 0.5)))
+        else:
+            baf_threshold = EPS_BAF
+        unbalanced_penalty = (params[:,0] != params[:,1]).dot(np.abs(new_p_binom - 0.5) < baf_threshold)
         # penalty on ploidy
         derived_ploidy = np.sum(params, axis=1).dot(points_per_state) / np.sum(points_per_state, axis=0)
         return np.square(0.3 * (mu - frac_rdr)).dot(points_per_state) + np.square(new_p_binom - frac_baf).dot(points_per_state) + \
-            np.sum(crucial_ordered_pairs_1) * len(pred_cnv) + np.sum(crucial_ordered_pairs_2) * len(pred_cnv) + np.sum(derived_ploidy > ploidy + 0.5) * len(pred_cnv)
+            np.sum(crucial_ordered_pairs_1) * len(pred_cnv) + np.sum(crucial_ordered_pairs_2) * len(pred_cnv) + np.sum(derived_ploidy > ploidy + 0.5) * len(pred_cnv) + \
+            unbalanced_penalty * len(pred_cnv)
         ### end temp penalty ###
         # return np.abs(mu - frac_rdr).dot(points_per_state) + 5 * np.abs(new_p_binom - frac_baf).dot(points_per_state)
     def hill_climb(initial_params, ploidy, max_iter=10):
