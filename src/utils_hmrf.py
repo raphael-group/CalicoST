@@ -183,12 +183,16 @@ def rectangle_initialize_initial_clone(coords, n_clones, random_state=0):
     # partition the range of x and y axes
     px = np.random.dirichlet( np.ones(p) * 10 )
     px[-1] += 1e-4
-    xrange = [np.min(coords[:,0]), np.max(coords[:,0])]
-    xdigit = np.digitize(coords[:,0], xrange[0] + (xrange[1] - xrange[0]) * np.cumsum(px), right=True)
+    xrange = [np.percentile(coords[:,0], 5), np.percentile(coords[:,0], 95)]
+    xboundary = xrange[0] + (xrange[1] - xrange[0]) * np.cumsum(px)
+    xboundary[-1] = np.max(coords[:,0]) + 1
+    xdigit = np.digitize(coords[:,0], xboundary, right=True)
     py = np.random.dirichlet( np.ones(p) * 10 )
     py[-1] += 1e-4
-    yrange = [np.min(coords[:,1]), np.max(coords[:,1])]
-    ydigit = np.digitize(coords[:,1], yrange[0] + (yrange[1] - yrange[0]) * np.cumsum(py), right=True)
+    yrange = [np.percentile(coords[:,1], 5), np.percentile(coords[:,1], 95)]
+    yboundary = yrange[0] + (yrange[1] - yrange[0]) * np.cumsum(py)
+    yboundary[-1] = np.max(coords[:,1]) + 1
+    ydigit = np.digitize(coords[:,1], yboundary, right=True)
     block_id = xdigit * p + ydigit
     # assigning blocks to clone (note that if sqrt(n_clone) is not an integer, multiple blocks can be assigneed to one clone)
     # block_clone_map = np.random.randint(low=0, high=n_clones, size=p**2)
