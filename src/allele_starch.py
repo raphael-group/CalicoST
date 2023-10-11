@@ -152,7 +152,7 @@ def main(configuration_file):
                 if not config["tumorprop_file"] is None:
                     logger.warning(f"Mixed sources of information for normal spots! Using {config['normalidx_file']}")
             else:
-                for prop_threshold in np.arange(0.05, 0.3, 0.05):
+                for prop_threshold in np.arange(0.05, 0.6, 0.05):
                     normal_candidate = (single_tumor_prop < prop_threshold)
                     if np.sum(copy_single_X_rdr[:, (normal_candidate==True)]) > single_X.shape[0] * 200:
                         break
@@ -346,8 +346,15 @@ def main(configuration_file):
                     if not max_medploidy is None:
                         best_integer_copies, _ = hill_climbing_integer_copynumber_oneclone(adjusted_log_mu, base_nb_mean[:,s], res_combine["new_p_binom"][:,s], this_pred_cnv, max_medploidy=max_medploidy)
                     else:
-                        best_integer_copies, _ = hill_climbing_integer_copynumber_fixdiploid(adjusted_log_mu, base_nb_mean[:,s], res_combine["new_p_binom"][:,s], this_pred_cnv, nonbalance_bafdist=config["nonbalance_bafdist"], nondiploid_rdrdist=config["nondiploid_rdrdist"])
-                        # best_integer_copies, _ = hill_climbing_integer_copynumber_oneclone(adjusted_log_mu, base_nb_mean[:,s], res_combine["new_p_binom"][:,s], this_pred_cnv)
+                        try:
+                            best_integer_copies, _ = hill_climbing_integer_copynumber_fixdiploid(adjusted_log_mu, base_nb_mean[:,s], res_combine["new_p_binom"][:,s], this_pred_cnv, nonbalance_bafdist=config["nonbalance_bafdist"], nondiploid_rdrdist=config["nondiploid_rdrdist"])
+                        except:
+                            try:
+                                best_integer_copies, _ = hill_climbing_integer_copynumber_fixdiploid(adjusted_log_mu, base_nb_mean[:,s], res_combine["new_p_binom"][:,s], this_pred_cnv, nonbalance_bafdist=config["nonbalance_bafdist"], nondiploid_rdrdist=config["nondiploid_rdrdist"], min_prop_threshold=0.05)
+                            except:
+                                finding_distate_failed = True
+                                continue
+
                     print(f"max med ploidy = {max_medploidy}, clone {s}, integer copy inference loss = {_}")
                     
                     allele_specific_copy.append( pd.DataFrame( best_integer_copies[res_combine["pred_cnv"][:,s], 0].reshape(1,-1), index=[f"clone{cid} A"], columns=np.arange(n_obs) ) )
@@ -399,7 +406,7 @@ def main(configuration_file):
             out, err = p.communicate()
 
             # plot RDR and BAF
-            cn_file = f"{outdir}/cnv_seglevel.tsv"
+            cn_file = f"{outdir}/cnv_diploid_seglevel.tsv"
             fig = plot_rdr_baf(configuration_file, r_hmrf_initialization, cn_file, clone_ids=None, remove_xticks=True, rdr_ylim=5, chrtext_shift=-0.3, base_height=3.2, pointsize=30, palette="tab10")
             fig.savefig(f"{outdir}/plots/rdr_baf_defaultcolor.pdf", transparent=True, bbox_inches="tight")
             # plot allele-specific copy number
@@ -408,7 +415,7 @@ def main(configuration_file):
                 df_cnv = pd.read_csv(cn_file, header=0, sep="\t")
                 df_cnv = expand_df_cnv(df_cnv)
                 fig, axes = plt.subplots(1, 1, figsize=(15, 0.9*len(final_clone_ids) + 0.6), dpi=200, facecolor="white")
-                axes = plot_acn_from_df(df_cnv, axes, add_chrbar=True, add_arrow=True, chrbar_thickness=0.4/(0.6*len(final_clone_ids) + 0.4), add_legend=True, remove_xticks=True)
+                axes = plot_acn_from_df_anotherscheme(df_cnv, axes, chrbar_pos='top', chrbar_thickness=0.3, add_legend=False, remove_xticks=True)
                 fig.tight_layout()
                 fig.savefig(f"{outdir}/plots/acn_genome{medfix[o]}.pdf", transparent=True, bbox_inches="tight")
                 # additionally plot the allele-specific copy number per region
@@ -432,7 +439,7 @@ def main(configuration_file):
                 fig.savefig(f"{outdir}/plots/clone_spatial.pdf", transparent=True, bbox_inches="tight")
             else:
                 assignment = pd.Series([f"clone {x}" for x in res_combine["new_assignment"]])
-                fig = plot_clones_in_space(coords, assignment, axes, palette="Set2")
+                fig = plot_individual_spots_in_space(coords, assignment, single_tumor_prop)
                 fig.savefig(f"{outdir}/plots/clone_spatial.pdf", transparent=True, bbox_inches="tight")
                 
 

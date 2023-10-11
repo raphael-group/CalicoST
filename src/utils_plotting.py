@@ -11,6 +11,8 @@ from matplotlib import pyplot as plt
 from matplotlib.colors import LinearSegmentedColormap, ListedColormap
 from matplotlib.gridspec import GridSpec
 import seaborn
+from matplotlib.lines import Line2D
+import matplotlib.patches as mpatches
 
 from utils_IO import *
 from utils_phase_switch import *
@@ -800,6 +802,8 @@ def plot_rdr_baf(configuration_file, r_hmrf_initialization, cn_file, clone_ids=N
     # load allele specific integer copy numbers
     df_cnv = pd.read_csv(cn_file, header=0, sep="\t")
     final_clone_ids = np.unique([ x.split(" ")[0][5:] for x in df_cnv.columns[3:] ])
+    if not '0' in final_clone_ids:
+        final_clone_ids = np.array(['0'] + list(final_clone_ids))
     assert (clone_ids is None) or np.all([ (cid in final_clone_ids) for cid in clone_ids])
     unique_chrs = np.unique(df_cnv.CHR.values)
 
@@ -843,7 +847,7 @@ def plot_rdr_baf(configuration_file, r_hmrf_initialization, cn_file, clone_ids=N
                     palette=seaborn.color_palette(colors), s=pointsize, edgecolor="black", linewidth=linewidth, alpha=1, legend=False, ax=axes[2*s])
             else:
                 seaborn.scatterplot(x=np.arange(X[:,1,c].shape[0]), y=X[:,0,c]/base_nb_mean[:,c], \
-                    hue=pd.Categorical(res_combine["pred_cnv"][:,cid], categories=np.arange(n_states), ordered=True), \
+                    hue=pd.Categorical(res_combine["pred_cnv"][:,c], categories=np.arange(n_states), ordered=True), \
                     palette=palette, s=pointsize, edgecolor="black", linewidth=linewidth, alpha=1, legend=False, ax=axes[2*s])
             axes[2*s].set_ylabel(f"clone {cid}\nRDR")
             axes[2*s].set_yticks(np.arange(1, rdr_ylim, 1))
@@ -857,7 +861,7 @@ def plot_rdr_baf(configuration_file, r_hmrf_initialization, cn_file, clone_ids=N
                     palette=seaborn.color_palette(colors), s=pointsize, edgecolor="black", alpha=0.8, legend=False, ax=axes[2*s+1])
             else:
                 seaborn.scatterplot(x=np.arange(X[:,1,c].shape[0]), y=X[:,1,c]/total_bb_RD[:,c], \
-                    hue=pd.Categorical(res_combine["pred_cnv"][:,cid], categories=np.arange(n_states), ordered=True), \
+                    hue=pd.Categorical(res_combine["pred_cnv"][:,c], categories=np.arange(n_states), ordered=True), \
                     palette=palette, s=pointsize, edgecolor="black", alpha=0.8, legend=False, ax=axes[2*s+1])
             axes[2*s+1].set_ylabel(f"clone {cid}\nphased AF")
             axes[2*s+1].set_ylim([-0.1, 1.1])
@@ -894,7 +898,7 @@ def plot_rdr_baf(configuration_file, r_hmrf_initialization, cn_file, clone_ids=N
                     palette=seaborn.color_palette(colors), s=pointsize, edgecolor="black", alpha=0.8, legend=False, ax=axes[2*s])
             else:
                 seaborn.scatterplot(x=np.arange(X[:,1,c].shape[0]), y=X[:,0,c]/base_nb_mean[:,c], \
-                    hue=pd.Categorical(res_combine["pred_cnv"][:,cid], categories=np.arange(n_states), ordered=True), \
+                    hue=pd.Categorical(res_combine["pred_cnv"][:,c], categories=np.arange(n_states), ordered=True), \
                     palette=palette, s=pointsize, edgecolor="black", alpha=0.8, legend=False, ax=axes[2*s])
             axes[2*s].set_ylabel(f"clone {cid}\nRDR" if clone_names is None else f"clone {clone_names[s]}\nRDR")
             axes[2*s].set_yticks(np.arange(1, rdr_ylim, 1))
@@ -908,7 +912,7 @@ def plot_rdr_baf(configuration_file, r_hmrf_initialization, cn_file, clone_ids=N
                     palette=seaborn.color_palette(colors), s=pointsize, edgecolor="black", alpha=0.8, legend=False, ax=axes[2*s+1])
             else:
                 seaborn.scatterplot(x=np.arange(X[:,1,c].shape[0]), y=X[:,1,c]/total_bb_RD[:,c], \
-                    hue=pd.Categorical(res_combine["pred_cnv"][:,cid], categories=np.arange(n_states), ordered=True), \
+                    hue=pd.Categorical(res_combine["pred_cnv"][:,c], categories=np.arange(n_states), ordered=True), \
                     palette=palette, s=pointsize, edgecolor="black", alpha=0.8, legend=False, ax=axes[2*s+1])
             axes[2*s+1].set_ylabel(f"clone {cid}\nphased AF" if clone_names is None else f"clone {clone_names[s]}\nphased AF")
             axes[2*s+1].set_ylim([-0.1, 1.1])
@@ -1048,4 +1052,50 @@ def plot_clones_in_space(coords, assignment, sample_list=None, sample_ids=None, 
 
     fig.tight_layout()
 
+    return fig
+
+
+def plot_individual_spots_in_space(coords, assignment, single_tumor_prop=None, sample_list=None, sample_ids=None, palette="Set2"):
+    # combine coordinates across samples
+    shifted_coords = copy.copy(coords)
+    if not (sample_ids is None):
+        x_offset = 0
+        for s,sname in enumerate(sample_list):
+            index = np.where(sample_ids == s)[0]
+            shifted_coords[index,0] = shifted_coords[index,0] + x_offset
+            x_offset += np.max(coords[index,0]) + 10
+
+    # number of clones and samples
+    final_clone_ids = np.unique(assignment[~assignment.isnull()].values)
+    n_final_clones = len(final_clone_ids)
+    n_samples = 1 if sample_list is None else len(sample_list)
+
+    # remove nan of single_tumor_prop
+    if not single_tumor_prop is None:
+        copy_single_tumor_prop = copy.copy(single_tumor_prop)
+        copy_single_tumor_prop[np.isnan(copy_single_tumor_prop)] = 0.5
+    
+    fig, axes = plt.subplots(1, 1, figsize=(4*n_samples, 3), dpi=200, facecolor="white")
+    if "clone 0" in final_clone_ids:
+        colorlist = ['lightgrey'] + seaborn.color_palette("Set2", n_final_clones-1).as_hex()
+    else:
+        colorlist = seaborn.color_palette("Set2", n_final_clones).as_hex()
+
+    for c,cid in enumerate(final_clone_ids):
+        idx = np.where( (assignment.values==cid) )[0]
+        if single_tumor_prop is None:
+            seaborn.scatterplot(x=shifted_coords[idx,0], y=-shifted_coords[idx,1], s=10, color=colorlist[c], linewidth=0, legend=None, ax=axes)
+        else:
+            # cmap
+            this_full_cmap = seaborn.color_palette(f"blend:lightgrey,{colorlist[c]}", as_cmap=True)
+            quantile_colors = this_full_cmap(np.array([0, np.min(copy_single_tumor_prop[idx]), np.max(copy_single_tumor_prop[idx]), 1]))
+            quantile_colors = [matplotlib.colors.rgb2hex(x) for x in quantile_colors[1:-1]]
+            this_cmap = seaborn.color_palette(f"blend:{quantile_colors[0]},{quantile_colors[-1]}", as_cmap=True)
+            seaborn.scatterplot(x=shifted_coords[idx,0], y=-shifted_coords[idx,1], s=10, hue=copy_single_tumor_prop[idx], palette=this_cmap, linewidth=0, legend=None, ax=axes)
+
+    legend_elements = [Line2D([0], [0], marker='o', color="w", markerfacecolor=colorlist[c], label=cid, markersize=10) for c,cid in enumerate(final_clone_ids)]
+    axes.legend(legend_elements, final_clone_ids, handlelength=0.1, loc="upper left", bbox_to_anchor=(1,1))
+    axes.axis("off")
+
+    fig.tight_layout()
     return fig

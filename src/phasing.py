@@ -49,7 +49,7 @@ def infer_initial_phase(single_X, lengths, single_base_nb_mean, single_total_bb_
 
 
 def initial_phase_given_partition(single_X, lengths, single_base_nb_mean, single_total_bb_RD, single_tumor_prop, initial_clone_index, n_states, log_sitewise_transmat, \
-    params, t, random_state, fix_NB_dispersion, shared_NB_dispersion, fix_BB_dispersion, shared_BB_dispersion, max_iter, tol):
+    params, t, random_state, fix_NB_dispersion, shared_NB_dispersion, fix_BB_dispersion, shared_BB_dispersion, max_iter, tol, min_snpumi=2e3):
     EPS_BAF = 0.05
     if single_tumor_prop is None:
         X, base_nb_mean, total_bb_RD = merge_pseudobulk_by_index(single_X, single_base_nb_mean, single_total_bb_RD, initial_clone_index)
@@ -61,17 +61,20 @@ def initial_phase_given_partition(single_X, lengths, single_base_nb_mean, single
     baf_profiles = np.zeros((X.shape[2], X.shape[0]))
     pred_cnv = np.zeros((X.shape[2], X.shape[0]))
     for i in range(X.shape[2]):
-        res = pipeline_baum_welch(None, X[:,:,i:(i+1)], lengths, n_states, base_nb_mean[:,i:(i+1)], total_bb_RD[:,i:(i+1)], log_sitewise_transmat, \
-                                hmmclass=hmm_sitewise, params=params, t=t, random_state=random_state, only_minor=True, \
-                                fix_NB_dispersion=fix_NB_dispersion, shared_NB_dispersion=shared_NB_dispersion, \
-                                fix_BB_dispersion=fix_BB_dispersion, shared_BB_dispersion=shared_BB_dispersion, is_diag=True, \
-                                init_log_mu=None, init_p_binom=None, init_alphas=None, init_taus=None, max_iter=max_iter, tol=tol)
-        #
-        pred = np.argmax(res["log_gamma"], axis=0)
-        this_baf_profiles = np.where(pred < n_states, res["new_p_binom"][pred%n_states, 0], 1-res["new_p_binom"][pred%n_states, 0])
-        this_baf_profiles[np.abs(this_baf_profiles - 0.5) < EPS_BAF] = 0.5
-        baf_profiles[i,:] = this_baf_profiles
-        pred_cnv[i,:] = (pred % n_states)
+        if np.sum(total_bb_RD[:,i]) < min_snpumi:
+            baf_profiles[i,:] = 0.5
+        else:
+            res = pipeline_baum_welch(None, X[:,:,i:(i+1)], lengths, n_states, base_nb_mean[:,i:(i+1)], total_bb_RD[:,i:(i+1)], log_sitewise_transmat, \
+                                    hmmclass=hmm_sitewise, params=params, t=t, random_state=random_state, only_minor=True, \
+                                    fix_NB_dispersion=fix_NB_dispersion, shared_NB_dispersion=shared_NB_dispersion, \
+                                    fix_BB_dispersion=fix_BB_dispersion, shared_BB_dispersion=shared_BB_dispersion, is_diag=True, \
+                                    init_log_mu=None, init_p_binom=None, init_alphas=None, init_taus=None, max_iter=max_iter, tol=tol)
+            #
+            pred = np.argmax(res["log_gamma"], axis=0)
+            this_baf_profiles = np.where(pred < n_states, res["new_p_binom"][pred%n_states, 0], 1-res["new_p_binom"][pred%n_states, 0])
+            this_baf_profiles[np.abs(this_baf_profiles - 0.5) < EPS_BAF] = 0.5
+            baf_profiles[i,:] = this_baf_profiles
+            pred_cnv[i,:] = (pred % n_states)
 
     if single_tumor_prop is None:
         n_total_spots = np.sum([ len(x) for x in initial_clone_index ])
