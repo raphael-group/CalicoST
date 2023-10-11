@@ -245,6 +245,10 @@ def aggr_hmrf_reassignment_concatenate(single_X, single_base_nb_mean, single_tot
 
 def merge_by_minspots(assignment, res, single_total_bb_RD, min_spots_thresholds=50, min_umicount_thresholds=0, single_tumor_prop=None, threshold=0.5):
     n_clones = len(np.unique(assignment))
+    if n_clones == 1:
+        merged_groups = [ [assignment[0]] ]
+        return merged_groups, res
+
     n_obs = int(len(res["pred_cnv"]) / n_clones)
     new_assignment = copy.copy(assignment)
     if single_tumor_prop is None:

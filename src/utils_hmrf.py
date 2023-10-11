@@ -363,7 +363,7 @@ def merge_pseudobulk_by_index_mix(single_X, single_base_nb_mean, single_total_bb
         X[:,:, k] = np.sum(single_X[:,:,idx], axis=2)
         base_nb_mean[:, k] = np.sum(single_base_nb_mean[:, idx], axis=1)
         total_bb_RD[:, k] = np.sum(single_total_bb_RD[:, idx], axis=1)
-        tumor_prop[k] = np.mean(single_tumor_prop[idx])
+        tumor_prop[k] = np.mean(single_tumor_prop[idx]) if len(idx) > 0 else 0
 
     return X, base_nb_mean, total_bb_RD, tumor_prop
 
