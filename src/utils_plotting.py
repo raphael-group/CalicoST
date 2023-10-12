@@ -935,6 +935,119 @@ def plot_rdr_baf(configuration_file, r_hmrf_initialization, cn_file, clone_ids=N
     return fig
 
 
+def plot_rdr_baf_from_df(df, clone_ids=None, clone_names=None, base_height=3.2, rdr_ylim=3, baf_ylim=0.5, linewidth=0, pointsize=30, chrtext_shift=-0.3, add_legend=False, remove_xticks=True):
+    """
+    Attributes
+    ----------
+    df : pandas.DataFrame
+        dataframe with columns: CHR, clone1 RD, clone1 BAF, clone1 A, clone1 B, ... for each clone
+    """
+    # full palette
+    chisel_palette, ordered_acn = get_full_palette()
+    map_cn = {x:i for i,x in enumerate(ordered_acn)}
+    colors = [chisel_palette[c] for c in ordered_acn]
+    
+    # load allele specific integer copy numbers
+    final_clone_ids = np.unique([ x.split(" ")[0][5:] for x in df.columns if "RD" in x ])
+    assert (clone_ids is None) or np.all([ (cid in final_clone_ids) for cid in clone_ids])
+    unique_chrs = np.unique(df.CHR.values)
+
+    if clone_ids is None:
+        fig, axes = plt.subplots(2*len(final_clone_ids), 1, figsize=(20, base_height*len(final_clone_ids)), dpi=200, facecolor="white")
+        for s,cid in enumerate(final_clone_ids):
+            # major and minor allele copies give the hue
+            major = np.maximum(df[f"clone{cid} A"].values, df[f"clone{cid} B"].values)
+            minor = np.minimum(df[f"clone{cid} A"].values, df[f"clone{cid} B"].values)
+            
+            seaborn.scatterplot(x=np.arange(df.shape[0]), y=df[f'clone{cid} RD'].values, \
+                hue=pd.Categorical([map_cn[(major[i], minor[i])] for i in range(len(major))], categories=np.arange(len(ordered_acn)), ordered=True), \
+                palette=seaborn.color_palette(colors), s=pointsize, edgecolor="black", linewidth=linewidth, alpha=0.8, legend=False, ax=axes[2*s])
+            axes[2*s].set_ylabel(f"clone {cid}\nRDR")
+            axes[2*s].set_yticks(np.arange(1, rdr_ylim, 1))
+            axes[2*s].set_ylim([0,rdr_ylim])
+            axes[2*s].set_xlim([0, df.shape[0]])
+            if remove_xticks:
+                axes[2*s].set_xticks([])
+            seaborn.scatterplot(x=np.arange(df.shape[0]), y=df[f"clone{cid} BAF"].values, \
+                hue=pd.Categorical([map_cn[(major[i], minor[i])] for i in range(len(major))], categories=np.arange(len(ordered_acn)), ordered=True), \
+                palette=seaborn.color_palette(colors), s=pointsize, edgecolor="black", linewidth=linewidth, alpha=0.8, legend=False, ax=axes[2*s+1])
+            axes[2*s+1].set_ylabel(f"clone {cid}\nphased AF")
+            axes[2*s+1].set_ylim([-0.1, baf_ylim])
+            axes[2*s+1].set_yticks(np.arange(0, baf_ylim, 0.1))
+            axes[2*s+1].set_xlim([0, df.shape[0]])
+            if remove_xticks:
+                axes[2*s+1].set_xticks([])
+
+        for i in unique_chrs:
+            median_len = np.percentile(np.where(df.CHR.values == i)[0], 45)
+            max_len = np.max(np.where(df.CHR.values == i)[0])
+            axes[-1].text(median_len-5, chrtext_shift, i, transform=axes[-1].get_xaxis_transform())
+            if max_len + 1 < df.shape[0]:
+                for k in range(2*len(final_clone_ids)):
+                    axes[k].axvline(x=max_len, c="grey", linewidth=1)
+    # plot a given clone
+    else:
+        fig, axes = plt.subplots(2*len(clone_ids), 1, figsize=(20, base_height*len(clone_ids)), dpi=200, facecolor="white")
+        for s,cid in enumerate(clone_ids):
+            # major and minor allele copies give the hue
+            major = np.maximum(df[f"clone{cid} A"].values, df[f"clone{cid} B"].values)
+            minor = np.minimum(df[f"clone{cid} A"].values, df[f"clone{cid} B"].values)
+
+            # plot points
+            seaborn.scatterplot(x=np.arange(df.shape[0]), y=df[f'clone{cid} RD'].values, \
+                hue=pd.Categorical([map_cn[(major[i], minor[i])] for i in range(len(major))], categories=np.arange(len(ordered_acn)), ordered=True), \
+                palette=seaborn.color_palette(colors), s=pointsize, edgecolor="black", linewidth=linewidth, alpha=0.8, legend=False, ax=axes[2*s])
+            axes[2*s].set_ylabel(f"clone {cid}\nRDR" if clone_names is None else f"clone {clone_names[s]}\nRDR")
+            axes[2*s].set_yticks(np.arange(1, rdr_ylim, 1))
+            axes[2*s].set_ylim([0,rdr_ylim])
+            axes[2*s].set_xlim([0, df.shape[0]])
+            if remove_xticks:
+                axes[2*s].set_xticks([])
+            seaborn.scatterplot(x=np.arange(df.shape[0]), y=df[f'clone{cid} BAF'].values, \
+                hue=pd.Categorical([map_cn[(major[i], minor[i])] for i in range(len(major))], categories=np.arange(len(ordered_acn)), ordered=True), \
+                palette=seaborn.color_palette(colors), s=pointsize, edgecolor="black", linewidth=linewidth, alpha=0.8, legend=False, ax=axes[2*s+1])
+            axes[2*s+1].set_ylabel(f"clone {cid}\nphased AF" if clone_names is None else f"clone {clone_names[s]}\nphased AF")
+            axes[2*s+1].set_ylim([-0.1, baf_ylim])
+            axes[2*s+1].set_yticks(np.arange(0, baf_ylim, 0.1))
+            axes[2*s+1].set_xlim([0, df.shape[0]])
+            if remove_xticks:
+                axes[2*s+1].set_xticks([])
+        
+        for i in unique_chrs:
+            median_len = np.percentile(np.where(df.CHR.values == i)[0], 45)
+            max_len = np.max(np.where(df.CHR.values == i)[0])
+            axes[-1].text(median_len-5, chrtext_shift, i, transform=axes[-1].get_xaxis_transform())
+            if max_len + 1 < df.shape[0]:
+                for k in range(2*len(clone_ids)):
+                    axes[k].axvline(x=max_len, c="grey", linewidth=1)
+
+    if add_legend:
+        a00 = plt.arrow(0,0, 0,0, 
+        color='darkblue')
+        a10 = plt.arrow(0,0, 0,0, color='lightblue')
+        a11 = plt.arrow(0,0, 0,0, color='lightgray')
+        a20 = plt.arrow(0,0, 0,0, color='dimgray')
+        a21 = plt.arrow(0,0, 0,0, color='lightgoldenrodyellow')
+        a30 = plt.arrow(0,0, 0,0, color='gold')
+        a22 = plt.arrow(0,0, 0,0, color='navajowhite')
+        a31 = plt.arrow(0,0, 0,0, color='orange')
+        a40 = plt.arrow(0,0, 0,0, color='darkorange')
+        a32 = plt.arrow(0,0, 0,0, color='salmon')
+        a41 = plt.arrow(0,0, 0,0, color='red')
+        a50 = plt.arrow(0,0, 0,0, color='darkred')
+        a33 = plt.arrow(0,0, 0,0, color='plum')
+        a42 = plt.arrow(0,0, 0,0, color='orchid')
+        a51 = plt.arrow(0,0, 0,0, color='purple')
+        a60 = plt.arrow(0,0, 0,0, color='indigo')
+        axes[0].legend([a00, a10, a11, a20, a21, a30, a22, a31, a40, a32, a41, a50, a33, a42, a51, a60], \
+        ['(0, 0)','(1, 0)','(1, 1)','(2, 0)', '(2, 1)','(3, 0)', '(2, 2)','(3, 1)','(4, 0)','(3, 2)', \
+        '(4, 1)','(5, 0)', '(3, 3)','(4, 2)','(5, 1)','(6, 0)'], ncol=2, loc='upper left', bbox_to_anchor=(1,1))
+
+    fig.tight_layout()
+    fig.subplots_adjust(hspace=0.1)
+    return fig, axes
+
+
 def plot_2dscatter_rdrbaf(configuration_file, r_hmrf_initialization, cn_file, clone_ids=None, rdr_ylim=5, base_width=3.2, pointsize=15):
     # full palette
     palette, ordered_acn = get_full_palette()
@@ -1012,6 +1125,61 @@ def plot_2dscatter_rdrbaf(configuration_file, r_hmrf_initialization, cn_file, cl
         fig.tight_layout()
 
     return fig
+
+
+def plot_2dscatter_rdrbaf_from_df(df, axes, cid, cname=None, baf_xlim=0.51, rdr_ylim=3, pointsize=15, linewidth=1, add_legend=False):
+    """
+    Attributes
+    ----------
+    df : pandas.DataFrame
+        dataframe with columns: clone1 RD, clone1 BAF, clone1 A, clone1 B, ... for each clone
+    """
+    # full palette
+    palette, ordered_acn = get_full_palette()
+    map_cn = {x:i for i,x in enumerate(ordered_acn)}
+    colors = [palette[c] for c in ordered_acn]
+
+    final_clone_ids = np.unique([ x.split(" ")[0][5:] for x in df.columns if "RD" in x ])
+    assert cid in final_clone_ids
+    unique_chrs = np.unique(df.CHR.values)
+
+    # major and minor allele copies give the hue
+    major = np.maximum(df[f"clone{cid} A"].values, df[f"clone{cid} B"].values)
+    minor = np.minimum(df[f"clone{cid} A"].values, df[f"clone{cid} B"].values)
+
+    # plot points
+    seaborn.scatterplot(x=df[f'clone{cid} BAF'].values, y=df[f'clone{cid} RD'].values, \
+        hue=pd.Categorical([map_cn[(major[i], minor[i])] for i in range(len(major))], categories=np.arange(len(ordered_acn)), ordered=True), \
+        palette=seaborn.color_palette(colors), s=pointsize, edgecolor="black", linewidth=linewidth, alpha=0.8, legend=False, ax=axes)
+    axes.set_xlabel(f"clone {cid}\nphased AF" if cname is None else f"{cname}\nphased AF")
+    axes.set_xlim([-0.02, baf_xlim])
+    axes.set_xticks(np.arange(0, baf_xlim, 0.1))
+    axes.set_ylabel(f"clone {cid}\nRDR" if cname is None else f"{cname}\nRDR")
+    axes.set_yticks(np.arange(1, rdr_ylim, 1))
+    axes.set_ylim([0,rdr_ylim])
+
+    if add_legend:
+        a00 = plt.arrow(0,0, 0,0, 
+        color='darkblue')
+        a10 = plt.arrow(0,0, 0,0, color='lightblue')
+        a11 = plt.arrow(0,0, 0,0, color='lightgray')
+        a20 = plt.arrow(0,0, 0,0, color='dimgray')
+        a21 = plt.arrow(0,0, 0,0, color='lightgoldenrodyellow')
+        a30 = plt.arrow(0,0, 0,0, color='gold')
+        a22 = plt.arrow(0,0, 0,0, color='navajowhite')
+        a31 = plt.arrow(0,0, 0,0, color='orange')
+        a40 = plt.arrow(0,0, 0,0, color='darkorange')
+        a32 = plt.arrow(0,0, 0,0, color='salmon')
+        a41 = plt.arrow(0,0, 0,0, color='red')
+        a50 = plt.arrow(0,0, 0,0, color='darkred')
+        a33 = plt.arrow(0,0, 0,0, color='plum')
+        a42 = plt.arrow(0,0, 0,0, color='orchid')
+        a51 = plt.arrow(0,0, 0,0, color='purple')
+        a60 = plt.arrow(0,0, 0,0, color='indigo')
+        axes.legend([a00, a10, a11, a20, a21, a30, a22, a31, a40, a32, a41, a50, a33, a42, a51, a60], \
+        ['(0, 0)','(1, 0)','(1, 1)','(2, 0)', '(2, 1)','(3, 0)', '(2, 2)','(3, 1)','(4, 0)','(3, 2)', \
+        '(4, 1)','(5, 0)', '(3, 3)','(4, 2)','(5, 1)','(6, 0)'], ncol=2, loc='upper left', bbox_to_anchor=(1,1))
+
 
 
 def plot_clones_in_space(coords, assignment, sample_list=None, sample_ids=None, palette="Set2", labels=None, label_coords=None, label_sample_ids=None):
