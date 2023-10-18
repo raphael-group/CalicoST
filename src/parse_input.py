@@ -92,16 +92,22 @@ def parse_visium(config):
     expected_nbins = int(expected_nbins)
     secondary_min_umi = choose_umithreshold_given_nbins(single_total_bb_RD, refined_lengths, expected_nbins)
     print(f"Secondary_min_umi = {secondary_min_umi}")
-    lengths, single_X, single_base_nb_mean, single_total_bb_RD, log_sitewise_transmat, sorted_chr_pos, sorted_chr_pos_last, x_gene_list, n_snps = perform_binning_new(lengths, single_X, \
-        single_base_nb_mean, single_total_bb_RD, sorted_chr_pos, sorted_chr_pos_last, x_gene_list, n_snps, phase_indicator, refined_lengths, config["binsize"], config["rdrbinsize"], config["nu"], config["logphase_shift"], secondary_min_umi=secondary_min_umi)
+    # lengths, single_X, single_base_nb_mean, single_total_bb_RD, log_sitewise_transmat, sorted_chr_pos, sorted_chr_pos_last, x_gene_list, n_snps = perform_binning_new(lengths, single_X, \
+    #     single_base_nb_mean, single_total_bb_RD, sorted_chr_pos, sorted_chr_pos_last, x_gene_list, n_snps, phase_indicator, refined_lengths, config["binsize"], config["rdrbinsize"], config["nu"], config["logphase_shift"], secondary_min_umi=secondary_min_umi)
+    lengths, single_X, single_total_bb_RD, log_sitewise_transmat, sorted_chr_pos, sorted_chr_pos_last, x_gene_list, n_snps = perform_binning(lengths, single_X, single_total_bb_RD, \
+        sorted_chr_pos, sorted_chr_pos_last, adata, config['hgtable_file'], n_snps, phase_indicator, refined_lengths, config["binsize"], config["rdrbinsize"], config["nu"], config["logphase_shift"], secondary_min_umi=secondary_min_umi)
     
     # remove bins where normal spots have imbalanced SNPs
     if not config["tumorprop_file"] is None:
         # index_normal = np.where(single_tumor_prop < 0.01)[0]
         index_normal = np.argsort(single_tumor_prop)[:100]
         lengths, single_X, single_base_nb_mean, single_total_bb_RD, log_sitewise_transmat, sorted_chr_pos, sorted_chr_pos_last, x_gene_list, index_remaining = bin_selection_basedon_normal(single_X, \
-                single_base_nb_mean, single_total_bb_RD, sorted_chr_pos, sorted_chr_pos_last, x_gene_list, config["nu"], config["logphase_shift"], index_normal)
+                single_base_nb_mean, single_total_bb_RD, sorted_chr_pos, sorted_chr_pos_last, adata, x_gene_list, config["nu"], config["logphase_shift"], index_normal)
         n_snps = [n_snps[i] for i in index_remaining]
+
+    # # add pseudo count to single_X
+    # pseudo_count = 1
+    # single_X[:,0,:] += pseudo_count
 
     # create RDR-BAF table
     table_bininfo = pd.DataFrame({"CHR":[x[0] for x in sorted_chr_pos], \
@@ -109,7 +115,8 @@ def parse_visium(config):
                                  "START":[x[1] for x in sorted_chr_pos], \
                                  "END":[x[1] for x in sorted_chr_pos_last], \
                                  "LOG_PHASE_TRANSITION": log_sitewise_transmat, \
-                                 "INCLUDED_GENES":x_gene_list, \
+                                 #"INCLUDED_GENES":x_gene_list, \
+                                 "INCLUDED_GENES": [ " ".join(map(str, x)) for x in x_gene_list ], \
                                  "NORMAL_COUNT":1e6 * np.sum(single_base_nb_mean, axis=1) / np.sum(single_base_nb_mean), \
                                  "N_SNPS":n_snps})
     table_rdrbaf = []
@@ -322,7 +329,8 @@ def load_tables_to_matrices(config):
     n_bins = table_bininfo.shape[0]
 
     # construct single_X
-    single_X = np.zeros((n_bins, 2, n_spots), dtype=int)
+    # single_X = np.zeros((n_bins, 2, n_spots), dtype=int)
+    single_X = np.zeros((n_bins, 2, n_spots))
     single_X[:, 0, :] = table_rdrbaf["EXP"].values.reshape((n_bins, n_spots), order="F")
     single_X[:, 1, :] = table_rdrbaf["B"].values.reshape((n_bins, n_spots), order="F")
 
@@ -338,7 +346,10 @@ def load_tables_to_matrices(config):
     # construct bin info and lengths and x_gene_list
     df_bininfo = table_bininfo
     lengths = np.array([ np.sum(table_bininfo.CHR == c) for c in range(1, 23) ])
-    x_gene_list = np.where(table_bininfo["INCLUDED_GENES"].isnull(), "", table_bininfo["INCLUDED_GENES"].values).astype(str)
+    # x_gene_list = np.where(table_bininfo["INCLUDED_GENES"].isnull(), "", table_bininfo["INCLUDED_GENES"].values).astype(str)
+    INCLUDED_GENES_isnull = table_bininfo["INCLUDED_GENES"].isnull()
+    x_gene_list = [ x.replace("'", "").replace("(","").replace(")","").replace(",","").split(" ") if ~INCLUDED_GENES_isnull[i] else "" for i,x in enumerate(table_bininfo["INCLUDED_GENES"].values) ]
+    x_gene_list = [ list(zip(x[0:len(x):2], map(float, x[1:len(x):2]) )) for x in x_gene_list]
 
     # construct barcodes
     barcodes = table_meta["BARCODES"]
