@@ -592,84 +592,6 @@ def convert_to_hmm_input_new(adata, cell_snp_Aallele, cell_snp_Ballele, snp_gene
     return lengths, single_X, single_base_nb_mean, single_total_bb_RD, log_sitewise_transmat, sorted_chr_pos_first, sorted_chr_pos_last, x_gene_list, n_snps
 
 
-def convert_to_hmm_input_v2(adata, cell_snp_Aallele, cell_snp_Ballele, snp_gene_list, unique_snp_ids, hgtable_file, nu, logphase_shift, genome_build="hg38"):
-    uncovered_genes = set(list(adata.var.index)) - set(list(snp_gene_list))
-    # df_hgtable = pd.read_csv("/u/congma/ragr-data/users/congma/Codes/STARCH_crazydev/hgTables_hg38_gencode.txt", header=0, index_col=0, sep="\t")
-    df_hgtable = pd.read_csv(hgtable_file, header=0, index_col=0, sep="\t")
-    df_hgtable = df_hgtable[df_hgtable.name2.isin(uncovered_genes)]
-    df_hgtable = df_hgtable[df_hgtable.chrom.isin( [f"chr{i}" for i in range(1, 23)] )]
-    uncovered_genes = df_hgtable.name2.values
-    uncovered_genes_chr = [int(x[3:]) for x in df_hgtable.chrom]
-    uncovered_genes_pos = df_hgtable.cdsStart.values
-
-    # combining and sorting all SNPs and uncovered genes
-    map_id = {(uncovered_genes_chr[i], uncovered_genes_pos[i]):uncovered_genes[i] for i in range(len(uncovered_genes_chr))}
-    map_id.update( {(int(x.split("_")[0]), int(x.split("_")[1])):x for x in unique_snp_ids} )
-    sorted_chr_pos = sorted( list(map_id.keys()) )
-    gene_mapper = {adata.var.index[i]:i for i in range(adata.shape[1])}
-
-    ##### fill-in HMM input matrices #####
-    unique_chrs = np.arange(1, 23)
-    single_X = np.zeros((len(sorted_chr_pos), 2, adata.shape[0]), dtype=int)
-    single_base_nb_mean = np.zeros((len(sorted_chr_pos), adata.shape[0]))
-    single_total_bb_RD = np.zeros((len(sorted_chr_pos), adata.shape[0]), dtype=int)
-    # BAF
-    map_unique_snp_ids = {x:i for i,x in enumerate(unique_snp_ids)}
-    idx_snps = np.array([i for i,x in enumerate(sorted_chr_pos) if map_id[x] in map_unique_snp_ids])
-    single_X[idx_snps, 1, :] = cell_snp_Aallele.T
-    single_total_bb_RD[idx_snps, :] = (cell_snp_Aallele + cell_snp_Ballele).T
-    # RDR
-    x_gene_list = [""] * len(sorted_chr_pos) #!
-    combined_snp_gene_list = [snp_gene_list[map_unique_snp_ids[map_id[x]]] if map_id[x] in map_unique_snp_ids else map_id[x] for i,x in enumerate(sorted_chr_pos)]
-    rdridx_X = []
-    rdridx_gene = []
-    for i,g in enumerate(combined_snp_gene_list):
-        if g != "" and g in gene_mapper:
-            if i == 0 or g != combined_snp_gene_list[i-1]:
-                rdridx_X.append(i)
-                rdridx_gene.append( gene_mapper[g] )
-                x_gene_list[i] = g #!
-    rdridx_X = np.array(rdridx_X)
-    rdridx_gene = np.array(rdridx_gene)
-    single_X[rdridx_X,0,:] = adata.layers["count"][:, rdridx_gene].T
-    # diploid baseline
-    if "tumor_annotation" in adata.obs:
-        idx_normal = np.where(adata.obs["tumor_annotation"] == "tumor")[0]
-        idx_normal = idx_normal[np.arange(0, len(idx_normal), 2)] # TBD
-        single_base_nb_mean = np.sum(single_X[:,0,:], axis=0, keepdims=True) * np.sum(single_X[:,0,idx_normal], axis=1, keepdims=True) / np.sum(single_X[:,0,idx_normal])
-        assert np.sum(np.abs( np.sum(single_X[:,0,:],axis=0) - np.sum(single_base_nb_mean,axis=0) )) < 1e-4
-
-    # bin both RDR and BAF
-    tmpbinsize = 2
-    bin_single_X = np.zeros((int(single_X.shape[0] / tmpbinsize), 2, single_X.shape[2]), dtype=int)
-    bin_single_base_nb_mean = np.zeros((int(single_base_nb_mean.shape[0] / tmpbinsize), single_base_nb_mean.shape[1]))
-    bin_single_total_bb_RD = np.zeros((int(single_total_bb_RD.shape[0] / tmpbinsize), single_total_bb_RD.shape[1]), dtype=int)
-    bin_sorted_chr_pos = []
-    bin_x_gene_list = []
-    for i in range(bin_single_X.shape[0]):
-        t = i*tmpbinsize+tmpbinsize if i + 1 < bin_single_X.shape[0] else single_X.shape[0]
-        bin_single_X[i,:,:] = np.sum(single_X[(i*tmpbinsize):t, :, :], axis=0)
-        bin_single_base_nb_mean[i,:] = np.sum(single_base_nb_mean[(i*tmpbinsize):t, :], axis=0)
-        bin_single_total_bb_RD[i,:] = np.sum(single_total_bb_RD[(i*tmpbinsize):t, :], axis=0)
-        bin_sorted_chr_pos.append( sorted_chr_pos[(i*tmpbinsize)] )
-        this_genes = [g for g in x_gene_list[(i*tmpbinsize):t] if g != ""]
-        bin_x_gene_list.append( " ".join(this_genes) )
-    single_X = bin_single_X
-    single_base_nb_mean = bin_single_base_nb_mean
-    single_total_bb_RD = bin_single_total_bb_RD
-    sorted_chr_pos = bin_sorted_chr_pos
-    x_gene_list = bin_x_gene_list
-
-    # phase switch probability from genetic distance
-    sorted_chr = np.array([x[0] for x in sorted_chr_pos])
-    lengths = np.array([ np.sum(sorted_chr == chrname) for chrname in unique_chrs ])
-    position_cM = get_position_cM_table( sorted_chr_pos, genome_build=genome_build )
-    phase_switch_prob = compute_phase_switch_probability_position(position_cM, sorted_chr_pos, nu)
-    log_sitewise_transmat = np.log(phase_switch_prob) - logphase_shift
-
-    return lengths, single_X, single_base_nb_mean, single_total_bb_RD, log_sitewise_transmat, sorted_chr_pos, x_gene_list
-
-
 def convert_to_hmm_input_slidedna(cell_snp_Aallele, cell_snp_Ballele, unique_snp_ids, normalidx_file, nu, logphase_shift, snp_readcount_threshold=10, genome_build="hg38"):
     # choose reference-based phasing binsize
     tmpbinsize = snp_readcount_threshold / np.median(np.sum(cell_snp_Aallele, axis=0).A.flatten() + np.sum(cell_snp_Ballele, axis=0).A.flatten())
@@ -857,7 +779,7 @@ def choose_umithreshold_given_nbins(single_total_bb_RD, refined_lengths, expecte
 
 
 # def perform_binning_new(lengths, single_X, single_base_nb_mean, single_total_bb_RD, sorted_chr_pos, sorted_chr_pos_last, x_gene_list, phase_indicator, refined_lengths, binsize, rdrbinsize, nu, logphase_shift, secondary_percentile=90, genome_build="hg38"):
-def perform_binning_new(lengths, single_X, single_base_nb_mean, single_total_bb_RD, sorted_chr_pos, sorted_chr_pos_last, x_gene_list, n_snps, phase_indicator, refined_lengths, binsize, rdrbinsize, nu, logphase_shift, secondary_min_umi=1000, genome_build="hg38"):
+def perform_binning_new(lengths, single_X, single_base_nb_mean, single_total_bb_RD, sorted_chr_pos, sorted_chr_pos_last, x_gene_list, n_snps, phase_indicator, refined_lengths, binsize, rdrbinsize, nu, logphase_shift, secondary_min_umi=1000, max_binlength=5e6, genome_build="hg38"):
     per_snp_umi = np.sum(single_total_bb_RD, axis=1)
     # secondary_min_umi = np.percentile(per_snp_umi, secondary_percentile)
     # bin both RDR and BAF
@@ -877,21 +799,34 @@ def perform_binning_new(lengths, single_X, single_base_nb_mean, single_total_bb_
             t = s + 1
             while t < cumlen + le and np.sum(per_snp_umi[s:t]) < secondary_min_umi:
                 t += 1
+                if sorted_chr_pos_last[t-1][1] - sorted_chr_pos[s][1] >= max_binlength:
+                    t = max(t-1, s+1)
+                    break
             # expand binsize by minimum number of genes
             this_genes = sum([ x_gene_list[i].split(" ") for i in range(s,t) ], [])
             this_genes = [z for z in this_genes if z!=""]
             idx_A = np.where(phase_indicator[s:t])[0]
             idx_B = np.where(~phase_indicator[s:t])[0]
-            if np.sum(per_snp_umi[s:t]) >= secondary_min_umi or sorted_chr_pos[s][0] != bin_sorted_chr_pos_last[-1][0]:
-                bin_single_X_rdr.append( np.sum(single_X[s:t, 0, :], axis=0) )
-                bin_single_X_baf.append( np.sum(single_X[s:t, 1, :][idx_A,:], axis=0) + np.sum(single_total_bb_RD[s:t, :][idx_B,:] - single_X[s:t, 1, :][idx_B,:], axis=0) )
-                bin_single_base_nb_mean.append( np.sum(single_base_nb_mean[s:t, :], axis=0) )
-                bin_single_total_bb_RD.append( np.sum(single_total_bb_RD[s:t, :], axis=0) )
-                bin_sorted_chr_pos_first.append( sorted_chr_pos[s] )
-                bin_sorted_chr_pos_last.append( sorted_chr_pos_last[t-1] )
-                bin_x_gene_list.append( " ".join(this_genes) )
-                bin_n_snps.append( np.sum(n_snps[s:t]) )
-            else:
+            # if np.sum(per_snp_umi[s:t]) >= secondary_min_umi or sorted_chr_pos[s][0] != bin_sorted_chr_pos_last[-1][0]:
+            #     bin_single_X_rdr.append( np.sum(single_X[s:t, 0, :], axis=0) )
+            #     bin_single_X_baf.append( np.sum(single_X[s:t, 1, :][idx_A,:], axis=0) + np.sum(single_total_bb_RD[s:t, :][idx_B,:] - single_X[s:t, 1, :][idx_B,:], axis=0) )
+            #     bin_single_base_nb_mean.append( np.sum(single_base_nb_mean[s:t, :], axis=0) )
+            #     bin_single_total_bb_RD.append( np.sum(single_total_bb_RD[s:t, :], axis=0) )
+            #     bin_sorted_chr_pos_first.append( sorted_chr_pos[s] )
+            #     bin_sorted_chr_pos_last.append( sorted_chr_pos_last[t-1] )
+            #     bin_x_gene_list.append( " ".join(this_genes) )
+            #     bin_n_snps.append( np.sum(n_snps[s:t]) )
+            # else:
+            #     bin_single_X_rdr[-1] += np.sum(single_X[s:t, 0, :], axis=0) 
+            #     bin_single_X_baf[-1] += np.sum(single_X[s:t, 1, :][idx_A,:], axis=0) + np.sum(single_total_bb_RD[s:t, :][idx_B,:] - single_X[s:t, 1, :][idx_B,:], axis=0)
+            #     bin_single_base_nb_mean[-1] += np.sum(single_base_nb_mean[s:t, :], axis=0)
+            #     bin_single_total_bb_RD[-1] += np.sum(single_total_bb_RD[s:t, :], axis=0)
+            #     bin_sorted_chr_pos_last[-1] = sorted_chr_pos_last[t-1]
+            #     if len(this_genes) > 0:
+            #         bin_x_gene_list[-1] += " " +  " ".join(this_genes)
+            #     bin_n_snps[-1] += np.sum(n_snps[s:t])                
+            if len(bin_sorted_chr_pos_last) > 0 and sorted_chr_pos[s][0] == bin_sorted_chr_pos_last[-1][0] and \
+            np.sum(per_snp_umi[s:t]) < 0.5*secondary_min_umi and sorted_chr_pos_last[t-1][1] - sorted_chr_pos[s][1] < 0.5*max_binlength:
                 bin_single_X_rdr[-1] += np.sum(single_X[s:t, 0, :], axis=0) 
                 bin_single_X_baf[-1] += np.sum(single_X[s:t, 1, :][idx_A,:], axis=0) + np.sum(single_total_bb_RD[s:t, :][idx_B,:] - single_X[s:t, 1, :][idx_B,:], axis=0)
                 bin_single_base_nb_mean[-1] += np.sum(single_base_nb_mean[s:t, :], axis=0)
@@ -900,6 +835,15 @@ def perform_binning_new(lengths, single_X, single_base_nb_mean, single_total_bb_
                 if len(this_genes) > 0:
                     bin_x_gene_list[-1] += " " +  " ".join(this_genes)
                 bin_n_snps[-1] += np.sum(n_snps[s:t])
+            else:
+                bin_single_X_rdr.append( np.sum(single_X[s:t, 0, :], axis=0) )
+                bin_single_X_baf.append( np.sum(single_X[s:t, 1, :][idx_A,:], axis=0) + np.sum(single_total_bb_RD[s:t, :][idx_B,:] - single_X[s:t, 1, :][idx_B,:], axis=0) )
+                bin_single_base_nb_mean.append( np.sum(single_base_nb_mean[s:t, :], axis=0) )
+                bin_single_total_bb_RD.append( np.sum(single_total_bb_RD[s:t, :], axis=0) )
+                bin_sorted_chr_pos_first.append( sorted_chr_pos[s] )
+                bin_sorted_chr_pos_last.append( sorted_chr_pos_last[t-1] )
+                bin_x_gene_list.append( " ".join(this_genes) )
+                bin_n_snps.append( np.sum(n_snps[s:t]) )
             s = t
         cumlen += le
     single_X = np.stack([ np.vstack([bin_single_X_rdr[i], bin_single_X_baf[i]]) for i in range(len(bin_single_X_rdr)) ])
@@ -948,63 +892,156 @@ def perform_binning_new(lengths, single_X, single_base_nb_mean, single_total_bb_
     return lengths, single_X, single_base_nb_mean, single_total_bb_RD, log_sitewise_transmat, sorted_chr_pos_first, sorted_chr_pos_last, x_gene_list, n_snps
 
 
-def perform_binning(lengths, single_X, single_base_nb_mean, single_total_bb_RD, sorted_chr_pos, x_gene_list, phase_indicator, refined_lengths, binsize, rdrbinsize, nu, logphase_shift, min_genes_perbin=5, genome_build="hg38"):
+def distribute_transcriptcount_tobins(adata, x_gene_list):
+    # mapped from gene name to index in adata
+    map_gene_idx = {adata.var.index[i]:i for i in range(adata.shape[1])}
+
+    single_X_rdr = np.zeros((len(x_gene_list), adata.shape[0])) # number bins by number spots
+    for bidx, x in enumerate(x_gene_list):
+        if len(x) > 0:
+            genenames = [x[i][0] for i in range(len(x))]
+            props = np.array([x[i][1] for i in range(len(x))])
+            geneindexes = np.array([ map_gene_idx[g] for g in genenames ])
+            single_X_rdr[bidx, :] = (adata.layers["count"][:, geneindexes] @ props.reshape(-1,1)).flatten()
+
+    return single_X_rdr
+
+
+def perform_binning(lengths, single_X, single_total_bb_RD, sorted_chr_pos, sorted_chr_pos_last, adata, hgtable_file, n_snps, phase_indicator, refined_lengths, binsize, rdrbinsize, nu, logphase_shift, secondary_min_umi=1000, max_binlength=5e6, genome_build="hg38"):
+    # read gene locations in the genome
+    df_hgtable = pd.read_csv(hgtable_file, header=0, index_col=0, sep="\t", names=["name2", "chrom", "cdsStart", "cdsEnd"])
+    df_hgtable = df_hgtable[df_hgtable.chrom.isin( [f"chr{i}" for i in range(1, 23)] )]
+    df_hgtable = df_hgtable[df_hgtable.name2.isin(adata.var.index)]
+    df_hgtable['chrom'] = [int(x[3:]) for x in df_hgtable.chrom.values]
+
+    per_snp_umi = np.sum(single_total_bb_RD, axis=1)
+    # secondary_min_umi = np.percentile(per_snp_umi, secondary_percentile)
     # bin both RDR and BAF
-    bin_single_X_rdr = []
     bin_single_X_baf = []
-    bin_single_base_nb_mean = []
     bin_single_total_bb_RD = []
-    bin_sorted_chr_pos = []
-    bin_x_gene_list = []
+    bin_sorted_chr_pos_first = []
+    bin_sorted_chr_pos_last = []
+    bin_n_snps = []
     cumlen = 0
     s = 0
     for le in refined_lengths:
         while s < cumlen + le:
             # initial bin with certain number of SNPs
-            t = min(s + binsize, cumlen + le)
+            t = s + 1
+            while t < cumlen + le and np.sum(per_snp_umi[s:t]) < secondary_min_umi:
+                t += 1
+                if sorted_chr_pos_last[t-1][1] - sorted_chr_pos[s][1] >= max_binlength:
+                    t = max(t-1, s+1)
+                    break
             # expand binsize by minimum number of genes
-            this_genes = sum([ x_gene_list[i].split(" ") for i in range(s,t) ], [])
-            this_genes = [z for z in this_genes if z!=""]
-            # while (t < cumlen + le) and (len(this_genes) < min_genes_perbin):
-            #     t += 1
-            #     this_genes = this_genes | set(x_gene_list[t].split(" "))
             idx_A = np.where(phase_indicator[s:t])[0]
-            idx_B = np.where(~phase_indicator[s:t])[0]
-            bin_single_X_rdr.append( np.sum(single_X[s:t, 0, :], axis=0) )
-            bin_single_X_baf.append( np.sum(single_X[s:t, 1, :][idx_A,:], axis=0) + np.sum(single_total_bb_RD[s:t, :][idx_B,:] - single_X[s:t, 1, :][idx_B,:], axis=0) )
-            bin_single_base_nb_mean.append( np.sum(single_base_nb_mean[s:t, :], axis=0) )
-            bin_single_total_bb_RD.append( np.sum(single_total_bb_RD[s:t, :], axis=0) )
-            bin_sorted_chr_pos.append( sorted_chr_pos[s] )
-            # this_genes = sum([ x_gene_list[i].split(" ") for i in range(s,t) ], [])
-            bin_x_gene_list.append( " ".join(this_genes) )
+            idx_B = np.where(~phase_indicator[s:t])[0]              
+            if len(bin_sorted_chr_pos_last) > 0 and sorted_chr_pos[s][0] == bin_sorted_chr_pos_last[-1][0] and \
+            np.sum(per_snp_umi[s:t]) < 0.5*secondary_min_umi and sorted_chr_pos_last[t-1][1] - sorted_chr_pos[s][1] < 0.5*max_binlength:
+                bin_single_X_baf[-1] += np.sum(single_X[s:t, 1, :][idx_A,:], axis=0) + np.sum(single_total_bb_RD[s:t, :][idx_B,:] - single_X[s:t, 1, :][idx_B,:], axis=0)
+                bin_single_total_bb_RD[-1] += np.sum(single_total_bb_RD[s:t, :], axis=0)
+                bin_sorted_chr_pos_last[-1] = sorted_chr_pos_last[t-1]
+                bin_n_snps[-1] += np.sum(n_snps[s:t])
+            else:
+                bin_single_X_baf.append( np.sum(single_X[s:t, 1, :][idx_A,:], axis=0) + np.sum(single_total_bb_RD[s:t, :][idx_B,:] - single_X[s:t, 1, :][idx_B,:], axis=0) )
+                bin_single_total_bb_RD.append( np.sum(single_total_bb_RD[s:t, :], axis=0) )
+                bin_sorted_chr_pos_first.append( sorted_chr_pos[s] )
+                bin_sorted_chr_pos_last.append( sorted_chr_pos_last[t-1] )
+                bin_n_snps.append( np.sum(n_snps[s:t]) )
             s = t
         cumlen += le
-    single_X = np.stack([ np.vstack([bin_single_X_rdr[i], bin_single_X_baf[i]]) for i in range(len(bin_single_X_rdr)) ])
-    single_base_nb_mean = np.vstack(bin_single_base_nb_mean)
+    single_X = np.zeros((len(bin_single_X_baf), 2, len(bin_single_X_baf[0])) )
+    single_X[:,1,:] = np.vstack(bin_single_X_baf)
     single_total_bb_RD = np.vstack(bin_single_total_bb_RD)
-    sorted_chr_pos = bin_sorted_chr_pos
-    x_gene_list = bin_x_gene_list
+    sorted_chr_pos_first = bin_sorted_chr_pos_first
+    sorted_chr_pos_last = bin_sorted_chr_pos_last
+    n_snps = bin_n_snps
 
     # phase switch probability from genetic distance
-    sorted_chr = np.array([x[0] for x in sorted_chr_pos])
-    position_cM = get_position_cM_table( sorted_chr_pos, genome_build=genome_build )
-    phase_switch_prob = compute_phase_switch_probability_position(position_cM, sorted_chr_pos, nu)
+    tmp_sorted_chr_pos = [val for pair in zip(sorted_chr_pos_first, sorted_chr_pos_last) for val in pair]
+    sorted_chr = np.array([x[0] for x in tmp_sorted_chr_pos])
+    position_cM = get_position_cM_table( tmp_sorted_chr_pos, genome_build=genome_build )
+    phase_switch_prob = compute_phase_switch_probability_position(position_cM, tmp_sorted_chr_pos, nu)
     log_sitewise_transmat = np.log(phase_switch_prob) - logphase_shift
+    log_sitewise_transmat = log_sitewise_transmat[np.arange(1, len(log_sitewise_transmat), 2)]
 
-    unique_chrs = np.unique(sorted_chr)
+    sorted_chr = np.array([x[0] for x in sorted_chr_pos_first])
+    unique_chrs = [sorted_chr[0]]
+    for x in sorted_chr[1:]:
+        if x != unique_chrs[-1]:
+            unique_chrs.append( x )
     lengths = np.array([ np.sum(sorted_chr == chrname) for chrname in unique_chrs ])
 
-    # bin RDR
-    for i in range(int(np.ceil(single_X.shape[0] / rdrbinsize))):
-        single_X[(i*rdrbinsize):(i*rdrbinsize+rdrbinsize), 0, :] = np.sum(single_X[(i*rdrbinsize):(i*rdrbinsize+rdrbinsize), 0, :], axis=0)
-        single_X[(i*rdrbinsize+1):(i*rdrbinsize+rdrbinsize), 0, :] = 0
-        single_base_nb_mean[(i*rdrbinsize):(i*rdrbinsize+rdrbinsize), :] = np.sum(single_base_nb_mean[(i*rdrbinsize):(i*rdrbinsize+rdrbinsize), :], axis=0)
-        single_base_nb_mean[(i*rdrbinsize+1):(i*rdrbinsize+rdrbinsize), :] = 0
+    # get transcript counts by checking the overlap of each bin with gene regions
+    # complete the bin boundary
+    EPS = 1e-3
+    bin_chr_regions = pd.DataFrame({"chr":[x[0] for x in sorted_chr_pos_first], "start":[x[1] for x in sorted_chr_pos_first], "end":[x[1] for x in sorted_chr_pos_last]})
+    bin_chr_regions['end'].iloc[:-1] = np.where( bin_chr_regions.chr.values[:-1]==bin_chr_regions.chr.values[1:], \
+                                                np.maximum(bin_chr_regions.end.values[:-1], bin_chr_regions.start.values[1:]), \
+                                                bin_chr_regions.end.values[:-1] )
+    bin_chrs = bin_chr_regions.chr.values
+    bin_starts = bin_chr_regions.start.values
+    bin_ends = bin_chr_regions.end.values
+    bidx = 0
+    x_gene_list = [[] for i in range(bin_chr_regions.shape[0])]
+    for g,gname in enumerate(df_hgtable.name2.values):
+        chr = df_hgtable.chrom.values[g]
+        g_start = df_hgtable.cdsStart.values[g]
+        g_end = df_hgtable.cdsEnd.values[g]
+        # get overlapping bin indexes and overlapping lengths
+        while bidx < bin_chr_regions.shape[0] and bin_chrs[bidx] < chr:
+            bidx += 1
+        while bidx < bin_chr_regions.shape[0] and bin_chrs[bidx] == chr and bin_ends[bidx] < g_start:
+            bidx += 1
+        overlapping_indexes = []
+        overlapping_lengths = []
+        for b in range(bidx, min(bin_chr_regions.shape[0],bidx + 50)):
+            if bin_chrs[b] != chr or bin_starts[b] > g_end:
+                break
+            overlapping_indexes.append(b)
+            overlapping_lengths.append( min(bin_ends[b], g_end) - max(bin_starts[b], g_start) )
 
-    return lengths, single_X, single_base_nb_mean, single_total_bb_RD, log_sitewise_transmat, sorted_chr_pos, x_gene_list
+        # attribute gene UMI counts to the overlapping bins
+        if len(overlapping_indexes) > 0:
+            overlapping_indexes = np.array(overlapping_indexes)
+            proportions = np.array(overlapping_lengths) / np.sum(overlapping_lengths)
+            # adata_gidx = np.where(adata.var.index == gname)[0][0]
+            # single_X[overlapping_indexes,0,:] += proportions.reshape(-1,1) * adata.layers["count"][:,adata_gidx].reshape(1,-1)
+            for i,x in enumerate(proportions):
+                if x > EPS:
+                    x_gene_list[overlapping_indexes[i]].append( (gname, x) )
+    
+    single_X[:,0,:] = distribute_transcriptcount_tobins(adata, x_gene_list)
+
+    return lengths, single_X, single_total_bb_RD, log_sitewise_transmat, sorted_chr_pos_first, sorted_chr_pos_last, x_gene_list, n_snps
 
 
-def bin_selection_basedon_normal(single_X, single_base_nb_mean, single_total_bb_RD, sorted_chr_pos, sorted_chr_pos_last, x_gene_list, nu, logphase_shift, index_normal, genome_build="hg38", confidence_interval=[0.05, 0.95], min_betabinom_tau=30):
+def adjust_gene_bin_proportions(x_gene_list):
+    """
+    Attributes
+    ----------
+    x_gene_list : list of str
+        List of (gname, proportion) in each bin.
+    """
+    # transform to gname by bin matrix where entries are proportions
+    unique_gnames = list(set([x[0] for y in x_gene_list for x in y]))
+    map_gene_idx = {unique_gnames[i]:i for i in range(len(unique_gnames))}
+    prop_mat = np.zeros((len(unique_gnames), len(x_gene_list)))
+    for i in range(len(x_gene_list)):
+        for x in x_gene_list[i]:
+            prop_mat[map_gene_idx[x[0]], i] = x[1]
+    
+    # normalize each gname to have proportions sum to 1
+    prop_mat = prop_mat / np.sum(prop_mat, axis=1, keepdims=True)
+
+    # convert back to list of bins with (gname, proportion)
+    EPS = 1e-3
+    for i in range(len(x_gene_list)):
+        x_gene_list[i] = [(unique_gnames[j], prop_mat[j,i]) for j in range(len(unique_gnames)) if prop_mat[j,i] > EPS]
+    return x_gene_list
+
+
+def bin_selection_basedon_normal(single_X, single_base_nb_mean, single_total_bb_RD, sorted_chr_pos, sorted_chr_pos_last, adata, x_gene_list, nu, logphase_shift, index_normal, genome_build="hg38", confidence_interval=[0.05, 0.95], min_betabinom_tau=30):
     """
     Filter out bins that potential contain somatic mutations based on BAF of normal spots.
     """
@@ -1028,6 +1065,8 @@ def bin_selection_basedon_normal(single_X, single_base_nb_mean, single_total_bb_
     sorted_chr_pos = [sorted_chr_pos[i] for i in index_remaining]
     sorted_chr_pos_last = [sorted_chr_pos_last[i] for i in index_remaining]
     x_gene_list = [x_gene_list[i] for i in index_remaining]
+    x_gene_list = adjust_gene_bin_proportions(x_gene_list)
+    single_X[:,0,:] = distribute_transcriptcount_tobins(adata, x_gene_list)
     # re-estimating phase switch probability
     tmp_sorted_chr_pos = [val for pair in zip(sorted_chr_pos, sorted_chr_pos_last) for val in pair]
     sorted_chr = np.array([x[0] for x in tmp_sorted_chr_pos])
@@ -1168,13 +1207,23 @@ def filter_de_genes_tri(exp_counts, x_gene_list, normal_candidate, sample_list=N
         filtered_out_set = filtered_out_set | this_filtered_out_set
         print(f"Filter out {len(filtered_out_set)} DE genes")
     #
-    new_single_X_rdr = np.zeros((len(x_gene_list), adata.shape[0]))
-    for i,x in enumerate(x_gene_list):
-        g_list = [z for z in x.split() if z != ""]
-        idx_genes = np.array([ map_gene_adatavar[g] for g in g_list if (not g in filtered_out_set) and (g in map_gene_adatavar)])
-        if len(idx_genes) > 0:
-            new_single_X_rdr[i, :] = np.sum(adata.layers["count"][:, idx_genes], axis=1)
-        # x_gene_list[i] = " ".join([g for g in g_list if (not g in filtered_out_set) and (g in map_gene_adatavar)])
+    # remove genes that are in filtered_out_set
+    print(filtered_out_set)
+    x_gene_list = [ [x for x in y if not x[0] in filtered_out_set] for y in x_gene_list ]
+    x_gene_list = adjust_gene_bin_proportions(x_gene_list)
+    new_single_X_rdr = distribute_transcriptcount_tobins(adata, x_gene_list)
+    # new_single_X_rdr = np.zeros((len(x_gene_list), adata.shape[0]))
+    # for i,x in enumerate(x_gene_list):
+    #     g_list = [z for z in x.split() if z != ""]
+    #     idx_genes = np.array([ map_gene_adatavar[g] for g in g_list if (not g in filtered_out_set) and (g in map_gene_adatavar)])
+    #     if len(idx_genes) > 0:
+    #         new_single_X_rdr[i, :] = np.sum(adata.layers["count"][:, idx_genes], axis=1)
+    #     # x_gene_list[i] = " ".join([g for g in g_list if (not g in filtered_out_set) and (g in map_gene_adatavar)])
+    
+    # # add pseudo count to single_X
+    # print( np.sum(np.sum(new_single_X_rdr,axis=1) == 0) )
+    # pseudo_count = 1
+    # new_single_X_rdr += pseudo_count
     return new_single_X_rdr, filtered_out_set
 
 
