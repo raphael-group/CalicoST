@@ -34,7 +34,7 @@ def main(configuration_file):
     for k in sorted(list(config.keys())):
         print(f"\t{k} : {config[k]}")
 
-    lengths, single_X, single_base_nb_mean, single_total_bb_RD, log_sitewise_transmat, df_bininfo, x_gene_list, \
+    lengths, single_X, single_base_nb_mean, single_total_bb_RD, log_sitewise_transmat, df_bininfo, df_gene_snp, \
         barcodes, coords, single_tumor_prop, sample_list, sample_ids, adjacency_mat, smooth_mat, exp_counts = run_parse_n_load(config)
     
     unique_chrs = np.arange(1, 23)
@@ -124,8 +124,16 @@ def main(configuration_file):
                     if np.sum(copy_single_X_rdr[:, (normal_candidate==True)]) > single_X.shape[0] * 200 or PERCENT_NORMAL == 100:
                         break
                     PERCENT_NORMAL += 10
-                # copy_single_X_rdr, _ = filter_de_genes(exp_counts, x_gene_list, normal_candidate, sample_list=sample_list, sample_ids=sample_ids)
-                copy_single_X_rdr, _ = filter_de_genes_tri(exp_counts, x_gene_list, normal_candidate, sample_list=sample_list, sample_ids=sample_ids)
+                # filter bins based on normal
+                index_normal = np.where(normal_candidate)[0]
+                sorted_chr_pos = list(zip(df_bininfo.CHR.values, df_bininfo.START.values))
+                lengths, single_X, single_base_nb_mean, single_total_bb_RD, log_sitewise_transmat, df_gene_snp = bin_selection_basedon_normal(df_gene_snp, \
+                    single_X, single_base_nb_mean, single_total_bb_RD, config['nu'], config['logphase_shift'], index_normal)
+                assert df_bininfo.shape[0] == copy_single_X_rdr.shape[0]
+                df_bininfo = genesnp_to_bininfo(df_gene_snp)
+                copy_single_X_rdr = copy.copy(single_X[:,0,:])
+                # filter out high-UMI DE genes, which may bias RDR estimates
+                copy_single_X_rdr, _ = filter_de_genes_tri(exp_counts, df_bininfo, normal_candidate, sample_list=sample_list, sample_ids=sample_ids)
                 MIN_NORMAL_COUNT_PERBIN = 20
                 bidx_inconfident = np.where( np.sum(copy_single_X_rdr[:, (normal_candidate==True)], axis=1) < MIN_NORMAL_COUNT_PERBIN )[0]
                 rdr_normal = np.sum(copy_single_X_rdr[:, (normal_candidate==True)], axis=1)
@@ -134,15 +142,6 @@ def main(configuration_file):
                 copy_single_X_rdr[bidx_inconfident, :] = 0 # avoid ill-defined distributions if normal has 0 count in that bin.
                 copy_single_base_nb_mean = rdr_normal.reshape(-1,1) @ np.sum(copy_single_X_rdr, axis=0).reshape(1,-1)
                 pd.Series(barcodes[normal_candidate==True].index).to_csv(f"{outdir}/normal_candidate_barcodes.txt", header=False, index=False)
-                #
-                index_normal = np.where(normal_candidate)[0]
-                sorted_chr_pos = list(zip(df_bininfo.CHR.values, df_bininfo.START.values))
-                lengths, single_X, single_base_nb_mean, single_total_bb_RD, log_sitewise_transmat, sorted_chr_pos, _, x_gene_list, index_remaining = bin_selection_basedon_normal(single_X, \
-                        single_base_nb_mean, single_total_bb_RD, sorted_chr_pos, sorted_chr_pos, x_gene_list, config["nu"], config["logphase_shift"], index_normal)
-                assert df_bininfo.shape[0] == copy_single_X_rdr.shape[0]
-                df_bininfo = df_bininfo.iloc[index_remaining, :]
-                copy_single_X_rdr = copy_single_X_rdr[index_remaining, :]
-                copy_single_base_nb_mean = copy_single_base_nb_mean[index_remaining, :]
                 
             elif (not config["normalidx_file"] is None):
                 # single_base_nb_mean has already been added in loading data step.
@@ -153,8 +152,7 @@ def main(configuration_file):
                     normal_candidate = (single_tumor_prop < prop_threshold)
                     if np.sum(copy_single_X_rdr[:, (normal_candidate==True)]) > single_X.shape[0] * 200:
                         break
-                # copy_single_X_rdr,_ = filter_de_genes(exp_counts, x_gene_list, normal_candidate, sample_list=sample_list, sample_ids=sample_ids)
-                copy_single_X_rdr, _ = filter_de_genes_tri(exp_counts, x_gene_list, normal_candidate, sample_list=sample_list, sample_ids=sample_ids)
+                copy_single_X_rdr, _ = filter_de_genes_tri(exp_counts, df_bininfo, normal_candidate, sample_list=sample_list, sample_ids=sample_ids)
                 MIN_NORMAL_COUNT_PERBIN = 20
                 bidx_inconfident = np.where( np.sum(copy_single_X_rdr[:, (normal_candidate==True)], axis=1) < MIN_NORMAL_COUNT_PERBIN )[0]
                 rdr_normal = np.sum(copy_single_X_rdr[:, (normal_candidate==True)], axis=1)
@@ -364,12 +362,16 @@ def main(configuration_file):
                     state_cnv.append( pd.DataFrame( best_integer_copies[:,0].reshape(-1,1), columns=[f"clone{cid} A"], index=np.arange(config['n_states']) ) )
                     state_cnv.append( pd.DataFrame( best_integer_copies[:,1].reshape(-1,1), columns=[f"clone{cid} B"], index=np.arange(config['n_states']) ) )
                     #
-                    tmpdf = get_genelevel_cnv_oneclone(best_integer_copies[res_combine["pred_cnv"][:,s], 0], best_integer_copies[res_combine["pred_cnv"][:,s], 1], x_gene_list)
-                    tmpdf.columns = [f"clone{s} A", f"clone{s} B"]
+                    # tmpdf = get_genelevel_cnv_oneclone(best_integer_copies[res_combine["pred_cnv"][:,s], 0], best_integer_copies[res_combine["pred_cnv"][:,s], 1], x_gene_list)
+                    # tmpdf.columns = [f"clone{s} A", f"clone{s} B"]
+                    bin_Acopy_mappers = {i:x for i,x in enumerate(best_integer_copies[res_combine["pred_cnv"][:,s], 0])}
+                    bin_Bcopy_mappers = {i:x for i,x in enumerate(best_integer_copies[res_combine["pred_cnv"][:,s], 1])}
+                    tmpdf = pd.DataFrame({"gene":df_gene_snp[df_gene_snp.is_interval].gene, f"clone{s} A":df_gene_snp[df_gene_snp.is_interval]['bin_id'].map(bin_Acopy_mappers), \
+                        f"clone{s} B":df_gene_snp[df_gene_snp.is_interval]['bin_id'].map(bin_Acopy_mappers)}).set_index('gene')
                     if df_genelevel_cnv is None:
-                        df_genelevel_cnv = copy.copy(tmpdf)
+                        df_genelevel_cnv = copy.copy( tmpdf[~tmpdf[f"clone{s} A"].isnull()].astype(int) )
                     else:
-                        df_genelevel_cnv = df_genelevel_cnv.join(tmpdf)
+                        df_genelevel_cnv = df_genelevel_cnv.join( tmpdf[~tmpdf[f"clone{s} A"].isnull()].astype(int) )
                 # output gene-level copy number
                 df_genelevel_cnv.to_csv(f"{outdir}/cnv{medfix[o]}_genelevel.tsv", header=True, index=True, sep="\t")
                 # output segment-level copy number

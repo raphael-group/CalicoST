@@ -17,6 +17,19 @@ from utils_IO import *
 from phasing import *
 
 
+def genesnp_to_bininfo(df_gene_snp):
+    table_bininfo = df_gene_snp[~df_gene_snp.bin_id.isnull()].groupby('bin_id').agg({"CHR":'first', 'START':'first', 'END':'last', 'gene':set, 'snp_id':set}).reset_index()
+    table_bininfo['ARM'] = '.'
+    table_bininfo['LOG_PHASE_TRANSITION'] = log_sitewise_transmat
+    table_bininfo['INCLUDED_GENES'] = [ " ".join([x for x in y if not x is None]) for y in table_bininfo.gene.values ]
+    table_bininfo['INCLUDED_SNP_IDS'] = [ " ".join([x for x in y if not x is None]) for y in table_bininfo.snp_id.values ]
+    table_bininfo['NORMAL_COUNT'] = np.nan
+    table_bininfo['N_SNPS'] = [ len([x for x in y if not x is None]) for y in table_bininfo.snp_id.values ]
+    # drop the set columns
+    table_bininfo.drop(columns=['gene', 'snp_id'], inplace=True)
+    return table_bininfo
+
+
 def parse_visium(config):
     """
     Read multiple 10X Visium SRT samples and SNP data and generate tables with counts and meta info.
@@ -76,49 +89,47 @@ def parse_visium(config):
         single_tumor_prop = None
     
     # read original data
-    lengths, single_X, single_base_nb_mean, single_total_bb_RD, log_sitewise_transmat, sorted_chr_pos, sorted_chr_pos_last, x_gene_list, n_snps = convert_to_hmm_input_new(adata, \
-        cell_snp_Aallele, cell_snp_Ballele, snp_gene_list, unique_snp_ids, config["hgtable_file"], config["nu"], config["logphase_shift"])
+    # lengths, single_X, single_base_nb_mean, single_total_bb_RD, log_sitewise_transmat, sorted_chr_pos, sorted_chr_pos_last, x_gene_list, n_snps = convert_to_hmm_input_new(adata, \
+    #     cell_snp_Aallele, cell_snp_Ballele, snp_gene_list, unique_snp_ids, config["hgtable_file"], config["nu"], config["logphase_shift"])
+    df_gene_snp = combine_gene_snps(unique_snp_ids, config['hgtable_file'], adata)
+    df_gene_snp = create_haplotype_block_ranges(df_gene_snp, adata, cell_snp_Aallele, cell_snp_Ballele, unique_snp_ids)
+    lengths, single_X, single_base_nb_mean, single_total_bb_RD, log_sitewise_transmat = summarize_counts_for_blocks(df_gene_snp, \
+            adata, cell_snp_Aallele, cell_snp_Ballele, unique_snp_ids, nu=config['nu'], logphase_shift=config['logphase_shift'], genome_build="hg38")
     # infer an initial phase using pseudobulk
     if not Path(f"{config['output_dir']}/initial_phase.npz").exists():
         initial_clone_for_phasing = perform_partition(coords, sample_ids, x_part=config["npart_phasing"], y_part=config["npart_phasing"], single_tumor_prop=single_tumor_prop, threshold=config["tumorprop_threshold"])
         phase_indicator, refined_lengths = initial_phase_given_partition(single_X, lengths, single_base_nb_mean, single_total_bb_RD, single_tumor_prop, initial_clone_for_phasing, 5, log_sitewise_transmat, \
             "sp", config["t_phaseing"], config["gmm_random_state"], config["fix_NB_dispersion"], config["shared_NB_dispersion"], config["fix_BB_dispersion"], config["shared_BB_dispersion"], 30, 1e-3)
         np.savez(f"{config['output_dir']}/initial_phase.npz", phase_indicator=phase_indicator, refined_lengths=refined_lengths)
+        # map phase indicator to individual snps
+        df_gene_snp['phase'] = np.where(df_gene_snp.snp_id.isnull(), None, df_gene_snp.block_id.map({i:x for i,x in enumerate(phase_indicator)}) )
     else:
         tmp = dict(np.load(f"{config['output_dir']}/initial_phase.npz"))
         phase_indicator, refined_lengths = tmp["phase_indicator"], tmp["refined_lengths"]
-    # binning with inferred phase
-    expected_nbins = min(config["max_nbins"], np.median(np.sum(single_total_bb_RD, axis=0)) * config["maxspots_pooling"] / config["avg_umi_perbinspot"] )
-    expected_nbins = int(expected_nbins)
-    secondary_min_umi = choose_umithreshold_given_nbins(single_total_bb_RD, refined_lengths, expected_nbins)
-    print(f"Secondary_min_umi = {secondary_min_umi}")
+
+    # TBD: this parameter shouldn't be hard coded!!!
+    secondary_min_umi = 300
+    # binning
+    df_gene_snp = create_bin_ranges(df_gene_snp, single_total_bb_RD, refined_lengths, secondary_min_umi)
+    lengths, single_X, single_base_nb_mean, single_total_bb_RD, log_sitewise_transmat = summarize_counts_for_bins(df_gene_snp, \
+            adata, single_X, single_total_bb_RD, phase_indicator, nu=config['nu'], logphase_shift=config['logphase_shift'], genome_build="hg38")
     # lengths, single_X, single_base_nb_mean, single_total_bb_RD, log_sitewise_transmat, sorted_chr_pos, sorted_chr_pos_last, x_gene_list, n_snps = perform_binning_new(lengths, single_X, \
     #     single_base_nb_mean, single_total_bb_RD, sorted_chr_pos, sorted_chr_pos_last, x_gene_list, n_snps, phase_indicator, refined_lengths, config["binsize"], config["rdrbinsize"], config["nu"], config["logphase_shift"], secondary_min_umi=secondary_min_umi)
-    lengths, single_X, single_total_bb_RD, log_sitewise_transmat, sorted_chr_pos, sorted_chr_pos_last, x_gene_list, n_snps = perform_binning(lengths, single_X, single_total_bb_RD, \
-        sorted_chr_pos, sorted_chr_pos_last, adata, config['hgtable_file'], n_snps, phase_indicator, refined_lengths, config["binsize"], config["rdrbinsize"], config["nu"], config["logphase_shift"], secondary_min_umi=secondary_min_umi)
-    
+        
     # remove bins where normal spots have imbalanced SNPs
     if not config["tumorprop_file"] is None:
         # index_normal = np.where(single_tumor_prop < 0.01)[0]
         index_normal = np.argsort(single_tumor_prop)[:100]
-        lengths, single_X, single_base_nb_mean, single_total_bb_RD, log_sitewise_transmat, sorted_chr_pos, sorted_chr_pos_last, x_gene_list, index_remaining = bin_selection_basedon_normal(single_X, \
-                single_base_nb_mean, single_total_bb_RD, sorted_chr_pos, sorted_chr_pos_last, adata, x_gene_list, config["nu"], config["logphase_shift"], index_normal)
-        n_snps = [n_snps[i] for i in index_remaining]
-
-    # # add pseudo count to single_X
-    # pseudo_count = 1
-    # single_X[:,0,:] += pseudo_count
+        lengths, single_X, single_base_nb_mean, single_total_bb_RD, log_sitewise_transmat, df_gene_snp = bin_selection_basedon_normal(df_gene_snp, \
+                single_X, single_base_nb_mean, single_total_bb_RD, config["nu"], config["logphase_shift"], index_normal)
+        assert np.sum(lengths) == single_X.shape[0] 
+        assert single_X.shape[0] == single_total_bb_RD.shape[0]
+        assert single_X.shape[0] == len(log_sitewise_transmat)
 
     # create RDR-BAF table
-    table_bininfo = pd.DataFrame({"CHR":[x[0] for x in sorted_chr_pos], \
-                                 "ARM":".", \
-                                 "START":[x[1] for x in sorted_chr_pos], \
-                                 "END":[x[1] for x in sorted_chr_pos_last], \
-                                 "LOG_PHASE_TRANSITION": log_sitewise_transmat, \
-                                 #"INCLUDED_GENES":x_gene_list, \
-                                 "INCLUDED_GENES": [ " ".join(map(str, x)) for x in x_gene_list ], \
-                                 "NORMAL_COUNT":1e6 * np.sum(single_base_nb_mean, axis=1) / np.sum(single_base_nb_mean), \
-                                 "N_SNPS":n_snps})
+    table_bininfo = genesnp_to_bininfo(df_gene_snp)
+    table_bininfo['LOG_PHASE_TRANSITION'] = log_sitewise_transmat
+
     table_rdrbaf = []
     for i in range(single_X.shape[2]):
         table_rdrbaf.append( pd.DataFrame({"BARCODES":adata.obs.index[i], "EXP":single_X[:,0,i], "TOT":single_total_bb_RD[:,i], "B":single_X[:,1,i]}) )
@@ -157,162 +168,7 @@ def parse_visium(config):
     n_pooled = np.median(np.sum(smooth_mat > 0, axis=0).A.flatten())
     print(f"Set up number of spots to pool in HMRF: {n_pooled}")
     
-    return table_bininfo, table_rdrbaf, table_meta, exp_counts, adjacency_mat, smooth_mat
-
-
-def load_raw_cellsnplite(cellsnplite_dir, ordered_chr=[str(c) for c in range(1,23)]):
-    # preprocess ordered_chr to a dictionary mapping from the string in ordered_chr to its index
-    ordered_chr_map = {ordered_chr[i]:i for i in range(len(ordered_chr))}
-
-    # load sparse matrix from cellsnp-lite
-    cell_snp_Aallele = scipy.io.mmread(f"{cellsnplite_dir}/cellSNP.tag.AD.mtx").T.tocsr()
-    cell_snp_Ballele = scipy.io.mmread(f"{cellsnplite_dir}/cellSNP.tag.DP.mtx").T.tocsr() - cell_snp_Aallele
-    
-    # load snp info
-    try:
-        df_snp = pd.read_csv(f"{cellsnplite_dir}/cellSNP.base.vcf.gz", comment="#", index_col=None, sep="\t", names=["CHROM", "POS", "ID", "REF", "ALT", "QUAL", "FILTER", "INFO"])
-    except:
-        df_snp = pd.read_csv(f"{cellsnplite_dir}/cellSNP.base.vcf", comment="#", index_col=None, sep="\t", names=["CHROM", "POS", "ID", "REF", "ALT", "QUAL", "FILTER", "INFO"])
-
-    # retain only chromosomes in ordered_chr
-    if ~np.any( df_snp.CHROM.isin(ordered_chr) ):
-        df_snp["CHROM"] = df_snp.CHROM.map(lambda x: x.replace("chr", ""))
-    df_snp = df_snp[df_snp.CHROM.isin(ordered_chr)]
-    df_snp["int_chrom"] = df_snp.CHROM.map(ordered_chr_map)
-    df_snp["snp_id"] = df_snp.int_chrom.map(str) + "_" + df_snp.POS.map(str) + "_" + df_snp.REF + "_" + df_snp.ALT
-    # argsort by chromosome and position
-    index = np.lexsort((df_snp.POS.values, df_snp.int_chrom.values))
-    df_snp = df_snp.iloc[index,:]
-    cell_snp_Aallele = cell_snp_Aallele[:,index]
-    cell_snp_Ballele = cell_snp_Ballele[:,index]
-    
-    # load barcode info
-    snp_barcodes = pd.read_csv(f"{cellsnplite_dir}/cellSNP.samples.tsv", header=None, names=["barcodes"])
-
-    return cell_snp_Aallele, cell_snp_Ballele, snp_barcodes, df_snp.snp_id.values
-
-
-def parse_hatchetblock(config, cellsnplite_dir, bb_file, ordered_chr=[str(c) for c in range(1,23)]):
-    """
-    TBD
-    """
-    ##### load expression + cellsnp-lite data module #####
-    if "input_filelist" in config:
-        return NotImplemented
-    else:
-        # 10X expression data
-        adata = sc.read_10x_h5(config["spaceranger_dir"] + "/filtered_feature_bc_matrix.h5")
-        adata.layers["count"] = np.array(adata.X.A.astype(int))
-        # add position
-        if Path(f"{config['spaceranger_dir']}/spatial/tissue_positions.csv").exists():
-            df_pos = pd.read_csv(f"{config['spaceranger_dir']}/spatial/tissue_positions.csv", sep=",", header=0, \
-                            names=["barcode", "in_tissue", "x", "y", "pixel_row", "pixel_col"])
-        elif Path(f"{config['spaceranger_dir']}/spatial/tissue_positions_list.csv").exists():
-            df_pos = pd.read_csv(f"{config['spaceranger_dir']}/spatial/tissue_positions_list.csv", sep=",", header=None, \
-                            names=["barcode", "in_tissue", "x", "y", "pixel_row", "pixel_col"])
-        else:
-            raise Exception("No spatial coordinate file!")
-        df_pos = df_pos[df_pos.in_tissue == True]
-        # SNP data
-        cell_snp_Aallele, cell_snp_Ballele, snp_barcodes, unique_snp_ids = load_raw_cellsnplite(cellsnplite_dir, ordered_chr=ordered_chr)
-        # shared barcodes
-        snp_barcodes, cell_snp_Aallele, cell_snp_Ballele, adata, df_pos = taking_shared_barcodes(snp_barcodes, cell_snp_Aallele, cell_snp_Ballele, adata, df_pos)
-        # sample and sample_list
-        adata.obs["sample"] = "unique_sample"
-        sample_list = [adata.obs["sample"][0]]
-        sample_ids = np.zeros(adata.shape[0], dtype=int)
-        across_slice_adjacency_mat = None
-    
-    # filter
-    adata, cell_snp_Aallele, cell_snp_Ballele, snp_barcodes, unique_snp_ids = filter_genes_barcodes_hatchetblock(adata, cell_snp_Aallele, cell_snp_Ballele, snp_barcodes, unique_snp_ids, config, ordered_chr=ordered_chr)
-    # coordinate
-    coords = df_pos[["x", "y"]].values
-    # tumor proportion
-    if not config["tumorprop_file"] is None:
-        df_tumorprop = pd.read_csv(config["tumorprop_file"], sep="\t", header=0, index_col=0)
-        df_tumorprop = df_tumorprop[["Tumor"]]
-        df_tumorprop.columns = ["tumor_proportion"]
-        adata.obs = adata.obs.join(df_tumorprop)
-        single_tumor_prop = adata.obs["tumor_proportion"]
-    else:
-        single_tumor_prop = None
-
-    ##### convert to hmm input matrices with hatchet blocks #####
-    lengths, single_X, single_base_nb_mean, single_total_bb_RD, log_sitewise_transmat, sorted_chr_pos, sorted_chr_pos_last, x_gene_list, n_snps = convert_to_hmm_using_hatchetblock(bb_file, \
-            cell_snp_Aallele, cell_snp_Ballele, unique_snp_ids, adata, config["hgtable_file"], config["nu"], config["logphase_shift"], ordered_chr=ordered_chr, genome_build="hg38")
-
-    ##### infer an initial phase between blocks #####
-    if not Path(f"{config['output_dir']}/initial_phase.npz").exists():
-        initial_clone_for_phasing = perform_partition(coords, sample_ids, x_part=config["npart_phasing"], y_part=config["npart_phasing"], single_tumor_prop=single_tumor_prop, threshold=config["tumorprop_threshold"])
-        phase_indicator, refined_lengths = initial_phase_given_partition(single_X, lengths, single_base_nb_mean, single_total_bb_RD, single_tumor_prop, initial_clone_for_phasing, 5, log_sitewise_transmat, \
-            "sp", config["t_phaseing"], config["gmm_random_state"], config["fix_NB_dispersion"], config["shared_NB_dispersion"], config["fix_BB_dispersion"], config["shared_BB_dispersion"], 30, 1e-3)
-        np.savez(f"{config['output_dir']}/initial_phase.npz", phase_indicator=phase_indicator, refined_lengths=refined_lengths)
-    else:
-        tmp = dict(np.load(f"{config['output_dir']}/initial_phase.npz"))
-        phase_indicator, refined_lengths = tmp["phase_indicator"], tmp["refined_lengths"]
-    # binning with inferred phase
-    expected_nbins = min(config["max_nbins"], np.median(np.sum(single_total_bb_RD, axis=0)) * config["maxspots_pooling"] / config["avg_umi_perbinspot"] )
-    expected_nbins = int(expected_nbins)
-    secondary_min_umi = choose_umithreshold_given_nbins(single_total_bb_RD, refined_lengths, expected_nbins)
-    print(f"Secondary_min_umi = {secondary_min_umi}")
-    lengths, single_X, single_base_nb_mean, single_total_bb_RD, log_sitewise_transmat, sorted_chr_pos, sorted_chr_pos_last, x_gene_list, n_snps = perform_binning_new(lengths, single_X, \
-        single_base_nb_mean, single_total_bb_RD, sorted_chr_pos, sorted_chr_pos_last, x_gene_list, n_snps, phase_indicator, refined_lengths, config["binsize"], config["rdrbinsize"], config["nu"], config["logphase_shift"], secondary_min_umi=secondary_min_umi)
-    
-    # remove bins where normal spots have imbalanced SNPs
-    if not config["tumorprop_file"] is None:
-        index_normal = np.where(single_tumor_prop < 0.01)[0]
-        lengths, single_X, single_base_nb_mean, single_total_bb_RD, log_sitewise_transmat, sorted_chr_pos, sorted_chr_pos_last, x_gene_list, index_remaining = bin_selection_basedon_normal(single_X, \
-                single_base_nb_mean, single_total_bb_RD, sorted_chr_pos, sorted_chr_pos_last, x_gene_list, config["nu"], config["logphase_shift"], index_normal)
-        n_snps = [n_snps[i] for i in index_remaining]
-
-        # create RDR-BAF table
-    table_bininfo = pd.DataFrame({"CHR":[x[0] for x in sorted_chr_pos], \
-                                 "ARM":".", \
-                                 "START":[x[1] for x in sorted_chr_pos], \
-                                 "END":[x[1] for x in sorted_chr_pos_last], \
-                                 "LOG_PHASE_TRANSITION": log_sitewise_transmat, \
-                                 "INCLUDED_GENES":x_gene_list, \
-                                 "NORMAL_COUNT":1e6 * np.sum(single_base_nb_mean, axis=1) / np.sum(single_base_nb_mean), \
-                                 "N_SNPS":n_snps})
-    table_rdrbaf = []
-    for i in range(single_X.shape[2]):
-        table_rdrbaf.append( pd.DataFrame({"BARCODES":adata.obs.index[i], "EXP":single_X[:,0,i], "TOT":single_total_bb_RD[:,i], "B":single_X[:,1,i]}) )
-    table_rdrbaf = pd.concat(table_rdrbaf, ignore_index=True)
-
-    # create meta info table
-    # note that table_meta.BARCODES is equal to the unique ones of table_rdrbaf.BARCODES in the original order
-    table_meta = pd.DataFrame({"BARCODES":adata.obs.index, "SAMPLE":adata.obs["sample"], "X":coords[:,0], "Y":coords[:,1]})
-    if not single_tumor_prop is None:
-        table_meta["TUMOR_PROPORTION"] = single_tumor_prop
-
-    # expression count dataframe
-    exp_counts = pd.DataFrame.sparse.from_spmatrix( scipy.sparse.csc_matrix(adata.layers["count"]), index=adata.obs.index, columns=adata.var.index)
-
-    # smooth and adjacency matrix for each sample
-    adjacency_mat = []
-    smooth_mat = []
-    for sname in sample_list:
-        index = np.where(adata.obs["sample"] == sname)[0]
-        this_coords = np.array(coords[index,:])
-        if config["construct_adjacency_method"] == "hexagon":
-            tmpsmooth_mat, tmpadjacency_mat = choose_adjacency_by_readcounts(this_coords, single_total_bb_RD[:,index], maxspots_pooling=config["maxspots_pooling"])
-        elif config["construct_adjacency_method"] == "KNN":
-            tmpsmooth_mat, tmpadjacency_mat = choose_adjacency_by_KNN(this_coords, exp_counts.iloc[index,:], w=config["construct_adjacency_w"], maxspots_pooling=config["maxspots_pooling"])
-        else:
-            logging.error("Unknown adjacency construction method")
-        # tmpsmooth_mat, tmpadjacency_mat = choose_adjacency_by_readcounts_slidedna(this_coords, maxspots_pooling=config["maxspots_pooling"])
-        adjacency_mat.append( tmpadjacency_mat.A )
-        smooth_mat.append( tmpsmooth_mat.A )
-    adjacency_mat = scipy.linalg.block_diag(*adjacency_mat)
-    adjacency_mat = scipy.sparse.csr_matrix( adjacency_mat )
-    if not across_slice_adjacency_mat is None:
-        adjacency_mat += across_slice_adjacency_mat
-    smooth_mat = scipy.linalg.block_diag(*smooth_mat)
-    smooth_mat = scipy.sparse.csr_matrix( smooth_mat )
-    n_pooled = np.median(np.sum(smooth_mat > 0, axis=0).A.flatten())
-    print(f"Set up number of spots to pool in HMRF: {n_pooled}")
-    
-    return table_bininfo, table_rdrbaf, table_meta, exp_counts, adjacency_mat, smooth_mat
+    return table_bininfo, table_rdrbaf, table_meta, exp_counts, adjacency_mat, smooth_mat, df_gene_snp
 
 
 def load_tables_to_matrices(config):
@@ -324,6 +180,8 @@ def load_tables_to_matrices(config):
     table_meta = pd.read_csv(f"{config['output_dir']}/parsed_inputs/table_meta.csv.gz", header=0, index_col=None, sep="\t")
     adjacency_mat = scipy.sparse.load_npz( f"{config['output_dir']}/parsed_inputs/adjacency_mat.npz" )
     smooth_mat = scipy.sparse.load_npz( f"{config['output_dir']}/parsed_inputs/smooth_mat.npz" )
+    #
+    df_gene_snp = pd.read_csv(f"{config['output_dir']}/parsed_inputs/gene_snp_info.csv.gz", header=0, index_col=None, sep="\t")
 
     n_spots = table_meta.shape[0]
     n_bins = table_bininfo.shape[0]
@@ -345,12 +203,8 @@ def load_tables_to_matrices(config):
 
     # construct bin info and lengths and x_gene_list
     df_bininfo = table_bininfo
-    lengths = np.array([ np.sum(table_bininfo.CHR == c) for c in range(1, 23) ])
-    # x_gene_list = np.where(table_bininfo["INCLUDED_GENES"].isnull(), "", table_bininfo["INCLUDED_GENES"].values).astype(str)
-    INCLUDED_GENES_isnull = table_bininfo["INCLUDED_GENES"].isnull()
-    x_gene_list = [ x.replace("'", "").replace("(","").replace(")","").replace(",","").split(" ") if ~INCLUDED_GENES_isnull[i] else "" for i,x in enumerate(table_bininfo["INCLUDED_GENES"].values) ]
-    x_gene_list = [ list(zip(x[0:len(x):2], map(float, x[1:len(x):2]) )) for x in x_gene_list]
-
+    lengths = np.array([ np.sum(table_bininfo.CHR == c) for c in df_bininfo.CHR.unique() ])
+    
     # construct barcodes
     barcodes = table_meta["BARCODES"]
 
@@ -373,7 +227,7 @@ def load_tables_to_matrices(config):
     # expression UMI count matrix
     exp_counts = pd.read_pickle( f"{config['output_dir']}/parsed_inputs/exp_counts.pkl" )
 
-    return lengths, single_X, single_base_nb_mean, single_total_bb_RD, log_sitewise_transmat, df_bininfo, x_gene_list, \
+    return lengths, single_X, single_base_nb_mean, single_total_bb_RD, log_sitewise_transmat, df_bininfo, df_gene_snp, \
         barcodes, coords, single_tumor_prop, sample_list, sample_ids, adjacency_mat, smooth_mat, exp_counts
 
 
@@ -386,7 +240,7 @@ def run_parse_n_load(config):
                              Path(f"{config['output_dir']}/parsed_inputs/exp_counts.pkl").exists() ])
     if not np.all(file_exists):
         # process to tables
-        table_bininfo, table_rdrbaf, table_meta, exp_counts, adjacency_mat, smooth_mat = parse_visium(config)
+        table_bininfo, table_rdrbaf, table_meta, exp_counts, adjacency_mat, smooth_mat, df_gene_snp = parse_visium(config)
         # table_bininfo, table_rdrbaf, table_meta, exp_counts, adjacency_mat, smooth_mat = parse_hatchetblock(config, cellsnplite_dir, bb_file)
 
         # save file
@@ -399,6 +253,8 @@ def run_parse_n_load(config):
         exp_counts.to_pickle( f"{config['output_dir']}/parsed_inputs/exp_counts.pkl" )
         scipy.sparse.save_npz( f"{config['output_dir']}/parsed_inputs/adjacency_mat.npz", adjacency_mat )
         scipy.sparse.save_npz( f"{config['output_dir']}/parsed_inputs/smooth_mat.npz", smooth_mat )
+        #
+        df_gene_snp.to_csv( f"{config['output_dir']}/parsed_inputs/gene_snp_info.csv.gz", header=True, index=False, sep="\t" )
 
     # load and parse data
     return load_tables_to_matrices(config)
