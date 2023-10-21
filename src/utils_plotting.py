@@ -364,24 +364,27 @@ def plot_acn_from_df_anotherscheme(df_cnv, ax_handle, clone_ids=None, clone_name
                     y1 = c
                     y2 = c+1
                     # up-arrow
+                    y_diverge1 = 0.9*y2+0.1*y1
+                    y_diverge2 = 0.5*y2+0.5*y1
+                    y_merge = 0.7*y2+0.3*y1
                     sub_intervals, sub_labs = get_intervals( df_cnv[f"clone{cid} A"].values[intervals[i][0]:intervals[i][1]] > df_cnv[f"clone{cid} B"].values[intervals[i][0]:intervals[i][1]] )
                     for j, sub_int in enumerate(sub_intervals):
                         if sub_labs[j]:
+                            # bounding box
                             ax_handle.fill_between( np.arange(intervals[i][0]+sub_int[0], intervals[i][0]+sub_int[1]), y1, y2, color="none", edgecolor="black")
-                            # ax_handle.arrow(x=intervals[i][0]+np.mean(sub_int), y=0.9*y2+0.1*y1, dx=0, dy=0.7*(y1-y2), head_width=0.3*(sub_int[1] - sub_int[0]), head_length=0.1*np.abs(y1-y2), fc="black")
-                            # ax_handle.plot([intervals[i][0]+sub_int[0], intervals[i][0]+sub_int[1]], [0.9*y2+0.1*y1, 0.9*y1+0.1*y2], color="black")
-                            ax_handle.fill_between( np.arange(intervals[i][0]+sub_int[0], intervals[i][0]+sub_int[1]), y2-0.2, y2, color="black", edgecolor="black")
+                            # arrow
+                            ax_handle.fill_between( [intervals[i][0]+sub_int[0], intervals[i][0]+sub_int[1]], [y_diverge1,y_merge], [y_diverge2,y_merge], color="black", edgecolor="black")
                     # down-arrow
+                    y_diverge1 = 0.1*y2+0.9*y1
+                    y_diverge2 = 0.5*y2+0.5*y1
+                    y_merge = 0.3*y2+0.7*y1
                     sub_intervals, sub_labs = get_intervals( df_cnv[f"clone{cid} A"].values[intervals[i][0]:intervals[i][1]] < df_cnv[f"clone{cid} B"].values[intervals[i][0]:intervals[i][1]] )
                     for j, sub_int in enumerate(sub_intervals):
                         if sub_labs[j]:
+                            # bounding box
                             ax_handle.fill_between( np.arange(intervals[i][0]+sub_int[0], intervals[i][0]+sub_int[1]), y1, y2, color="none", edgecolor="black")
-                            # ax_handle.arrow(x=intervals[i][0]+np.mean(sub_int), y=0.9*y1+0.1*y2, dx=0, dy=-0.7*(y1-y2), head_width=0.3*(sub_int[1]-sub_int[0]), head_length=0.1*np.abs(y1-y2), fc="black")
-                            # ax_handle.plot([intervals[i][0]+sub_int[0], intervals[i][0]+sub_int[1]], [0.9*y1+0.1*y2, 0.9*y2+0.1*y1], color="black")
-                            ax_handle.fill_between( np.arange(intervals[i][0]+sub_int[0], intervals[i][0]+sub_int[1]), y1, y1+0.2, color="black", edgecolor="black")
-            # # horizontal separation between clones
-            # for c,cid in enumerate(final_clone_ids[:-1]):
-            #     ax_handle.axhline(y=c+1, color="black", lw=0.5)
+                            # arrow
+                            ax_handle.fill_between( [intervals[i][0]+sub_int[0], intervals[i][0]+sub_int[1]], [y_merge,y_diverge1], [y_merge,y_diverge2], color="black", edgecolor="black")
         else:
             # find regions where there exist both clones with A > B and clones with A < B
             has_up = np.any(np.vstack([ df_cnv[f"clone{cid} A"].values > df_cnv[f"clone{cid} B"].values for cid in clone_ids]), axis=0)
@@ -395,21 +398,27 @@ def plot_acn_from_df_anotherscheme(df_cnv, ax_handle, clone_ids=None, clone_name
                     y1 = c
                     y2 = c+1
                     # up-arrow
+                    y_diverge1 = 0.9*y2+0.1*y1
+                    y_diverge2 = 0.5*y2+0.5*y1
+                    y_merge = 0.7*y2+0.3*y1
                     sub_intervals, sub_labs = get_intervals( df_cnv[f"clone{cid} A"].values[intervals[i][0]:intervals[i][1]] > df_cnv[f"clone{cid} B"].values[intervals[i][0]:intervals[i][1]] )
                     for j, sub_int in enumerate(sub_intervals):
                         if sub_labs[j]:
-                            ax_handle.fill_between( np.arange(intervals[i][0]+sub_int[0], intervals[i][0]+sub_int[1]), y1, y2, color="none", edgecolor="black")
-                            # ax_handle.arrow(x=intervals[i][0]+np.mean(sub_int), y=0.9*y2+0.1*y1, dx=0, dy=0.7*(y1-y2), head_width=0.3*(sub_int[1] - sub_int[0]), head_length=0.1*np.abs(y1-y2), fc="black")
-                            # ax_handle.plot([intervals[i][0]+sub_int[0], intervals[i][0]+sub_int[1]], [0.9*y2+0.1*y1, 0.9*y1+0.1*y2], color="black")
-                            ax_handle.fill_between( np.arange(intervals[i][0]+sub_int[0], intervals[i][0]+sub_int[1]), y2-0.2, y2, color="black", edgecolor="black")
+                            # bounding box
+                            ax_handle.fill_between( [intervals[i][0]+sub_int[0], intervals[i][0]+sub_int[1]], y1, y2, color="none", edgecolor="black")
+                            # arrow
+                            ax_handle.fill_between( [intervals[i][0]+sub_int[0], intervals[i][0]+sub_int[1]], [y_diverge1,y_merge], [y_diverge2,y_merge], color="black", edgecolor="black")
                     # down-arrow
+                    y_diverge1 = 0.1*y2+0.9*y1
+                    y_diverge2 = 0.5*y2+0.5*y1
+                    y_merge = 0.3*y2+0.7*y1
                     sub_intervals, sub_labs = get_intervals( df_cnv[f"clone{cid} A"].values[intervals[i][0]:intervals[i][1]] < df_cnv[f"clone{cid} B"].values[intervals[i][0]:intervals[i][1]] )
                     for j, sub_int in enumerate(sub_intervals):
                         if sub_labs[j]:
-                            ax_handle.fill_between( np.arange(intervals[i][0]+sub_int[0], intervals[i][0]+sub_int[1]), y1, y2, color="none", edgecolor="black")
-                            # ax_handle.arrow(x=intervals[i][0]+np.mean(sub_int), y=0.9*y1+0.1*y2, dx=0, dy=-0.7*(y1-y2), head_width=0.3*(sub_int[1] - sub_int[0]), head_length=0.1*np.abs(y1-y2), fc="black")
-                            # ax_handle.plot([intervals[i][0]+sub_int[0], intervals[i][0]+sub_int[1]], [0.9*y1+0.1*y2, 0.9*y2+0.1*y1], color="black")
-                            ax_handle.fill_between( np.arange(intervals[i][0]+sub_int[0], intervals[i][0]+sub_int[1]), y1, y1+0.2, color="black", edgecolor="black")
+                            # bounding box
+                            ax_handle.fill_between( [intervals[i][0]+sub_int[0], intervals[i][0]+sub_int[1]], y1, y2, color="none", edgecolor="black")
+                            # arrow
+                            ax_handle.fill_between( [intervals[i][0]+sub_int[0], intervals[i][0]+sub_int[1]], [y_merge,y_diverge1], [y_merge,y_diverge2], color="black", edgecolor="black")
 
             # # horizontal separation between clones
             # for c,cid in enumerate(clone_ids[:-1]):

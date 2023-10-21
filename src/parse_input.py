@@ -20,7 +20,6 @@ from phasing import *
 def genesnp_to_bininfo(df_gene_snp):
     table_bininfo = df_gene_snp[~df_gene_snp.bin_id.isnull()].groupby('bin_id').agg({"CHR":'first', 'START':'first', 'END':'last', 'gene':set, 'snp_id':set}).reset_index()
     table_bininfo['ARM'] = '.'
-    table_bininfo['LOG_PHASE_TRANSITION'] = log_sitewise_transmat
     table_bininfo['INCLUDED_GENES'] = [ " ".join([x for x in y if not x is None]) for y in table_bininfo.gene.values ]
     table_bininfo['INCLUDED_SNP_IDS'] = [ " ".join([x for x in y if not x is None]) for y in table_bininfo.snp_id.values ]
     table_bininfo['NORMAL_COUNT'] = np.nan
