@@ -2,6 +2,9 @@ import sys
 import numpy as np
 import scipy
 import pandas as pd
+import logging
+logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s", datefmt="%Y-%m-%d %H:%M:%S")
+logger = logging.getLogger()
 
 
 def load_default_config():
@@ -22,10 +25,7 @@ def load_default_config():
         "supervision_clone_file" : None,
         "filtergenelist_file" : None,
         "filterregion_file" : None,
-        "binsize" : 1,
-        "rdrbinsize" : 1,
-        "max_nbins" : 1200,
-        "avg_umi_perbinspot" : 1.5,
+        "secondary_min_umi" : 300,
         "bafonly" : True,
         # phase switch probability
         "nu" : 1,
@@ -82,10 +82,7 @@ def load_default_config():
         "supervision_clone_file" : "str",
         "filtergenelist_file" : "str",
         "filterregion_file" : "str",
-        "binsize" : "int",
-        "rdrbinsize" : "int",
-        "max_nbins" : "int",
-        "avg_umi_perbinspot" : "float",
+        "secondary_min_umi" : "int",
         "bafonly" : "bool",
         # phase switch probability
         "nu" : "float",
@@ -127,7 +124,7 @@ def load_default_config():
 
     category_names = ["", "# supporting files and preprocessing arguments", "# phase switch probability", "# HMRF configurations", "# HMM configurations", "# integer copy number"]
     category_elements = [["input_filelist", "spaceranger_dir", "snp_dir", "output_dir"], \
-                         ["hgtable_file", "normalidx_file", "tumorprop_file", "alignment_files", "supervision_clone_file", "filtergenelist_file", "filterregion_file", "binsize", "rdrbinsize", "max_nbins", "avg_umi_perbinspot", "bafonly"], \
+                         ["hgtable_file", "normalidx_file", "tumorprop_file", "alignment_files", "supervision_clone_file", "filtergenelist_file", "filterregion_file", "secondary_min_umi", "bafonly"], \
                          ["nu", "logphase_shift", "npart_phasing"], \
                          ["n_clones", "n_clones_rdr", "min_spots_per_clone", "min_avgumi_per_clone", "maxspots_pooling", "tumorprop_threshold",  "max_iter_outer", "nodepotential", "initialization_method", "num_hmrf_initialization_start",  "num_hmrf_initialization_end", "spatial_weight", "construct_adjacency_method", "construct_adjacency_w"], \
                          ["n_states", "params", "t", "t_phaseing", "fix_NB_dispersion", "shared_NB_dispersion", "fix_BB_dispersion", "shared_BB_dispersion", "max_iter", "tol", "gmm_random_state", "np_threshold", "np_eventminlen"], \
@@ -146,9 +143,12 @@ def read_configuration_file(filename):
         for line in fp:
             if line.strip() == "" or line[0] == "#":
                 continue
-            # strs = [x.replace(" ", "") for x in line.strip().split(":") if x != ""]
             strs = [x.strip() for x in line.strip().split(":") if x != ""]
-            assert strs[0] in config.keys(), f"{strs[0]} is not a valid configuration parameter! Configuration parameters are: {list(config.keys())}"
+            # assert strs[0] in config.keys(), f"{strs[0]} is not a valid configuration parameter! Configuration parameters are: {list(config.keys())}"
+            if (not strs[0] in config.keys()) and (not strs[0] in config_joint.keys()):
+                # warning that the argument is not a valid configuration parameter and continue
+                logger.warning(f"{strs[0]} is not a valid configuration parameter! Configuration parameters are: {list(config.keys())}")
+                continue
             if strs[1].upper() == "NONE":
                 config[strs[0]] = None
             elif argument_type[strs[0]] == "str":
@@ -183,7 +183,11 @@ def read_joint_configuration_file(filename):
             if line.strip() == "" or line[0] == "#":
                 continue
             strs = [x.strip() for x in line.strip().split(":") if x != ""]
-            assert strs[0] in config.keys(), f"{strs[0]} is not a valid configuration parameter! Configuration parameters are: {list(config.keys())}"
+            # assert strs[0] in config.keys(), f"{strs[0]} is not a valid configuration parameter! Configuration parameters are: {list(config.keys())}"
+            if (not strs[0] in config.keys()) and (not strs[0] in config_single.keys()):
+                # warning that the argument is not a valid configuration parameter and continue
+                logger.warning(f"{strs[0]} is not a valid configuration parameter! Configuration parameters are: {list(config.keys())}")
+                continue
             if len(strs) == 1:
                 config[strs[0]] = []
             elif strs[1].upper() == "NONE":

@@ -384,18 +384,18 @@ def main(configuration_file):
                 # output per-state copy number
                 state_cnv = functools.reduce(lambda left,right: pd.merge(left,right, left_index=True, right_index=True, how='inner'), state_cnv)
                 state_cnv.to_csv(f"{outdir}/cnv{medfix[o]}_perstate.tsv", header=True, index=False, sep="\t")
-                #
-                # posterior using integer-copy numbers
-                log_persample_weights = np.zeros((len(nonempty_clone_ids), len(sample_list)))
-                for sidx in range(len(sample_list)):
-                    index = np.where(sample_ids == sidx)[0]
-                    this_persample_weight = np.array([ np.sum(res_combine["new_assignment"][index] == cid) for cid in nonempty_clone_ids]) / len(index)
-                    log_persample_weights[:, sidx] = np.where(this_persample_weight > 0, np.log(this_persample_weight), -50)
-                    log_persample_weights[:, sidx] = log_persample_weights[:, sidx] - scipy.special.logsumexp(log_persample_weights[:, sidx])
-                pred = np.vstack([ np.argmax(res_combine["log_gamma"][:,:,cid], axis=0) for cid in nonempty_clone_ids ]).T
-                df_posterior = clonelabel_posterior_withinteger(single_X, single_base_nb_mean, single_total_bb_RD, single_tumor_prop, state_cnv, res_combine, pred, \
-                    smooth_mat, adjacency_mat, res_combine["new_assignment"], sample_ids, base_nb_mean, log_persample_weights, config["spatial_weight"], hmmclass=hmm_nophasing_v2)
-                df_posterior.to_pickle(f"{outdir}/posterior{medfix[o]}.pkl")
+                # #
+                # # posterior using integer-copy numbers
+                # log_persample_weights = np.zeros((len(nonempty_clone_ids), len(sample_list)))
+                # for sidx in range(len(sample_list)):
+                #     index = np.where(sample_ids == sidx)[0]
+                #     this_persample_weight = np.array([ np.sum(res_combine["new_assignment"][index] == cid) for cid in nonempty_clone_ids]) / len(index)
+                #     log_persample_weights[:, sidx] = np.where(this_persample_weight > 0, np.log(this_persample_weight), -50)
+                #     log_persample_weights[:, sidx] = log_persample_weights[:, sidx] - scipy.special.logsumexp(log_persample_weights[:, sidx])
+                # pred = np.vstack([ np.argmax(res_combine["log_gamma"][:,:,cid], axis=0) for cid in nonempty_clone_ids ]).T
+                # df_posterior = clonelabel_posterior_withinteger(single_X, single_base_nb_mean, single_total_bb_RD, single_tumor_prop, state_cnv, res_combine, pred, \
+                #     smooth_mat, adjacency_mat, res_combine["new_assignment"], sample_ids, base_nb_mean, log_persample_weights, config["spatial_weight"], hmmclass=hmm_nophasing_v2)
+                # df_posterior.to_pickle(f"{outdir}/posterior{medfix[o]}.pkl")
             
             ##### output clone label #####
             df_clone_label = pd.DataFrame({"clone_label":res_combine["new_assignment"]}, index=barcodes)

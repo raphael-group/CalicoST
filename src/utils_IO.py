@@ -1104,7 +1104,7 @@ def create_bin_ranges(df_gene_snp, single_total_bb_RD, refined_lengths, secondar
                     t = max(t-1, s+1)
                     break
             # check whether it is a very small bin in the end
-            if t == len(block_lengths) and np.sum(block_umi[s:t]) < 0.5*secondary_min_umi and np.sum(block_lengths[s:t]) < 0.5*max_binlength:
+            if s > 0 and t == len(block_lengths) and np.sum(block_umi[s:t]) < 0.5*secondary_min_umi and np.sum(block_lengths[s:t]) < 0.5*max_binlength:
                 bin_ranges[-1][1] = t
             else:
                 bin_ranges.append( [s,t] )
