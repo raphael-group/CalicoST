@@ -106,10 +106,8 @@ def parse_visium(config):
         tmp = dict(np.load(f"{config['output_dir']}/initial_phase.npz"))
         phase_indicator, refined_lengths = tmp["phase_indicator"], tmp["refined_lengths"]
 
-    # TBD: this parameter shouldn't be hard coded!!!
-    secondary_min_umi = 300
     # binning
-    df_gene_snp = create_bin_ranges(df_gene_snp, single_total_bb_RD, refined_lengths, secondary_min_umi)
+    df_gene_snp = create_bin_ranges(df_gene_snp, single_total_bb_RD, refined_lengths, config['secondary_min_umi'])
     lengths, single_X, single_base_nb_mean, single_total_bb_RD, log_sitewise_transmat = summarize_counts_for_bins(df_gene_snp, \
             adata, single_X, single_total_bb_RD, phase_indicator, nu=config['nu'], logphase_shift=config['logphase_shift'], genome_build="hg38")
     # lengths, single_X, single_base_nb_mean, single_total_bb_RD, log_sitewise_transmat, sorted_chr_pos, sorted_chr_pos_last, x_gene_list, n_snps = perform_binning_new(lengths, single_X, \
