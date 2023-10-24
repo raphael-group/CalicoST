@@ -141,7 +141,27 @@ def map_hatchet_to_bins(df_wes, sorted_chr_pos):
     return snp_seg_index
 
 
-def stateaccuracy_allele_starch(configuration_file, r_hmrf_initialization, hatchet_wes_file, midfix="", ordered_chr=[str(c) for c in range(1,23)], fun_hatchetconvert=convert_copy_to_states, binsize=1e5):
+def map_all_hatchet_to_bins(df_wes, sorted_bins, min_overlap=1e3):
+    # map HATCHet to allele-specific STARCH bins
+    snp_seg_index = []
+    j = 0
+    for i in range(len(sorted_bins)):
+        this_idx = []
+        this_chr = sorted_bins[i][0]
+        this_start = sorted_bins[i][1]
+        this_end = sorted_bins[i][2]
+        while j < df_wes.shape[0] and ( (df_wes.int_chrom.iloc[j] < this_chr) or (df_wes.int_chrom.iloc[j] == this_chr and df_wes.END.iloc[j] < this_start) ):
+            j += 1
+
+        for k in np.arange(j, min(df_wes.shape[0], j+20)):
+            if k < df_wes.shape[0] and df_wes.int_chrom.iloc[k] == this_chr and max(df_wes.START.iloc[k], this_start) + min_overlap <= min(df_wes.END.iloc[k], this_end):
+                this_idx.append(k)
+
+        snp_seg_index.append(this_idx)
+    return snp_seg_index
+
+
+def stateaccuracy_allele_starch(configuration_file, r_hmrf_initialization, hatchet_wes_file, midfix="", ordered_chr=[str(c) for c in range(1,23)], fun_hatchetconvert=convert_copy_to_states, binsize=1e5, purity_threshold=0.3):
     try:
         config = read_configuration_file(configuration_file)
     except:
@@ -165,7 +185,7 @@ def stateaccuracy_allele_starch(configuration_file, r_hmrf_initialization, hatch
     coarse_states_inferred = np.array([fun_hatchetconvert(df_starch_cnv[f"clone{cid} A"].values, df_starch_cnv[f"clone{cid} B"].values, counts=((df_starch_cnv.END.values-df_starch_cnv.START.values) / binsize).astype(int)) for cid in clone_ids])
     
     # hatchet results
-    df_wes = read_hatchet(hatchet_wes_file)
+    df_wes = read_hatchet(hatchet_wes_file, purity_threshold=purity_threshold)
     snp_seg_index = map_hatchet_to_bins(df_wes, sorted_chr_pos)
     retained_hatchet_clones = [x[6:] for x in df_wes.columns if x.startswith("Acopy_")]
     coarse_states_wes = np.array([fun_hatchetconvert(df_wes[f"Acopy_{sid}"].values, df_wes[f"Bcopy_{sid}"].values, counts=((df_wes.END.values-df_wes.START.values) / binsize).astype(int)) for sid in retained_hatchet_clones])
@@ -179,7 +199,7 @@ def stateaccuracy_allele_starch(configuration_file, r_hmrf_initialization, hatch
     return percent_category, sorted_chr_pos
 
 
-def exactaccuracy_allele_starch(configuration_file, r_hmrf_initialization, hatchet_wes_file, midfix="", ordered_chr=[str(c) for c in range(1,23)]):
+def exactaccuracy_allele_starch(configuration_file, r_hmrf_initialization, hatchet_wes_file, midfix="", ordered_chr=[str(c) for c in range(1,23)], purity_threshold=0.3):
     try:
         config = read_configuration_file(configuration_file)
     except:
@@ -202,7 +222,7 @@ def exactaccuracy_allele_starch(configuration_file, r_hmrf_initialization, hatch
     clone_ids = np.unique([ x.split(" ")[0][5:] for x in df_starch_cnv.columns[3:] ])
 
     # hatchet results
-    df_wes = read_hatchet(hatchet_wes_file)
+    df_wes = read_hatchet(hatchet_wes_file, purity_threshold=purity_threshold)
     df_mapped_wes = pd.DataFrame({"CHR":df_starch_cnv.CHR, "START":df_starch_cnv.START, "END":df_starch_cnv.END})
     if df_wes.shape[0] == 0:
         return None, None
@@ -221,11 +241,11 @@ def exactaccuracy_allele_starch(configuration_file, r_hmrf_initialization, hatch
     return percent_exact, sorted_chr_pos, df_mapped_wes
 
 
-def stateaccuracy_numbat(numbat_dirs, hatchet_wes_file, sorted_chr_pos, ordered_chr=[str(c) for c in range(1,23)], fun_hatchetconvert=convert_copy_to_states, binsize=1e5):
+def stateaccuracy_numbat(numbat_dirs, hatchet_wes_file, sorted_chr_pos, ordered_chr=[str(c) for c in range(1,23)], fun_hatchetconvert=convert_copy_to_states, binsize=1e5, purity_threshold=0.3):
     ordered_chr_map = {ordered_chr[i]:i for i in range(len(ordered_chr))}
     
     # hatchet results
-    df_wes = read_hatchet(hatchet_wes_file)
+    df_wes = read_hatchet(hatchet_wes_file, purity_threshold=purity_threshold)
     if df_wes.shape[0] == 0:
         return None, None
     snp_seg_index = map_hatchet_to_bins(df_wes, sorted_chr_pos)
@@ -269,11 +289,11 @@ def stateaccuracy_numbat(numbat_dirs, hatchet_wes_file, sorted_chr_pos, ordered_
     return percent_category, coarse_states_wes[:,snp_seg_index], states_numbat
 
 
-def stateaccuracy_infercnv(infercnv_dirs, hatchet_wes_file, sorted_chr_pos, ordered_chr=[str(c) for c in range(1,23)], fun_hatchetconvert=convert_copy_to_states, binsize=1e5):
+def stateaccuracy_infercnv(infercnv_dirs, hatchet_wes_file, sorted_chr_pos, ordered_chr=[str(c) for c in range(1,23)], fun_hatchetconvert=convert_copy_to_states, binsize=1e5, purity_threshold=0.3):
     ordered_chr_map = {ordered_chr[i]:i for i in range(len(ordered_chr))}
     
     # hatchet results
-    df_wes = read_hatchet(hatchet_wes_file)
+    df_wes = read_hatchet(hatchet_wes_file, purity_threshold=purity_threshold)
     if df_wes.shape[0] == 0:
         return None, None
     snp_seg_index = map_hatchet_to_bins(df_wes, sorted_chr_pos)
@@ -314,11 +334,11 @@ def stateaccuracy_infercnv(infercnv_dirs, hatchet_wes_file, sorted_chr_pos, orde
     return percent_category
 
 
-def stateaccuracy_oldstarch(oldstarch_dirs, map_hgtable, hatchet_wes_file, sorted_chr_pos, ordered_chr=[str(c) for c in range(1,23)], fun_hatchetconvert=convert_copy_to_states, binsize=1e5):
+def stateaccuracy_oldstarch(oldstarch_dirs, map_hgtable, hatchet_wes_file, sorted_chr_pos, ordered_chr=[str(c) for c in range(1,23)], fun_hatchetconvert=convert_copy_to_states, binsize=1e5, purity_threshold=0.3):
     ordered_chr_map = {ordered_chr[i]:i for i in range(len(ordered_chr))}
     
     # hatchet results
-    df_wes = read_hatchet(hatchet_wes_file)
+    df_wes = read_hatchet(hatchet_wes_file, purity_threshold=purity_threshold)
     if df_wes.shape[0] == 0:
         return None, None
     snp_seg_index = map_hatchet_to_bins(df_wes, sorted_chr_pos)
@@ -584,22 +604,22 @@ def map_hatchet_to_genes(hatchet_resultfile, hgtable_file, out_file, ordered_chr
     df_hatchet_genes.to_csv(out_file, sep="\t", header=True, index=True)
 
 
-if __name__ == "__main__":
-    if len(sys.argv) == 1:
-        print("python plot_hatchet.py <hatchet_dir> <hatchet_cnfile> <out_file>")
-        sys.exit(1)
+# if __name__ == "__main__":
+#     if len(sys.argv) == 1:
+#         print("python plot_hatchet.py <hatchet_dir> <hatchet_cnfile> <out_file>")
+#         sys.exit(1)
     
-    hatchet_dir = sys.argv[1]
-    hatchet_cnfile = sys.argv[2]
-    out_plot_acn = sys.argv[3]
-    out_plot_tcn = sys.argv[4]
-    out_file_seg = sys.argv[5]
-    out_file_gene = sys.argv[6]
-    plot_hatchet_acn(hatchet_dir, hatchet_cnfile, out_plot_acn)
-    # plot total copy number
-    plot_hatchet_totalcn(hatchet_dir, hatchet_cnfile, out_plot_tcn)
-    # output log2 CNV ratio and copy number state of hatchet
-    map_hatchet_to_states(f"{hatchet_dir}/results/{hatchet_cnfile}", out_file_seg)
-    # output gene-level file
-    hgtable_file = "/home/congma/congma/codes/locality-clustering-cnv/data/hgTables_hg38_gencode.txt"
-    map_hatchet_to_genes(f"{hatchet_dir}/results/{hatchet_cnfile}", hgtable_file, out_file_gene)
+#     hatchet_dir = sys.argv[1]
+#     hatchet_cnfile = sys.argv[2]
+#     out_plot_acn = sys.argv[3]
+#     out_plot_tcn = sys.argv[4]
+#     out_file_seg = sys.argv[5]
+#     out_file_gene = sys.argv[6]
+#     plot_hatchet_acn(hatchet_dir, hatchet_cnfile, out_plot_acn)
+#     # plot total copy number
+#     plot_hatchet_totalcn(hatchet_dir, hatchet_cnfile, out_plot_tcn)
+#     # output log2 CNV ratio and copy number state of hatchet
+#     map_hatchet_to_states(f"{hatchet_dir}/results/{hatchet_cnfile}", out_file_seg)
+#     # output gene-level file
+#     hgtable_file = "/home/congma/congma/codes/locality-clustering-cnv/data/hgTables_hg38_gencode.txt"
+#     map_hatchet_to_genes(f"{hatchet_dir}/results/{hatchet_cnfile}", hgtable_file, out_file_gene)
