@@ -306,7 +306,7 @@ def plot_acn_from_df(df_cnv, ax_handle, clone_ids=None, clone_names=None, add_ch
     return ax_handle
 
 
-def plot_acn_from_df_anotherscheme(df_cnv, ax_handle, clone_ids=None, clone_names=None, clone_proportions=None, chrbar_pos=None, add_arrow=True, chrbar_thickness=0.1, add_legend=True, remove_xticks=True, rasterized=True):
+def plot_acn_from_df_anotherscheme(df_cnv, ax_handle, clone_ids=None, clone_names=None, clone_proportions=None, chrbar_pos=None, add_arrow=True, border_linewidth=1, chrbar_thickness=0.1, add_legend=True, remove_xticks=True, rasterized=True):
     # full color palette
     palette,_ = get_full_palette()
 
@@ -367,25 +367,25 @@ def plot_acn_from_df_anotherscheme(df_cnv, ax_handle, clone_ids=None, clone_name
                     y1 = c
                     y2 = c+1
                     # up-arrow
-                    y_diverge1 = 0.9*y2+0.1*y1
-                    y_diverge2 = 0.5*y2+0.5*y1
+                    y_diverge1 = 0.8*y2+0.2*y1
+                    y_diverge2 = 0.6*y2+0.4*y1
                     y_merge = 0.7*y2+0.3*y1
                     sub_intervals, sub_labs = get_intervals( df_cnv[f"clone{cid} A"].values[intervals[i][0]:intervals[i][1]] > df_cnv[f"clone{cid} B"].values[intervals[i][0]:intervals[i][1]] )
                     for j, sub_int in enumerate(sub_intervals):
                         if sub_labs[j]:
                             # bounding box
-                            ax_handle.fill_between( np.arange(intervals[i][0]+sub_int[0], intervals[i][0]+sub_int[1]), y1, y2, color="none", edgecolor="black")
+                            ax_handle.fill_between( np.arange(intervals[i][0]+sub_int[0], intervals[i][0]+sub_int[1]), y1, y2, color="none", edgecolor="black", linewidth=border_linewidth)
                             # arrow
                             ax_handle.fill_between( [intervals[i][0]+sub_int[0], intervals[i][0]+sub_int[1]], [y_diverge1,y_merge], [y_diverge2,y_merge], color="black", edgecolor="black")
                     # down-arrow
-                    y_diverge1 = 0.1*y2+0.9*y1
-                    y_diverge2 = 0.5*y2+0.5*y1
+                    y_diverge1 = 0.2*y2+0.8*y1
+                    y_diverge2 = 0.4*y2+0.6*y1
                     y_merge = 0.3*y2+0.7*y1
                     sub_intervals, sub_labs = get_intervals( df_cnv[f"clone{cid} A"].values[intervals[i][0]:intervals[i][1]] < df_cnv[f"clone{cid} B"].values[intervals[i][0]:intervals[i][1]] )
                     for j, sub_int in enumerate(sub_intervals):
                         if sub_labs[j]:
                             # bounding box
-                            ax_handle.fill_between( np.arange(intervals[i][0]+sub_int[0], intervals[i][0]+sub_int[1]), y1, y2, color="none", edgecolor="black")
+                            ax_handle.fill_between( np.arange(intervals[i][0]+sub_int[0], intervals[i][0]+sub_int[1]), y1, y2, color="none", edgecolor="black", linewidth=border_linewidth)
                             # arrow
                             ax_handle.fill_between( [intervals[i][0]+sub_int[0], intervals[i][0]+sub_int[1]], [y_merge,y_diverge1], [y_merge,y_diverge2], color="black", edgecolor="black")
         else:
@@ -401,25 +401,25 @@ def plot_acn_from_df_anotherscheme(df_cnv, ax_handle, clone_ids=None, clone_name
                     y1 = c
                     y2 = c+1
                     # up-arrow
-                    y_diverge1 = 0.9*y2+0.1*y1
-                    y_diverge2 = 0.5*y2+0.5*y1
+                    y_diverge1 = 0.8*y2+0.2*y1
+                    y_diverge2 = 0.6*y2+0.4*y1
                     y_merge = 0.7*y2+0.3*y1
                     sub_intervals, sub_labs = get_intervals( df_cnv[f"clone{cid} A"].values[intervals[i][0]:intervals[i][1]] > df_cnv[f"clone{cid} B"].values[intervals[i][0]:intervals[i][1]] )
                     for j, sub_int in enumerate(sub_intervals):
                         if sub_labs[j]:
                             # bounding box
-                            ax_handle.fill_between( [intervals[i][0]+sub_int[0], intervals[i][0]+sub_int[1]], y1, y2, color="none", edgecolor="black")
+                            ax_handle.fill_between( [intervals[i][0]+sub_int[0], intervals[i][0]+sub_int[1]], y1, y2, color="none", edgecolor="black", linewidth=border_linewidth)
                             # arrow
                             ax_handle.fill_between( [intervals[i][0]+sub_int[0], intervals[i][0]+sub_int[1]], [y_diverge1,y_merge], [y_diverge2,y_merge], color="black", edgecolor="black")
                     # down-arrow
-                    y_diverge1 = 0.1*y2+0.9*y1
-                    y_diverge2 = 0.5*y2+0.5*y1
+                    y_diverge1 = 0.2*y2+0.8*y1
+                    y_diverge2 = 0.4*y2+0.6*y1
                     y_merge = 0.3*y2+0.7*y1
                     sub_intervals, sub_labs = get_intervals( df_cnv[f"clone{cid} A"].values[intervals[i][0]:intervals[i][1]] < df_cnv[f"clone{cid} B"].values[intervals[i][0]:intervals[i][1]] )
                     for j, sub_int in enumerate(sub_intervals):
                         if sub_labs[j]:
                             # bounding box
-                            ax_handle.fill_between( [intervals[i][0]+sub_int[0], intervals[i][0]+sub_int[1]], y1, y2, color="none", edgecolor="black")
+                            ax_handle.fill_between( [intervals[i][0]+sub_int[0], intervals[i][0]+sub_int[1]], y1, y2, color="none", edgecolor="black", linewidth=border_linewidth)
                             # arrow
                             ax_handle.fill_between( [intervals[i][0]+sub_int[0], intervals[i][0]+sub_int[1]], [y_merge,y_diverge1], [y_merge,y_diverge2], color="black", edgecolor="black")
 
@@ -947,7 +947,7 @@ def plot_rdr_baf(configuration_file, r_hmrf_initialization, cn_file, clone_ids=N
     return fig
 
 
-def plot_rdr_baf_from_df(df, clone_ids=None, clone_names=None, base_height=3.2, rdr_ylim=3, baf_ylim=0.5, linewidth=0, pointsize=30, chrtext_shift=-0.3, add_legend=False, remove_xticks=True):
+def plot_rdr_baf_from_df(df, clone_ids=None, clone_names=None, base_height=3.2, rdr_ylim=3, baf_ylim=0.5, baf_yticks=None, linewidth=0, pointsize=30, chrtext_shift=-0.3, add_legend=False, remove_xticks=True):
     """
     Attributes
     ----------
@@ -985,7 +985,10 @@ def plot_rdr_baf_from_df(df, clone_ids=None, clone_names=None, base_height=3.2, 
                 palette=seaborn.color_palette(colors), s=pointsize, edgecolor="black", linewidth=linewidth, alpha=0.8, legend=False, ax=axes[2*s+1])
             axes[2*s+1].set_ylabel(f"clone {cid}\nphased AF")
             axes[2*s+1].set_ylim([-0.1, baf_ylim])
-            axes[2*s+1].set_yticks(np.arange(0, baf_ylim, 0.1))
+            if baf_yticks is None:
+                axes[2*s+1].set_yticks(np.arange(0, baf_ylim, 0.1))
+            else:
+                axes[2*s+1].set_yticks(baf_yticks)
             axes[2*s+1].set_xlim([0, df.shape[0]])
             if remove_xticks:
                 axes[2*s+1].set_xticks([])
@@ -1020,7 +1023,10 @@ def plot_rdr_baf_from_df(df, clone_ids=None, clone_names=None, base_height=3.2, 
                 palette=seaborn.color_palette(colors), s=pointsize, edgecolor="black", linewidth=linewidth, alpha=0.8, legend=False, ax=axes[2*s+1])
             axes[2*s+1].set_ylabel(f"clone {cid}\nphased AF" if clone_names is None else f"clone {clone_names[s]}\nphased AF")
             axes[2*s+1].set_ylim([-0.1, baf_ylim])
-            axes[2*s+1].set_yticks(np.arange(0, baf_ylim, 0.1))
+            if baf_yticks is None:
+                axes[2*s+1].set_yticks(np.arange(0, baf_ylim, 0.1))
+            else:
+                axes[2*s+1].set_yticks(baf_yticks)
             axes[2*s+1].set_xlim([0, df.shape[0]])
             if remove_xticks:
                 axes[2*s+1].set_xticks([])
