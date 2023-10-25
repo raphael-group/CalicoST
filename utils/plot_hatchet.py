@@ -141,26 +141,6 @@ def map_hatchet_to_bins(df_wes, sorted_chr_pos):
     return snp_seg_index
 
 
-def map_all_hatchet_to_bins(df_wes, sorted_bins, min_overlap=1e3):
-    # map HATCHet to allele-specific STARCH bins
-    snp_seg_index = []
-    j = 0
-    for i in range(len(sorted_bins)):
-        this_idx = []
-        this_chr = sorted_bins[i][0]
-        this_start = sorted_bins[i][1]
-        this_end = sorted_bins[i][2]
-        while j < df_wes.shape[0] and ( (df_wes.int_chrom.iloc[j] < this_chr) or (df_wes.int_chrom.iloc[j] == this_chr and df_wes.END.iloc[j] < this_start) ):
-            j += 1
-
-        for k in np.arange(j, min(df_wes.shape[0], j+20)):
-            if k < df_wes.shape[0] and df_wes.int_chrom.iloc[k] == this_chr and max(df_wes.START.iloc[k], this_start) + min_overlap <= min(df_wes.END.iloc[k], this_end):
-                this_idx.append(k)
-
-        snp_seg_index.append(this_idx)
-    return snp_seg_index
-
-
 def stateaccuracy_allele_starch(configuration_file, r_hmrf_initialization, hatchet_wes_file, midfix="", ordered_chr=[str(c) for c in range(1,23)], fun_hatchetconvert=convert_copy_to_states, binsize=1e5, purity_threshold=0.3):
     try:
         config = read_configuration_file(configuration_file)
@@ -241,11 +221,11 @@ def exactaccuracy_allele_starch(configuration_file, r_hmrf_initialization, hatch
     return percent_exact, sorted_chr_pos, df_mapped_wes
 
 
-def stateaccuracy_numbat(numbat_dirs, hatchet_wes_file, sorted_chr_pos, ordered_chr=[str(c) for c in range(1,23)], fun_hatchetconvert=convert_copy_to_states, binsize=1e5, purity_threshold=0.3):
+def stateaccuracy_numbat(numbat_dirs, hatchet_wes_file, sorted_chr_pos, ordered_chr=[str(c) for c in range(1,23)], fun_hatchetconvert=convert_copy_to_states, binsize=1e5):
     ordered_chr_map = {ordered_chr[i]:i for i in range(len(ordered_chr))}
     
     # hatchet results
-    df_wes = read_hatchet(hatchet_wes_file, purity_threshold=purity_threshold)
+    df_wes = read_hatchet(hatchet_wes_file)
     if df_wes.shape[0] == 0:
         return None, None
     snp_seg_index = map_hatchet_to_bins(df_wes, sorted_chr_pos)
@@ -289,11 +269,62 @@ def stateaccuracy_numbat(numbat_dirs, hatchet_wes_file, sorted_chr_pos, ordered_
     return percent_category, coarse_states_wes[:,snp_seg_index], states_numbat
 
 
-def stateaccuracy_infercnv(infercnv_dirs, hatchet_wes_file, sorted_chr_pos, ordered_chr=[str(c) for c in range(1,23)], fun_hatchetconvert=convert_copy_to_states, binsize=1e5, purity_threshold=0.3):
+def cna_precisionrecall_allele_starch(configuration_file, r_hmrf_initialization, hatchet_wes_file, midfix="", ordered_chr=[str(c) for c in range(1,23)], purity_threshold=0.3):
+    try:
+        config = read_configuration_file(configuration_file)
+    except:
+        config = read_joint_configuration_file(configuration_file)
+    
+    # starch results
+    outdir = f"{config['output_dir']}/clone{config['n_clones']}_rectangle{r_hmrf_initialization}_w{config['spatial_weight']:.1f}"
+    df_starch_cnv = pd.read_csv(f"{outdir}/cnv_{midfix}seglevel.tsv", sep="\t", header=0)
+    df_starch_cnv.CHR = df_starch_cnv.CHR.astype(str)
+    # check agreement with ordered_chr
+    ordered_chr_map = {ordered_chr[i]:i for i in range(len(ordered_chr))}
+    if ~np.any( df_starch_cnv.CHR.isin(ordered_chr) ):
+        df_starch_cnv["CHR"] = df_starch_cnv.CHR.map(lambda x: x.replace("chr", ""))
+    df_starch_cnv = df_starch_cnv[df_starch_cnv.CHR.isin(ordered_chr)]
+    df_starch_cnv["int_chrom"] = df_starch_cnv.CHR.map(ordered_chr_map)
+    # sort by int_chrom and START
+    df_starch_cnv = df_starch_cnv.sort_values(by=["int_chrom", "START"])
+    sorted_chr_pos = [[df_starch_cnv.int_chrom.iloc[i], df_starch_cnv.START.iloc[i]] for i in range(df_starch_cnv.shape[0])]
+    df_starch_cnv.drop(columns=["int_chrom"], inplace=True)
+    clone_ids = np.unique([ x.split(" ")[0][5:] for x in df_starch_cnv.columns[3:] ])
+
+    # hatchet results
+    df_wes = read_hatchet(hatchet_wes_file, purity_threshold=purity_threshold)
+    df_mapped_wes = pd.DataFrame({"CHR":df_starch_cnv.CHR, "START":df_starch_cnv.START, "END":df_starch_cnv.END})
+    if df_wes.shape[0] == 0:
+        return None, None
+    snp_seg_index = map_hatchet_to_bins(df_wes, sorted_chr_pos)
+    retained_hatchet_clones = [x[6:] for x in df_wes.columns if x.startswith("Acopy_")]
+    precision = np.zeros( (len(clone_ids), len(retained_hatchet_clones)) )
+    recall = np.zeros( (len(clone_ids), len(retained_hatchet_clones)) )
+    f1 = np.zeros( (len(clone_ids), len(retained_hatchet_clones)) )
+    for s,sid in enumerate(retained_hatchet_clones):
+        minor_copy_wes = np.minimum(df_wes[f"Acopy_{sid}"].values[snp_seg_index], df_wes[f"Bcopy_{sid}"].values[snp_seg_index])
+        major_copy_wes = np.maximum(df_wes[f"Acopy_{sid}"].values[snp_seg_index], df_wes[f"Bcopy_{sid}"].values[snp_seg_index])
+        df_mapped_wes[[f'clone{s} A', f'clone{s} B']] = np.vstack([minor_copy_wes, major_copy_wes]).T
+        for c, cid in enumerate(clone_ids):
+            # exact
+            minor_copy_inferred = np.minimum(df_starch_cnv[f"clone{cid} A"].values, df_starch_cnv[f"clone{cid} B"].values)
+            major_copy_inferred = np.maximum(df_starch_cnv[f"clone{cid} A"].values, df_starch_cnv[f"clone{cid} B"].values)
+            index_truth = set(list( np.where( ~((minor_copy_wes==1) & (major_copy_wes==1)) )[0] ))
+            index_pred = set(list( np.where( ~((minor_copy_inferred==1) & (major_copy_inferred==1)) )[0] ))
+
+            precision[c, s] = 0 if len(index_pred)==0 else len(index_truth & index_pred) / len(index_pred)
+            recall[c, s] = 0 if len(index_truth)==0 else  len(index_truth & index_pred) / len(index_truth)
+            f1[c,s] = 0 if precision[c, s] + recall[c, s]==0 else 2 * (precision[c, s] * recall[c, s]) / (precision[c, s] + recall[c, s])
+
+    return precision, recall, f1, sorted_chr_pos, df_mapped_wes
+
+
+
+def stateaccuracy_infercnv(infercnv_dirs, hatchet_wes_file, sorted_chr_pos, ordered_chr=[str(c) for c in range(1,23)], fun_hatchetconvert=convert_copy_to_states, binsize=1e5):
     ordered_chr_map = {ordered_chr[i]:i for i in range(len(ordered_chr))}
     
     # hatchet results
-    df_wes = read_hatchet(hatchet_wes_file, purity_threshold=purity_threshold)
+    df_wes = read_hatchet(hatchet_wes_file)
     if df_wes.shape[0] == 0:
         return None, None
     snp_seg_index = map_hatchet_to_bins(df_wes, sorted_chr_pos)
@@ -334,11 +365,11 @@ def stateaccuracy_infercnv(infercnv_dirs, hatchet_wes_file, sorted_chr_pos, orde
     return percent_category
 
 
-def stateaccuracy_oldstarch(oldstarch_dirs, map_hgtable, hatchet_wes_file, sorted_chr_pos, ordered_chr=[str(c) for c in range(1,23)], fun_hatchetconvert=convert_copy_to_states, binsize=1e5, purity_threshold=0.3):
+def stateaccuracy_oldstarch(oldstarch_dirs, map_hgtable, hatchet_wes_file, sorted_chr_pos, ordered_chr=[str(c) for c in range(1,23)], fun_hatchetconvert=convert_copy_to_states, binsize=1e5):
     ordered_chr_map = {ordered_chr[i]:i for i in range(len(ordered_chr))}
     
     # hatchet results
-    df_wes = read_hatchet(hatchet_wes_file, purity_threshold=purity_threshold)
+    df_wes = read_hatchet(hatchet_wes_file)
     if df_wes.shape[0] == 0:
         return None, None
     snp_seg_index = map_hatchet_to_bins(df_wes, sorted_chr_pos)
