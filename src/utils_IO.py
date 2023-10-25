@@ -1415,19 +1415,57 @@ def get_lengths_by_arm(sorted_chr_pos, centromere_file):
     return armlengths
 
 
-def expand_df_cnv(df_cnv, binsize=1e6):
-    df_expand = []
-    for i in range(df_cnv.shape[0]):
-        # repeat the row i for int(END - START / binsize) times and save to a new dataframe
-        n_bins = max(1, int(1.0*(df_cnv.iloc[i].END - df_cnv.iloc[i].START) / binsize))
-        tmp = pd.DataFrame(np.repeat(df_cnv.iloc[i:(i+1),:].values, n_bins, axis=0), columns=df_cnv.columns)
-        for k in range(n_bins):
-            tmp.END.iloc[k] = df_cnv.START.iloc[i]+ k*binsize
-        tmp.END.iloc[-1] = df_cnv.END.iloc[i]
-        df_expand.append(tmp)
-    df_expand = pd.concat(df_expand, ignore_index=True)
-    return df_expand
+# def expand_df_cnv(df_cnv, binsize=1e6):
+#     df_expand = []
+#     for i in range(df_cnv.shape[0]):
+#         # repeat the row i for int(END - START / binsize) times and save to a new dataframe
+#         n_bins = max(1, int(1.0*(df_cnv.iloc[i].END - df_cnv.iloc[i].START) / binsize))
+#         tmp = pd.DataFrame(np.repeat(df_cnv.iloc[i:(i+1),:].values, n_bins, axis=0), columns=df_cnv.columns)
+#         for k in range(n_bins):
+#             tmp.END.iloc[k] = df_cnv.START.iloc[i]+ k*binsize
+#         tmp.END.iloc[-1] = df_cnv.END.iloc[i]
+#         df_expand.append(tmp)
+#     df_expand = pd.concat(df_expand, ignore_index=True)
+#     return df_expand
 
+
+def expand_df_cnv(df_cnv, binsize=2e5):
+    # get CHR and its END
+    df_chr_end = df_cnv.groupby("CHR").agg({"END":"max"}).reset_index()
+
+    # initialize df_expand as a dataframe containing CHR, START, END such that END-START = binsize
+    df_expand = []
+    for i,c in enumerate(df_chr_end.CHR.values):
+        df_expand.append( pd.DataFrame({"CHR":c, "START":np.arange(0, df_chr_end.END.values[i], binsize), "END":binsize + np.arange(0, df_chr_end.END.values[i], binsize)}) )
+    df_expand = pd.concat(df_expand, ignore_index=True)
+
+    # find the index in df_cnv such that each entry in df_expand overlaps with the largest length
+    vec_cnv_chr = df_cnv.CHR.values
+    vec_cnv_start = df_cnv.START.values
+    vec_cnv_end = df_cnv.END.values
+
+    seg_index = -1 * np.ones(df_expand.shape[0], dtype=int)
+    j = 0
+    for i, this_chr in enumerate(df_expand.CHR.values):
+        this_start = df_expand.START.values[i]
+        this_end = df_expand.END.values[i]
+        while j < df_cnv.shape[0] and (vec_cnv_chr[j] < this_chr or (vec_cnv_chr[j] == this_chr and vec_cnv_end[j] <= this_start)):
+            j += 1
+        # overlap length of the j-th segment to (j+3)-th segment in df_cnv
+        overlap_lengths = []
+        for k in range(j, min(j+3, df_cnv.shape[0])):
+            if vec_cnv_chr[k] > this_chr or vec_cnv_start[k] > this_end:
+                break
+            overlap_lengths.append( min(vec_cnv_end[k], this_end) - max(vec_cnv_start[k], this_start) )
+        if len(overlap_lengths) > 0:
+            seg_index[i] = j + np.argmax(overlap_lengths)
+
+    for col in df_cnv.columns[df_cnv.columns.str.startswith("clone")]:
+        df_expand[col] = np.nan
+        df_expand[col].iloc[seg_index>=0] = df_cnv[col].values[ seg_index[seg_index>=0] ]
+        df_expand[col] = df_expand[col].astype("Int64")
+
+    return df_expand
 
 
 import pysam

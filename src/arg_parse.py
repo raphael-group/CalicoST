@@ -26,7 +26,7 @@ def load_default_config():
         "filtergenelist_file" : None,
         "filterregion_file" : None,
         "secondary_min_umi" : 300,
-        "bafonly" : True,
+        "bafonly" : False,
         # phase switch probability
         "nu" : 1,
         "logphase_shift" : 1,
