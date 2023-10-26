@@ -417,6 +417,7 @@ def main(configuration_file):
                 cn_file = f"{outdir}/cnv{medfix[o]}_seglevel.tsv"
                 df_cnv = pd.read_csv(cn_file, header=0, sep="\t")
                 df_cnv = expand_df_cnv(df_cnv)
+                df_cnv = df_cnv[~df_cnv.iloc[:,-1].isnull()]
                 fig, axes = plt.subplots(1, 1, figsize=(15, 0.9*len(final_clone_ids) + 0.6), dpi=200, facecolor="white")
                 axes = plot_acn_from_df_anotherscheme(df_cnv, axes, chrbar_pos='top', chrbar_thickness=0.3, add_legend=False, remove_xticks=True)
                 fig.tight_layout()
