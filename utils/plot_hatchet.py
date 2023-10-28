@@ -64,6 +64,19 @@ def convert_copy_to_states(A_copy, B_copy, counts=None):
     return coarse_states
 
 
+def fixed_convert_copy_to_states(A_copy, B_copy, counts=None):
+    base_ploidy = 2
+    is_homozygous = (A_copy == 0) | (B_copy == 0)
+    coarse_states = np.array(["neutral"] * A_copy.shape[0])
+    coarse_states[ (A_copy + B_copy < base_ploidy) & (A_copy != B_copy) ] = "del"
+    coarse_states[ (A_copy + B_copy < base_ploidy) & (A_copy == B_copy) ] = "bdel"
+    coarse_states[ (A_copy + B_copy > base_ploidy) & (A_copy != B_copy) ] = "amp"
+    coarse_states[ (A_copy + B_copy > base_ploidy) & (A_copy == B_copy) ] = "bamp"
+    coarse_states[ (A_copy + B_copy == base_ploidy) & (is_homozygous) ] = "loh"
+    coarse_states[coarse_states == "neutral"] = "neu"
+    return coarse_states
+
+
 def convert_copy_to_totalcopy_states(A_copy, B_copy, counts=None):
     if counts is None:
         tmp = A_copy + B_copy
@@ -71,6 +84,15 @@ def convert_copy_to_totalcopy_states(A_copy, B_copy, counts=None):
     else:
         tmp = np.concatenate([ np.ones(counts[i]) * (A_copy[i]+B_copy[i]) for i in range(len(counts)) if ~np.isnan(A_copy[i]+B_copy[i]) ])
     base_ploidy = np.median(tmp)
+    coarse_states = np.array(["neutral"] * A_copy.shape[0])
+    coarse_states[ (A_copy + B_copy < base_ploidy) ] = "del"
+    coarse_states[ (A_copy + B_copy > base_ploidy) ] = "amp"
+    coarse_states[coarse_states == "neutral"] = "neu"
+    return coarse_states
+
+
+def fixed_convert_copy_to_totalcopy_states(A_copy, B_copy, counts=None):
+    base_ploidy = 2
     coarse_states = np.array(["neutral"] * A_copy.shape[0])
     coarse_states[ (A_copy + B_copy < base_ploidy) ] = "del"
     coarse_states[ (A_copy + B_copy > base_ploidy) ] = "amp"
@@ -243,6 +265,7 @@ def stateaccuracy_numbat(numbat_dirs, hatchet_wes_file, sorted_chr_pos, ordered_
             tmpdf_numbat["CHROM"] = tmpdf_numbat.CHROM.map(lambda x: x.replace("chr", ""))
         tmpdf_numbat = tmpdf_numbat[tmpdf_numbat.CHROM.isin(ordered_chr)]
         tmpdf_numbat["int_chrom"] = tmpdf_numbat.CHROM.map(ordered_chr_map)
+        tmpdf_numbat.sort_values(by=['int_chrom', 'POS'], inplace=True)
 
         this_percent_category = np.zeros((n_numbat_samples, len(retained_hatchet_clones)))
         for sidx,s in enumerate(np.unique(tmpdf_numbat["sample"])):
