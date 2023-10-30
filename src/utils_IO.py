@@ -1429,7 +1429,7 @@ def get_lengths_by_arm(sorted_chr_pos, centromere_file):
 #     return df_expand
 
 
-def expand_df_cnv(df_cnv, binsize=2e5):
+def expand_df_cnv(df_cnv, binsize=2e5, fillmissing=True):
     # get CHR and its END
     df_chr_end = df_cnv.groupby("CHR").agg({"END":"max"}).reset_index()
 
@@ -1464,6 +1464,14 @@ def expand_df_cnv(df_cnv, binsize=2e5):
         df_expand[col] = np.nan
         df_expand[col].iloc[seg_index>=0] = df_cnv[col].values[ seg_index[seg_index>=0] ]
         df_expand[col] = df_expand[col].astype("Int64")
+
+    if fillmissing:
+        # for each nan row, fill it with the closest non-nan row
+        nan_rows = np.where( df_expand.iloc[:,-1].isnull() )[0]
+        filled_rows = np.where( ~df_expand.iloc[:,-1].isnull() )[0]
+        for i in nan_rows:
+            j = filled_rows[ np.argmin(np.abs(filled_rows - i)) ]
+            df_expand.iloc[i, 3:] = df_expand.iloc[j, 3:].values
 
     return df_expand
 
