@@ -1470,7 +1470,8 @@ def expand_df_cnv(df_cnv, binsize=2e5, fillmissing=True):
         nan_rows = np.where( df_expand.iloc[:,-1].isnull() )[0]
         filled_rows = np.where( ~df_expand.iloc[:,-1].isnull() )[0]
         for i in nan_rows:
-            j = filled_rows[ np.argmin(np.abs(filled_rows - i)) ]
+            candidates = np.where( (~df_expand.iloc[:,-1].isnull()) & (df_expand.CHR.values == df_expand.CHR.values[i]) )[0]
+            j = candidates[ np.argmin(np.abs(candidates - i)) ]
             df_expand.iloc[i, 3:] = df_expand.iloc[j, 3:].values
 
     return df_expand
