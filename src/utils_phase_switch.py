@@ -6,16 +6,19 @@ import scipy
 import scipy.special
 
 
-def get_position_cM_table(chr_pos_vector):
+def get_position_cM_table(chr_pos_vector, genome_build="hg38"):
     """
     Attributes
     ----------
     chr_pos_vector : list of pairs
         list of (chr, pos) pairs of SNPs
     """
-    df = pd.read_csv("/u/congma/ragr-data/datasets/genetic_map/recomb-hg38/genetic_map_GRCh38_merged.tab", header=0, sep="\t")
+    if genome_build=="hg38":
+        df = pd.read_csv("/u/congma/ragr-data/datasets/genetic_map/recomb-hg38/genetic_map_GRCh38_merged.tab", header=0, sep="\t")
+    elif genome_build == "hg19":
+        df = pd.read_csv("/u/congma/ragr-data/datasets/genetic_map/plink.GRCh37.map/plink.GRCh37.map.merged", header=0, sep="\t")
     # remove chrX
-    df = df[df.chrom != "chrX"]
+    df = df[df.chrom.isin( [f"chr{i}" for i in range(1,23)] )]
     # check the chromosome names
     if not ("chr" in str(chr_pos_vector[0][0])):
         df["chrom"] = [int(x[3:]) for x in df.chrom]
@@ -33,11 +36,13 @@ def get_position_cM_table(chr_pos_vector):
         pos = x[1]
         while k < len(ref_chrom) and (ref_chrom[k] < chrname or (ref_chrom[k] == chrname and ref_pos[k] < pos)):
             k += 1
-        if ref_chrom[k] == chrname and ref_pos[k] >= pos:
+        if k < len(ref_chrom) and ref_chrom[k] == chrname and ref_pos[k] >= pos:
             if k > 0 and ref_chrom[k-1] == chrname:
                 position_cM[i] = ref_cm[k-1] + (pos - ref_pos[k-1]) / (ref_pos[k] - ref_pos[k-1]) * (ref_cm[k] - ref_cm[k-1])
             else:
                 position_cM[i] = (pos - 0) / (ref_pos[k] - 0) * (ref_cm[k] - 0)
+        else:
+            position_cM[i] = ref_cm[k-1]
     return position_cM
 
 
@@ -232,6 +237,27 @@ def get_intervals(pred_cnv):
     s = 0
     while s < len(pred_cnv):
         t = np.where(pred_cnv[s:] != pred_cnv[s])[0]
+        if len(t) == 0:
+            intervals.append( (s, len(pred_cnv))  )
+            labs.append( pred_cnv[s] )
+            s = len(pred_cnv)
+        else:
+            t = t[0]
+            intervals.append( (s,s+t) )
+            labs.append( pred_cnv[s] )
+            s = s+t
+    return intervals, labs
+
+
+def get_intervals_nd(pred_cnv):
+    """
+    pred_cnv : np.array of shape (n_bins, n_clones)
+    """
+    intervals = []
+    labs = []
+    s = 0
+    while s < len(pred_cnv):
+        t = np.where(np.any(pred_cnv[s:] != pred_cnv[s], axis=1))[0]
         if len(t) == 0:
             intervals.append( (s, len(pred_cnv))  )
             labs.append( pred_cnv[s] )
