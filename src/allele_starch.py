@@ -129,9 +129,8 @@ def main(configuration_file):
                     PERCENT_NORMAL += 10
                 # filter bins based on normal
                 index_normal = np.where(normal_candidate)[0]
-                sorted_chr_pos = list(zip(df_bininfo.CHR.values, df_bininfo.START.values))
                 lengths, single_X, single_base_nb_mean, single_total_bb_RD, log_sitewise_transmat, df_gene_snp = bin_selection_basedon_normal(df_gene_snp, \
-                    single_X, single_base_nb_mean, single_total_bb_RD, config['nu'], config['logphase_shift'], index_normal)
+                    single_X, single_base_nb_mean, single_total_bb_RD, config['nu'], config['logphase_shift'], index_normal, config['geneticmap_file'])
                 assert df_bininfo.shape[0] == copy_single_X_rdr.shape[0]
                 df_bininfo = genesnp_to_bininfo(df_gene_snp)
                 copy_single_X_rdr = copy.copy(single_X[:,0,:])
