@@ -19,6 +19,7 @@ def load_default_config():
         "snp_dir" : None,
         "output_dir" : None,
         # supporting files and preprocessing arguments
+        "geneticmap_file" : None,
         "hgtable_file" : None,
         "normalidx_file" : None,
         "tumorprop_file" : None,
@@ -76,6 +77,7 @@ def load_default_config():
         "snp_dir" : "str",
         "output_dir" : "str",
         # supporting files and preprocessing arguments
+        "geneticmap_file" : "str",
         "hgtable_file" : "str",
         "normalidx_file" : "str",
         "tumorprop_file" : "str",
@@ -124,7 +126,7 @@ def load_default_config():
 
     category_names = ["", "# supporting files and preprocessing arguments", "# phase switch probability", "# HMRF configurations", "# HMM configurations", "# integer copy number"]
     category_elements = [["input_filelist", "spaceranger_dir", "snp_dir", "output_dir"], \
-                         ["hgtable_file", "normalidx_file", "tumorprop_file", "alignment_files", "supervision_clone_file", "filtergenelist_file", "filterregion_file", "secondary_min_umi", "bafonly"], \
+                         ["geneticmap_file", "hgtable_file", "normalidx_file", "tumorprop_file", "alignment_files", "supervision_clone_file", "filtergenelist_file", "filterregion_file", "secondary_min_umi", "bafonly"], \
                          ["nu", "logphase_shift", "npart_phasing"], \
                          ["n_clones", "n_clones_rdr", "min_spots_per_clone", "min_avgumi_per_clone", "maxspots_pooling", "tumorprop_threshold",  "max_iter_outer", "nodepotential", "initialization_method", "num_hmrf_initialization_start",  "num_hmrf_initialization_end", "spatial_weight", "construct_adjacency_method", "construct_adjacency_w"], \
                          ["n_states", "params", "t", "t_phaseing", "fix_NB_dispersion", "shared_NB_dispersion", "fix_BB_dispersion", "shared_BB_dispersion", "max_iter", "tol", "gmm_random_state", "np_threshold", "np_eventminlen"], \

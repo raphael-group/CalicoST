@@ -602,7 +602,7 @@ def create_haplotype_block_ranges(df_gene_snp, adata, cell_snp_Aallele, cell_snp
     return df_gene_snp
 
 
-def summarize_counts_for_blocks(df_gene_snp, adata, cell_snp_Aallele, cell_snp_Ballele, unique_snp_ids, nu, logphase_shift, genome_build="hg38"):
+def summarize_counts_for_blocks(df_gene_snp, adata, cell_snp_Aallele, cell_snp_Ballele, unique_snp_ids, nu, logphase_shift, geneticmap_file):
     """
     Attributes:
     ----------
@@ -655,7 +655,7 @@ def summarize_counts_for_blocks(df_gene_snp, adata, cell_snp_Aallele, cell_snp_B
     sorted_chr_pos_last = list(zip(sorted_chr_pos_last.CHR.values, sorted_chr_pos_last.END.values))
     #
     tmp_sorted_chr_pos = [val for pair in zip(sorted_chr_pos_first, sorted_chr_pos_last) for val in pair]
-    position_cM = get_position_cM_table( tmp_sorted_chr_pos, genome_build=genome_build )
+    position_cM = get_position_cM_table( tmp_sorted_chr_pos, geneticmap_file )
     phase_switch_prob = compute_phase_switch_probability_position(position_cM, tmp_sorted_chr_pos, nu)
     log_sitewise_transmat = np.minimum(np.log(0.5), np.log(phase_switch_prob) - logphase_shift)
     # log_sitewise_transmat = log_sitewise_transmat[np.arange(0, len(log_sitewise_transmat), 2)]
@@ -664,8 +664,7 @@ def summarize_counts_for_blocks(df_gene_snp, adata, cell_snp_Aallele, cell_snp_B
     return lengths, single_X, single_base_nb_mean, single_total_bb_RD, log_sitewise_transmat
 
 
-# def convert_to_hmm_input_new(adata, cell_snp_Aallele, cell_snp_Ballele, snp_gene_list, unique_snp_ids, hgtable_file, nu, logphase_shift, initial_percentile=75, genome_build="hg38"):
-def convert_to_hmm_input_new(adata, cell_snp_Aallele, cell_snp_Ballele, snp_gene_list, unique_snp_ids, hgtable_file, nu, logphase_shift, initial_min_umi=15, genome_build="hg38"):
+def convert_to_hmm_input_new(adata, cell_snp_Aallele, cell_snp_Ballele, snp_gene_list, unique_snp_ids, hgtable_file, nu, logphase_shift, geneticmap_file, initial_min_umi=15):
     """
     Coverage-based binning.
     """
@@ -754,7 +753,7 @@ def convert_to_hmm_input_new(adata, cell_snp_Aallele, cell_snp_Ballele, snp_gene
     # phase switch probability from genetic distance
     tmp_sorted_chr_pos = [val for pair in zip(sorted_chr_pos_first, sorted_chr_pos_last) for val in pair]
     sorted_chr = np.array([x[0] for x in tmp_sorted_chr_pos])
-    position_cM = get_position_cM_table( tmp_sorted_chr_pos, genome_build=genome_build )
+    position_cM = get_position_cM_table( tmp_sorted_chr_pos, geneticmap_file )
     phase_switch_prob = compute_phase_switch_probability_position(position_cM, tmp_sorted_chr_pos, nu)
     log_sitewise_transmat = np.minimum(np.log(0.5), np.log(phase_switch_prob) - logphase_shift)
     # log_sitewise_transmat = log_sitewise_transmat[np.arange(0, len(log_sitewise_transmat), 2)]
@@ -766,7 +765,7 @@ def convert_to_hmm_input_new(adata, cell_snp_Aallele, cell_snp_Ballele, snp_gene
     return lengths, single_X, single_base_nb_mean, single_total_bb_RD, log_sitewise_transmat, sorted_chr_pos_first, sorted_chr_pos_last, x_gene_list, n_snps
 
 
-def convert_to_hmm_input_slidedna(cell_snp_Aallele, cell_snp_Ballele, unique_snp_ids, normalidx_file, nu, logphase_shift, snp_readcount_threshold=10, genome_build="hg38"):
+def convert_to_hmm_input_slidedna(cell_snp_Aallele, cell_snp_Ballele, unique_snp_ids, normalidx_file, nu, logphase_shift, geneticmap_file, snp_readcount_threshold=10):
     # choose reference-based phasing binsize
     tmpbinsize = snp_readcount_threshold / np.median(np.sum(cell_snp_Aallele, axis=0).A.flatten() + np.sum(cell_snp_Ballele, axis=0).A.flatten())
     tmpbinsize = max(tmpbinsize, 1.0)
@@ -806,7 +805,7 @@ def convert_to_hmm_input_slidedna(cell_snp_Aallele, cell_snp_Ballele, unique_snp
     # phase switch probability from genetic distance
     unique_chrs = np.arange(1, 23)
     tmp_sorted_chr_pos = [val for pair in zip(sorted_chr_pos_first, sorted_chr_pos_last) for val in pair]
-    position_cM = get_position_cM_table( tmp_sorted_chr_pos, genome_build=genome_build )
+    position_cM = get_position_cM_table( tmp_sorted_chr_pos, geneticmap_file )
     phase_switch_prob = compute_phase_switch_probability_position(position_cM, tmp_sorted_chr_pos, nu)
     log_sitewise_transmat = np.log(phase_switch_prob) - logphase_shift
     log_sitewise_transmat = log_sitewise_transmat[np.arange(1, len(log_sitewise_transmat), 2)]
@@ -815,107 +814,6 @@ def convert_to_hmm_input_slidedna(cell_snp_Aallele, cell_snp_Ballele, unique_snp
     lengths = np.array([ np.sum(sorted_chr == chrname) for chrname in unique_chrs ])
 
     return lengths, single_X, single_base_nb_mean, single_total_bb_RD, log_sitewise_transmat, sorted_chr_pos_first, sorted_chr_pos_last, n_snps
-
-
-def convert_to_hmm_using_hatchetblock(bb_file, cell_snp_Aallele, cell_snp_Ballele, unique_snp_ids, adata, hgtable_file, nu, logphase_shift, ordered_chr=[str(c) for c in range(1,23)], genome_build="hg38"):
-    # preprocess ordered_chr to a dictionary mapping from the string in ordered_chr to its index
-    ordered_chr_map = {ordered_chr[i]:i for i in range(len(ordered_chr))}
-    # load hatchet bb file
-    df_hatchet = pd.read_csv(bb_file, comment="#", index_col=None, sep="\t", names=["CHR", "START", "END", "SAMPLE", "RD", "NSNPS", "COV", "ALPHA", "BETA", "TOTAL_SNP_READS", "BAF", "TOTAL_READS", \
-                                                                                    "NORMAL_READS", "SNP_POS", "SNP_REF_COUNTS", "SNP_ALT_COUNTS", "HAPLO", "ORIGINAL_BAF", "UNIT", "CORRECTED_READS"])
-    if ~np.any( df_hatchet.CHR.isin(ordered_chr) ):
-        df_hatchet["CHR"] = df_hatchet.CHR.map(lambda x: x.replace("chr", ""))
-    df_hatchet = df_hatchet[df_hatchet.CHR.isin(ordered_chr)]
-    df_hatchet["int_chrom"] = df_hatchet.CHR.map(ordered_chr_map)
-    df_hatchet.sort_values(by=["int_chrom", "START"], inplace=True)
-    # loop over df_hatchet entries and create the following
-    # single_X, single_base_nb_mean, single_total_bb_RD, log_sitewise_transmat, sorted_chr_pos, sorted_chr_pos_last, x_gene_list, n_snps
-    short_unique_snp_ids = np.array([ "_".join(x.split("_")[:2]) for x in unique_snp_ids ])
-    sorted_chr_pos = []
-    sorted_chr_pos_last = []
-    n_snps = np.zeros(df_hatchet.shape[0], dtype=int)
-    mult_B_block = [[], []] # the row index and col index of a sparse matrix such that hatchet phasing is 1, eventually the sparse matrix has size n_snps * n_blocks
-    mult_A_block = [[], []] # the row index and col index of a sparse matrix such that hatchet phasing is 0, eventually the sparse matrix has size n_snps * n_blocks
-    s = 0
-    for i in range(df_hatchet.shape[0]):
-        involved_pos = [int(x) for x in df_hatchet.SNP_POS.values[i].split(",")]
-        involved_snp_ids = [ f"{df_hatchet.int_chrom.values[i]}_{x}" for x in involved_pos ]
-        involved_marker = np.array([False] * len(involved_pos))
-        indexes = []
-        for t in range(s, len(short_unique_snp_ids)):
-            if short_unique_snp_ids[t] in involved_snp_ids:
-                indexes.append(t)
-                involved_marker[involved_snp_ids.index(short_unique_snp_ids[t])] = True
-            else:
-                short_snp_chr = int(short_unique_snp_ids[t].split("_")[0])
-                short_snp_pos = int(short_unique_snp_ids[t].split("_")[1])
-                if short_snp_chr > df_hatchet.int_chrom.values[i] or (short_snp_chr == df_hatchet.int_chrom.values[i] and short_snp_pos > involved_pos[-1]):
-                    break
-        s = t
-        indexes = np.array(indexes)
-        hatchet_phasing = np.array([ (x=="1") for x in df_hatchet.HAPLO.values[i].split(",") ])[involved_marker]
-        assert len(indexes) == len(hatchet_phasing)
-        mult_B_block[0] += list( indexes[hatchet_phasing] )
-        mult_B_block[1] += [i] * np.sum(hatchet_phasing)
-        mult_A_block[0] += list( indexes[~hatchet_phasing] )
-        mult_A_block[1] += [i] * np.sum(~hatchet_phasing)
-        sorted_chr_pos.append( (df_hatchet.int_chrom.values[i], int(short_unique_snp_ids[s].split("_")[1]) ) )
-        sorted_chr_pos_last.append( (df_hatchet.int_chrom.values[i], int(short_unique_snp_ids[t-1].split("_")[1]) ) )
-        n_snps[i] = len(indexes)
-    # construct single_X and single_total_bb_RD using matrix multiplication with mult_B_block and mult_A_block
-    mult_B_block = scipy.sparse.csr_matrix( (np.ones(len(mult_B_block[0]), dtype=int), (mult_B_block[0], mult_B_block[1])), shape=(len(short_unique_snp_ids), df_hatchet.shape[0]) )
-    mult_A_block = scipy.sparse.csr_matrix( (np.ones(len(mult_A_block[0]), dtype=int), (mult_A_block[0], mult_A_block[1])), shape=(len(short_unique_snp_ids), df_hatchet.shape[0]) )
-    single_X = np.zeros((df_hatchet.shape[0], 2, cell_snp_Aallele.shape[0]), dtype=int)
-    single_X[:,1,:] = (cell_snp_Ballele @ mult_B_block + cell_snp_Aallele @ mult_A_block).T.A
-    single_total_bb_RD = ((cell_snp_Ballele + cell_snp_Aallele) @ (mult_B_block + mult_A_block)).T.A
-    
-    # load gene positions and loop over hatchet entries to find corresponding genes within each block
-    map_gene_adataindex = {adata.var.index[i]:i for i in range(adata.shape[1])}
-    df_genes = pd.read_csv(hgtable_file, header=0, index_col=0, sep="\t")
-    df_genes = df_genes[df_genes["name2"].isin(adata.var.index)]
-    if ~np.any( df_genes["chrom"].map(str).isin(ordered_chr) ):
-        df_genes["chrom"] = df_genes["chrom"].map(lambda x: x.replace("chr", ""))
-    df_genes = df_genes[df_genes.chrom.isin(ordered_chr)]
-    df_genes["int_chrom"] = df_genes.chrom.map(ordered_chr_map)
-    df_genes.sort_values(by=["int_chrom", "cdsStart"], inplace=True)
-    gene_ranges = list(zip( df_genes.name2.values, df_genes.int_chrom, df_genes.cdsStart.values ))
-    mult_gene_block = [[],[]]
-    x_gene_list = [""] * df_hatchet.shape[0]
-    s = 0
-    for i in range(df_hatchet.shape[0]):
-        this_chr = df_hatchet.int_chrom.values[i]
-        this_range = [df_hatchet.START.values[i], df_hatchet.END.values[i]]
-        while s < len(gene_ranges) and ((gene_ranges[s][1] < this_chr) or (gene_ranges[s][1] == this_chr and gene_ranges[s][2] < this_range[0])):
-            s += 1
-        indexes = []
-        for t in range(s, len(gene_ranges)):
-            if gene_ranges[t][1] == this_chr and gene_ranges[t][2] >= this_range[0] and gene_ranges[t][2] < this_range[1]:
-                if gene_ranges[t][0] in map_gene_adataindex:
-                    indexes.append( map_gene_adataindex[ gene_ranges[t][0] ] )
-            elif gene_ranges[t][1] > this_chr or (gene_ranges[t][1] == this_chr and gene_ranges[t][2] >= this_range[1]):
-                break
-        s = t
-        indexes = np.array(indexes)
-        mult_gene_block[0] += list( indexes )
-        mult_gene_block[1] += [i] * len(indexes)
-        x_gene_list[i] = " ".join(df_genes.name2.values[indexes]) if len(indexes) > 0 else ""
-    # construct single_gene_X using matrix multiplication with mult_gene_block
-    mult_gene_block = scipy.sparse.csr_matrix( (np.ones(len(mult_gene_block[0]), dtype=int), (mult_gene_block[0], mult_gene_block[1])), shape=(adata.shape[1], df_hatchet.shape[0]) )
-    single_X[:,0,:] = (adata.layers["count"] @ mult_gene_block).T
-    single_base_nb_mean = np.zeros((df_hatchet.shape[0], adata.shape[0] ))
-    
-    # compute log_sitewise_transmat by phasing switch model
-    tmp_sorted_chr_pos = [val for pair in zip(sorted_chr_pos, sorted_chr_pos_last) for val in pair]
-    sorted_chr = np.array([x[0] for x in tmp_sorted_chr_pos])
-    position_cM = get_position_cM_table( tmp_sorted_chr_pos, genome_build=genome_build )
-    phase_switch_prob = compute_phase_switch_probability_position(position_cM, tmp_sorted_chr_pos, nu)
-    log_sitewise_transmat = np.log(phase_switch_prob) - logphase_shift
-    log_sitewise_transmat = log_sitewise_transmat[np.arange(1, len(log_sitewise_transmat), 2)]
-
-    sorted_chr = np.array([x[0] for x in sorted_chr_pos])
-    lengths = np.array([ np.sum(sorted_chr == c) for c in range(len(ordered_chr_map)) ])
-
-    return lengths, single_X, single_base_nb_mean, single_total_bb_RD, log_sitewise_transmat, sorted_chr_pos, sorted_chr_pos_last, x_gene_list, n_snps
 
 
 def choose_umithreshold_given_nbins(single_total_bb_RD, refined_lengths, expected_nbins):
@@ -952,8 +850,7 @@ def choose_umithreshold_given_nbins(single_total_bb_RD, refined_lengths, expecte
     return mid
 
 
-# def perform_binning_new(lengths, single_X, single_base_nb_mean, single_total_bb_RD, sorted_chr_pos, sorted_chr_pos_last, x_gene_list, phase_indicator, refined_lengths, binsize, rdrbinsize, nu, logphase_shift, secondary_percentile=90, genome_build="hg38"):
-def perform_binning_new(lengths, single_X, single_base_nb_mean, single_total_bb_RD, sorted_chr_pos, sorted_chr_pos_last, x_gene_list, n_snps, phase_indicator, refined_lengths, binsize, rdrbinsize, nu, logphase_shift, secondary_min_umi=1000, max_binlength=5e6, genome_build="hg38"):
+def perform_binning_new(lengths, single_X, single_base_nb_mean, single_total_bb_RD, sorted_chr_pos, sorted_chr_pos_last, x_gene_list, n_snps, phase_indicator, refined_lengths, binsize, rdrbinsize, nu, logphase_shift, geneticmap_file, secondary_min_umi=1000, max_binlength=5e6):
     per_snp_umi = np.sum(single_total_bb_RD, axis=1)
     # secondary_min_umi = np.percentile(per_snp_umi, secondary_percentile)
     # bin both RDR and BAF
@@ -1031,7 +928,7 @@ def perform_binning_new(lengths, single_X, single_base_nb_mean, single_total_bb_
     # phase switch probability from genetic distance
     tmp_sorted_chr_pos = [val for pair in zip(sorted_chr_pos_first, sorted_chr_pos_last) for val in pair]
     sorted_chr = np.array([x[0] for x in tmp_sorted_chr_pos])
-    position_cM = get_position_cM_table( tmp_sorted_chr_pos, genome_build=genome_build )
+    position_cM = get_position_cM_table( tmp_sorted_chr_pos, geneticmap_file )
     phase_switch_prob = compute_phase_switch_probability_position(position_cM, tmp_sorted_chr_pos, nu)
     log_sitewise_transmat = np.log(phase_switch_prob) - logphase_shift
     # log_sitewise_transmat = log_sitewise_transmat[np.arange(0, len(log_sitewise_transmat), 2)]
@@ -1147,7 +1044,7 @@ def create_bin_ranges(df_gene_snp, single_total_bb_RD, refined_lengths, secondar
     return df_gene_snp
 
 
-def summarize_counts_for_bins(df_gene_snp, adata, single_X, single_total_bb_RD, phase_indicator, nu, logphase_shift, genome_build="hg38"):
+def summarize_counts_for_bins(df_gene_snp, adata, single_X, single_total_bb_RD, phase_indicator, nu, logphase_shift, geneticmap_file):
     """
     Attributes:
     ----------
@@ -1199,7 +1096,7 @@ def summarize_counts_for_bins(df_gene_snp, adata, single_X, single_total_bb_RD, 
     sorted_chr_pos_last = list(zip(sorted_chr_pos_last.CHR.values, sorted_chr_pos_last.END.values))
     #
     tmp_sorted_chr_pos = [val for pair in zip(sorted_chr_pos_first, sorted_chr_pos_last) for val in pair]
-    position_cM = get_position_cM_table( tmp_sorted_chr_pos, genome_build=genome_build )
+    position_cM = get_position_cM_table( tmp_sorted_chr_pos, geneticmap_file )
     phase_switch_prob = compute_phase_switch_probability_position(position_cM, tmp_sorted_chr_pos, nu)
     log_sitewise_transmat = np.minimum(np.log(0.5), np.log(phase_switch_prob) - logphase_shift)
     # log_sitewise_transmat = log_sitewise_transmat[np.arange(0, len(log_sitewise_transmat), 2)]
@@ -1208,7 +1105,7 @@ def summarize_counts_for_bins(df_gene_snp, adata, single_X, single_total_bb_RD, 
     return lengths, bin_single_X, bin_single_base_nb_mean, bin_single_total_bb_RD, log_sitewise_transmat
 
 
-def bin_selection_basedon_normal(df_gene_snp, single_X, single_base_nb_mean, single_total_bb_RD, nu, logphase_shift, index_normal, genome_build="hg38", confidence_interval=[0.05, 0.95], min_betabinom_tau=30):
+def bin_selection_basedon_normal(df_gene_snp, single_X, single_base_nb_mean, single_total_bb_RD, nu, logphase_shift, index_normal, geneticmap_file, confidence_interval=[0.05, 0.95], min_betabinom_tau=30):
     """
     Filter out bins that potential contain somatic mutations based on BAF of normal spots.
     """
@@ -1250,7 +1147,7 @@ def bin_selection_basedon_normal(df_gene_snp, single_X, single_base_nb_mean, sin
     sorted_chr_pos_last = list(zip(sorted_chr_pos_last.CHR.values, sorted_chr_pos_last.END.values))
     #
     tmp_sorted_chr_pos = [val for pair in zip(sorted_chr_pos_first, sorted_chr_pos_last) for val in pair]
-    position_cM = get_position_cM_table( tmp_sorted_chr_pos, genome_build=genome_build )
+    position_cM = get_position_cM_table( tmp_sorted_chr_pos, geneticmap_file )
     phase_switch_prob = compute_phase_switch_probability_position(position_cM, tmp_sorted_chr_pos, nu)
     log_sitewise_transmat = np.minimum(np.log(0.5), np.log(phase_switch_prob) - logphase_shift)
     # log_sitewise_transmat = log_sitewise_transmat[np.arange(0, len(log_sitewise_transmat), 2)]

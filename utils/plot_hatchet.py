@@ -292,7 +292,64 @@ def stateaccuracy_numbat(numbat_dirs, hatchet_wes_file, sorted_chr_pos, ordered_
     return percent_category, coarse_states_wes[:,snp_seg_index], states_numbat
 
 
-def cna_precisionrecall_allele_starch(configuration_file, r_hmrf_initialization, hatchet_wes_file, midfix="", ordered_chr=[str(c) for c in range(1,23)], purity_threshold=0.3):
+def cna_precisionrecall_numbat(numbat_dirs, hatchet_wes_file, sorted_chr_pos, ordered_chr=[str(c) for c in range(1,23)], fun_hatchetconvert=convert_copy_to_states, binsize=1e5):
+    ordered_chr_map = {ordered_chr[i]:i for i in range(len(ordered_chr))}
+    
+    # hatchet results
+    df_wes = read_hatchet(hatchet_wes_file)
+    if df_wes.shape[0] == 0:
+        return None, None
+    snp_seg_index = map_hatchet_to_bins(df_wes, sorted_chr_pos)
+    retained_hatchet_clones = [x[6:] for x in df_wes.columns if x.startswith("Acopy_")]
+    coarse_states_wes = np.array([fun_hatchetconvert(df_wes[f"Acopy_{sid}"].values, df_wes[f"Bcopy_{sid}"].values, counts=((df_wes.END.values-df_wes.START.values) / binsize).astype(int)) for sid in retained_hatchet_clones])
+
+    precision = []
+    recall = []
+    states_numbat = []
+    for dirname in numbat_dirs:
+        tmpdf_numbat = pd.read_csv(f"{dirname}/bulk_clones_final.tsv.gz", header=0, sep="\t")
+        n_numbat_samples = len( np.unique(tmpdf_numbat["sample"]) )
+        # check chromosome name
+        tmpdf_numbat.CHROM = tmpdf_numbat.CHROM.astype(str)
+        if ~np.any( tmpdf_numbat.CHROM.isin(ordered_chr) ):
+            tmpdf_numbat["CHROM"] = tmpdf_numbat.CHROM.map(lambda x: x.replace("chr", ""))
+        tmpdf_numbat = tmpdf_numbat[tmpdf_numbat.CHROM.isin(ordered_chr)]
+        tmpdf_numbat["int_chrom"] = tmpdf_numbat.CHROM.map(ordered_chr_map)
+        tmpdf_numbat.sort_values(by=['int_chrom', 'POS'], inplace=True)
+
+        this_precision = np.zeros((n_numbat_samples, len(retained_hatchet_clones)))
+        this_recall = np.zeros((n_numbat_samples, len(retained_hatchet_clones)))
+        for sidx,s in enumerate(np.unique(tmpdf_numbat["sample"])):
+            tmpdf_sample = tmpdf_numbat[tmpdf_numbat["sample"] == s][["int_chrom", "POS", "cnv_state"]]
+            index = np.ones(len(sorted_chr_pos), dtype=int) * -1
+            j = 0
+            for i in range(len(sorted_chr_pos)):
+                this_chr = sorted_chr_pos[i][0]
+                this_pos = sorted_chr_pos[i][1]
+                while (j < tmpdf_sample.shape[0]) and ((tmpdf_sample.int_chrom.values[j] < this_chr) or (tmpdf_sample.int_chrom.values[j] == this_chr and tmpdf_sample.POS.values[j] < this_pos)):
+                    j += 1
+                if j < tmpdf_sample.shape[0] and tmpdf_sample.int_chrom.values[j] == this_chr:
+                    index[i] = j
+                else:
+                    index[i] = j -1
+            for c in range(len(retained_hatchet_clones)):
+                index_truth = set(list( np.where(coarse_states_wes[c][snp_seg_index] != 'neu')[0] ))
+                index_pred = set(list( np.where(tmpdf_sample["cnv_state"].values[index] != 'neu')[0] ))
+                this_precision[sidx, c] = 0 if len(index_pred)==0 else len(index_truth & index_pred) / len(index_pred)
+                this_recall[sidx, c] = 0 if len(index_truth)==0 else len(index_truth & index_pred) / len(index_truth)
+
+            states_numbat.append( tmpdf_sample["cnv_state"].values[index] )
+        precision.append(this_precision)
+        recall.append(this_recall)
+
+    precision = np.vstack(precision)
+    recall = np.vstack(recall)
+    f1 = 2 * precision * recall / (precision + recall)
+    states_numbat = np.array(states_numbat)
+    return precision, recall, f1, coarse_states_wes[:,snp_seg_index], states_numbat
+
+
+def cna_precisionrecall_calicost(configuration_file, r_hmrf_initialization, hatchet_wes_file, midfix="", ordered_chr=[str(c) for c in range(1,23)], purity_threshold=0.3):
     try:
         config = read_configuration_file(configuration_file)
     except:
