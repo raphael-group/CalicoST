@@ -232,31 +232,6 @@ def sample_initialize_initial_clone(adata, sample_list, n_clones, random_state=0
     initial_clone_index = [np.where(clone_id == i)[0] for i in range(n_clones)]
     return initial_clone_index
 
-def data_driven_initialize_initial_clone(single_X, single_total_bb_RD, phase_prob, n_states, n_clones, sorted_chr_pos, coords, random_state, genome_build="hg38"):
-    ### arm-level BAF ###
-    # smoothing based on adjacency
-    if genome_build == "hg38":
-        centromere_file = "/u/congma/ragr-data/datasets/ref-genomes/centromeres/hg38.centromeres.txt"
-    elif genome_build == "hg19":
-        centromere_file = "/u/congma/ragr-data/datasets/ref-genomes/centromeres/hg19.centromeres.txt"
-    armlengths = get_lengths_by_arm(sorted_chr_pos, centromere_file)
-    adjacency_mat = compute_adjacency_mat_v2(coords, ratio=10)
-    smoothed_X_baf = single_X[:,1,:] @ adjacency_mat
-    smoothed_total_bb_RD = single_total_bb_RD @ adjacency_mat
-    # smoothed BAF
-    chr_level_af = np.zeros((single_X.shape[2], len(armlengths)))
-    for k,le in enumerate(armlengths):
-        s = np.sum(armlengths[:k])
-        t = s + le
-        numer = phase_prob[s:t].dot(smoothed_X_baf[s:t,:]) + (1-phase_prob[s:t]).dot(smoothed_total_bb_RD[s:t,:] - smoothed_X_baf[s:t,:])
-        denom = np.sum(smoothed_total_bb_RD[s:t,:], axis=0)
-        chr_level_af[:,k] = numer / denom
-    chr_level_af[np.isnan(chr_level_af)] = 0.5
-    # Kmeans clustering based on BAF
-    kmeans = KMeans(n_clusters=n_clones, random_state=random_state).fit(chr_level_af)
-    initial_clone_index = [np.where(kmeans.labels_ == i)[0] for i in range(n_clones)]
-    return initial_clone_index
-
 
 def fixed_rectangle_initialization(coords, x_part, y_part):
     #

@@ -6,17 +6,14 @@ import scipy
 import scipy.special
 
 
-def get_position_cM_table(chr_pos_vector, genome_build="hg38"):
+def get_position_cM_table(chr_pos_vector, geneticmap_file):
     """
     Attributes
     ----------
     chr_pos_vector : list of pairs
         list of (chr, pos) pairs of SNPs
     """
-    if genome_build=="hg38":
-        df = pd.read_csv("/u/congma/ragr-data/datasets/genetic_map/recomb-hg38/genetic_map_GRCh38_merged.tab", header=0, sep="\t")
-    elif genome_build == "hg19":
-        df = pd.read_csv("/u/congma/ragr-data/datasets/genetic_map/plink.GRCh37.map/plink.GRCh37.map.merged", header=0, sep="\t")
+    df = pd.read_csv(geneticmap_file, header=0, sep="\t")
     # remove chrX
     df = df[df.chrom.isin( [f"chr{i}" for i in range(1,23)] )]
     # check the chromosome names

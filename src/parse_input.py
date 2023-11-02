@@ -93,7 +93,7 @@ def parse_visium(config):
     df_gene_snp = combine_gene_snps(unique_snp_ids, config['hgtable_file'], adata)
     df_gene_snp = create_haplotype_block_ranges(df_gene_snp, adata, cell_snp_Aallele, cell_snp_Ballele, unique_snp_ids)
     lengths, single_X, single_base_nb_mean, single_total_bb_RD, log_sitewise_transmat = summarize_counts_for_blocks(df_gene_snp, \
-            adata, cell_snp_Aallele, cell_snp_Ballele, unique_snp_ids, nu=config['nu'], logphase_shift=config['logphase_shift'], genome_build="hg38")
+            adata, cell_snp_Aallele, cell_snp_Ballele, unique_snp_ids, nu=config['nu'], logphase_shift=config['logphase_shift'], geneticmap_file=config['geneticmap_file'])
     # infer an initial phase using pseudobulk
     if not Path(f"{config['output_dir']}/initial_phase.npz").exists():
         initial_clone_for_phasing = perform_partition(coords, sample_ids, x_part=config["npart_phasing"], y_part=config["npart_phasing"], single_tumor_prop=single_tumor_prop, threshold=config["tumorprop_threshold"])
@@ -109,7 +109,7 @@ def parse_visium(config):
     # binning
     df_gene_snp = create_bin_ranges(df_gene_snp, single_total_bb_RD, refined_lengths, config['secondary_min_umi'])
     lengths, single_X, single_base_nb_mean, single_total_bb_RD, log_sitewise_transmat = summarize_counts_for_bins(df_gene_snp, \
-            adata, single_X, single_total_bb_RD, phase_indicator, nu=config['nu'], logphase_shift=config['logphase_shift'], genome_build="hg38")
+            adata, single_X, single_total_bb_RD, phase_indicator, nu=config['nu'], logphase_shift=config['logphase_shift'], geneticmap_file=config['geneticmap_file'])
     # lengths, single_X, single_base_nb_mean, single_total_bb_RD, log_sitewise_transmat, sorted_chr_pos, sorted_chr_pos_last, x_gene_list, n_snps = perform_binning_new(lengths, single_X, \
     #     single_base_nb_mean, single_total_bb_RD, sorted_chr_pos, sorted_chr_pos_last, x_gene_list, n_snps, phase_indicator, refined_lengths, config["binsize"], config["rdrbinsize"], config["nu"], config["logphase_shift"], secondary_min_umi=secondary_min_umi)
         
@@ -179,7 +179,8 @@ def load_tables_to_matrices(config):
     smooth_mat = scipy.sparse.load_npz( f"{config['output_dir']}/parsed_inputs/smooth_mat.npz" )
     #
     df_gene_snp = pd.read_csv(f"{config['output_dir']}/parsed_inputs/gene_snp_info.csv.gz", header=0, index_col=None, sep="\t")
-
+    df_gene_snp = df_gene_snp.replace(np.nan, None)
+    
     n_spots = table_meta.shape[0]
     n_bins = table_bininfo.shape[0]
 
