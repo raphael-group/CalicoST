@@ -59,7 +59,7 @@ def parse_visium(config):
         KNN smoothing matrix.
     """
     if "input_filelist" in config:
-        adata, cell_snp_Aallele, cell_snp_Ballele, snp_gene_list, unique_snp_ids, across_slice_adjacency_mat = load_joint_data(config["input_filelist"], config["snp_dir"], config["alignment_files"], config["filtergenelist_file"], config["filterregion_file"], config["normalidx_file"])
+        adata, cell_snp_Aallele, cell_snp_Ballele, unique_snp_ids, across_slice_adjacency_mat = load_joint_data(config["input_filelist"], config["snp_dir"], config["alignment_files"], config["filtergenelist_file"], config["filterregion_file"], config["normalidx_file"])
         sample_list = [adata.obs["sample"][0]]
         for i in range(1, adata.shape[0]):
             if adata.obs["sample"][i] != sample_list[-1]:
@@ -70,7 +70,7 @@ def parse_visium(config):
             index = np.where(adata.obs["sample"] == sname)[0]
             sample_ids[index] = s
     else:
-        adata, cell_snp_Aallele, cell_snp_Ballele, snp_gene_list, unique_snp_ids = load_data(config["spaceranger_dir"], config["snp_dir"], config["filtergenelist_file"], config["filterregion_file"], config["normalidx_file"])
+        adata, cell_snp_Aallele, cell_snp_Ballele, unique_snp_ids = load_data(config["spaceranger_dir"], config["snp_dir"], config["filtergenelist_file"], config["filterregion_file"], config["normalidx_file"])
         adata.obs["sample"] = "unique_sample"
         sample_list = [adata.obs["sample"][0]]
         sample_ids = np.zeros(adata.shape[0], dtype=int)
@@ -88,8 +88,6 @@ def parse_visium(config):
         single_tumor_prop = None
     
     # read original data
-    # lengths, single_X, single_base_nb_mean, single_total_bb_RD, log_sitewise_transmat, sorted_chr_pos, sorted_chr_pos_last, x_gene_list, n_snps = convert_to_hmm_input_new(adata, \
-    #     cell_snp_Aallele, cell_snp_Ballele, snp_gene_list, unique_snp_ids, config["hgtable_file"], config["nu"], config["logphase_shift"])
     df_gene_snp = combine_gene_snps(unique_snp_ids, config['hgtable_file'], adata)
     df_gene_snp = create_haplotype_block_ranges(df_gene_snp, adata, cell_snp_Aallele, cell_snp_Ballele, unique_snp_ids)
     lengths, single_X, single_base_nb_mean, single_total_bb_RD, log_sitewise_transmat = summarize_counts_for_blocks(df_gene_snp, \
