@@ -1,0 +1,25 @@
+# path to executables or their parent directories
+calicost_dir: "/u/congma/ragr-data/users/congma/Codes/CalicoST/"
+cellsnplite: "cellsnp-lite"
+samtools: "samtools"
+bgzip: "bgzip"
+tabix: "tabix"
+eagledir: "/u/congma/ragr-data/users/congma/environments/Eagle_v2.4.1/"
+
+# running parameters
+# samtools sort (only used when joingly calling from multiple slices)
+samtools_sorting_mem: "4G"
+# cellsnp-lite
+UMItag: "Auto"
+cellTAG: "CB"
+nthreads_cellsnplite: 20
+region_vcf: "/u/congma/ragr-data/users/congma/references/snplist/genome1K.phase3.SNP_AF5e4.chr1toX.hg38.vcf.gz"
+# Eagle phasing
+phasing_panel: "/u/congma/ragr-data/users/congma/references/phasing_ref/1000G_hg38/"
+chromosomes: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22]
+
+# input
+spaceranger_dir: "/u/congma/ragr-data/datasets/DingLab/HT112/U1/"
+
+# output
+outputdir: "/u/congma/ragr-data/users/congma/Datasets/test_calico"
