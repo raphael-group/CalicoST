@@ -10,10 +10,10 @@ from tqdm import trange
 import statsmodels.api as sm
 from statsmodels.base.model import GenericLikelihoodModel
 import copy
-from utils_hmm import *
-from utils_distribution_fitting import *
-from hmm_NB_BB_nophasing import *
-from hmm_NB_BB_nophasing_v2 import *
+from calicost.utils_hmm import *
+from calicost.utils_distribution_fitting import *
+from calicost.hmm_NB_BB_nophasing import *
+from calicost.hmm_NB_BB_nophasing_v2 import *
 import networkx as nx
 
 

@@ -4,7 +4,7 @@ import copy
 import scipy.special
 from tqdm import trange
 from sklearn.mixture import GaussianMixture
-from utils_distribution_fitting import *
+from calicost.utils_distribution_fitting import *
 
 
 @njit

@@ -102,7 +102,8 @@ def cell_by_gene_lefthap_counts(cellsnp_folder, eagle_folder, barcode_list):
     DP = DP[:, index]
     phased_AD = phased_AD[:, index]    
     
-    return DP-phased_AD, phased_AD, df_snp.snp_id.values
+    # returned matrix has shape (N_cells, N_snps), which is the transpose of the original matrix
+    return (DP-phased_AD).T, phased_AD.T, df_snp.snp_id.values
 
 
 def cell_by_gene_lefthap_counts_v2(df_cell_snp, hg_table_file, gene_list, barcode_list):
