@@ -1,11 +1,14 @@
 import numpy as np
 import pandas as pd
 import scipy
+import calicost.arg_parse
+import calicost.parse_input
 
 
 rule all:
     input:
-        f"{config['outputdir']}/snpinfo/cell_snp_Aallele.npz",
+        # expand(f"{config['outputdir']}/{config['output_foldername']}" + "/configfile{r}", r=config['random_state']),
+        f"{config['outputdir']}/{config['output_foldername']}/parsed_inputs/table_bininfo.csv.gz"
 
 
 rule link_or_merge_bam:
@@ -128,4 +131,82 @@ rule parse_final_snp:
         command = f"python {config['calicost_dir']}/utils/get_snp_matrix.py " + \
             f"-c {params.outputdir}/snpinfo/genotyping -e {params.outputdir}/snpinfo/phasing -b {params.outputdir}/snpinfo/barcodes.txt -o {params.outputdir}/snpinfo/ >> {log} 2>&1"
         print( command )
+
+
+rule write_calicost_configfile:
+    input:
+        "{outputdir}/snpinfo/cell_snp_Aallele.npz",
+    output:
+        expand("{{outputdir}}/" + config['output_foldername'] + "/configfile{r}", r=config['random_state'])
+    params:
+        outputdir="{outputdir}",
+    threads: 1
+    run:
+        template_configuration_file = f"{config['calicost_dir']}/resources/template_configfile_single" if not ("bamlist" in config) else f"{config['calicost_dir']}/resources/template_configfile_joint"
+        try:
+            calicost_config = calicost.arg_parse.read_configuration_file(template_configuration_file)
+        except:
+            calicost_config = calicost.arg_parse.read_joint_configuration_file(template_configuration_file)
+        
+        # update input
+        calicost_config['snp_dir'] = f"{params.outputdir}/snpinfo/"
+        calicost_config['output_dir'] = f"{params.outputdir}/{config['output_foldername']}"
+        if 'spaceranger_dir' in calicost_config:
+            assert 'spaceranger_dir' in config
+            calicost_config['spaceranger_dir'] = config['spaceranger_dir']
+        if 'input_filelist' in calicost_config:
+            assert 'bamlist' in config
+            calicost_config['input_filelist'] = config['bamlist']
+
+        for k in calicost_config.keys():
+            if k in config:
+                calicost_config[k] = config[k]
+
+        for r in config['random_state']:
+            calicost_config["num_hmrf_initialization_start"] = r
+            calicost_config["num_hmrf_initialization_end"] = r+1
+            calicost.arg_parse.write_config_file(f"{params.outputdir}/{config['output_foldername']}/configfile{r}", calicost_config)
+
+
+rule prepare_calicost_data:
+    input:
+        expand("{{outputdir}}/" + config['output_foldername'] + "/configfile{r}", r=config['random_state']),
+    output:
+        f"{{outputdir}}/{config['output_foldername']}/parsed_inputs/table_bininfo.csv.gz",
+        f"{{outputdir}}/{config['output_foldername']}/parsed_inputs/table_rdrbaf.csv.gz",
+        f"{{outputdir}}/{config['output_foldername']}/parsed_inputs/table_meta.csv.gz",
+        f"{{outputdir}}/{config['output_foldername']}/parsed_inputs/exp_counts.pkl",
+        f"{{outputdir}}/{config['output_foldername']}/parsed_inputs/adjacency_mat.npz",
+        f"{{outputdir}}/{config['output_foldername']}/parsed_inputs/smooth_mat.npz"
+    params:
+        outputdir="{outputdir}",
+    threads: 1
+    log:
+        "{outputdir}/logs/prepare_calicost_data.log"
+    run:
+        command = f"python {config['calicost_dir']}/src/calicost/parse_input.py -c {input[0]} >> {log} 2>&1"
+        print( command )
+        # try:
+        #     calicost_config = calicost.arg_parse.read_configuration_file(input[0])
+        # except:
+        #     calicost_config = calicost.arg_parse.read_joint_configuration_file(input[0])
+        # _ = calicost.parse_input.run_parse_n_load(calicost_config)
+
+
+# rule run_calicost:
+#     input:
+#         f"{{outputdir}}/{config['output_foldername']}/configfile{{r}}",
+#         f"{{outputdir}}/{config['output_foldername']}/parsed_inputs/table_bininfo.csv.gz",
+#         f"{{outputdir}}/{config['output_foldername']}/parsed_inputs/table_rdrbaf.csv.gz",
+#         f"{{outputdir}}/{config['output_foldername']}/parsed_inputs/table_meta.csv.gz",
+#         f"{{outputdir}}/{config['output_foldername']}/parsed_inputs/exp_counts.pkl",
+#         f"{{outputdir}}/{config['output_foldername']}/parsed_inputs/adjacency_mat.npz",
+#         f"{{outputdir}}/{config['output_foldername']}/parsed_inputs/smooth_mat.npz"
+#     output:
+#         f"{{outputdir}}/{config['output_foldername']}/summary{{r}}",
+#     params:
+#         outputdir="{outputdir}",
+#         r="{r}"
+#     threads: 1
+#     run:
 

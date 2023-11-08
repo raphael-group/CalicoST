@@ -13,8 +13,10 @@ import copy
 from pathlib import Path
 import functools
 import subprocess
-from utils_IO import *
-from phasing import *
+import argparse
+from calicost.utils_IO import *
+from calicost.phasing import *
+from calicost.arg_parse import *
 
 
 def genesnp_to_bininfo(df_gene_snp):
@@ -254,3 +256,20 @@ def run_parse_n_load(config):
 
     # load and parse data
     return load_tables_to_matrices(config)
+
+
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser()
+    parser.add_argument("-c", "--configfile", help="configuration file of CalicoST", required=True, type=str)
+    args = parser.parse_args()
+
+    try:
+        config = read_configuration_file(args.configfile)
+    except:
+        config = read_joint_configuration_file(args.configfile)
+
+    print("Configurations:")
+    for k in sorted(list(config.keys())):
+        print(f"\t{k} : {config[k]}")
+        
+    _ = run_parse_n_load(config)

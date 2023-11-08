@@ -10,8 +10,8 @@ from sklearn.kernel_ridge import KernelRidge
 from sklearn.cluster import KMeans
 import scanpy as sc
 import anndata
-from utils_phase_switch import *
-from utils_distribution_fitting import *
+from calicost.utils_phase_switch import *
+from calicost.utils_distribution_fitting import *
 import subprocess
 
 
@@ -1216,129 +1216,6 @@ def expand_df_cnv(df_cnv, binsize=2e5, fillmissing=True):
             df_expand.iloc[i, 3:] = df_expand.iloc[j, 3:].values
 
     return df_expand
-
-
-import pysam
-def count_reads_from_bam(sorted_chr_pos, barcodes, bamfile, barcodetag="BX"):
-    def get_reference(refname):
-        if refname[:3] == "chr":
-            if refname[3] >= '0' and refname[3] <= '9':
-                return int(refname[3:])
-            else:
-                return None
-        else:
-            if refname[0] >= '0' and refname[0] <= '9':
-                return int(refname)
-            else:
-                return None
-    dic_counts = {}
-    map_barcodes = {barcodes[i]:i for i in range(len(barcodes))}
-    # separate chr info and pos info of SNPs
-    snp_chrs = np.array([x[0] for x in sorted_chr_pos])
-    chr_ranges = [(np.where(snp_chrs==c)[0][0], np.where(snp_chrs==c)[0][-1]) for c in range(1,23)]
-    snp_pos = np.array([x[1] for x in sorted_chr_pos])
-    # parse bam file
-    last_chr = 0
-    idx = 0
-    last_ranges = (-1,-1)
-    fp = pysam.AlignmentFile(bamfile, "rb")
-    for read in fp:
-        if read.is_unmapped or read.is_secondary or read.is_duplicate or read.is_qcfail:
-            continue
-        this_chr = get_reference(read.reference_name)
-        if (not this_chr is None) and (read.has_tag(barcodetag)) and (read.get_tag(barcodetag) in map_barcodes):
-            idx_barcode = map_barcodes[ read.get_tag(barcodetag) ]
-            if this_chr != last_chr:
-                last_ranges = chr_ranges[this_chr-1]
-                idx = last_ranges[0]
-                last_chr = this_chr
-            # find the bin index of the read
-            while idx + 1 <= last_ranges[1] and snp_pos[idx+1] <= read.reference_start:
-                idx += 1
-            if (idx_barcode, idx) in dic_counts:
-                dic_counts[(idx_barcode, idx)] += 1
-            else:
-                dic_counts[(idx_barcode, idx)] = 1
-    fp.close()
-    # convert dic_counts to count matrix
-    list_keys = list(dic_counts.keys())
-    row_ind = np.array([k[0] for k in list_keys]).astype(int)
-    col_ind = np.array([k[1] for k in list_keys]).astype(int)
-    counts = scipy.sparse.csr_matrix(( [dic_counts[k] for k in list_keys], (row_ind, col_ind) ))
-    return counts
-
-
-def count_reads_from_bam_bulk(sorted_chr_pos, bamfile):
-    def get_reference(refname):
-        if refname[:3] == "chr":
-            if refname[3] >= '0' and refname[3] <= '9':
-                return int(refname[3:])
-            else:
-                return None
-        else:
-            if refname[0] >= '0' and refname[0] <= '9':
-                return int(refname)
-            else:
-                return None
-    bulk_counts = np.zeros(len(sorted_chr_pos))
-    # separate chr info and pos info of SNPs
-    snp_chrs = np.array([x[0] for x in sorted_chr_pos])
-    chr_ranges = [(np.where(snp_chrs==c)[0][0], np.where(snp_chrs==c)[0][-1]) for c in range(1,23)]
-    snp_pos = np.array([x[1] for x in sorted_chr_pos])
-    # parse bam file
-    last_chr = 0
-    idx = 0
-    last_ranges = (-1,-1)
-    fp = pysam.AlignmentFile(bamfile, "rb")
-    for read in fp:
-        if read.is_unmapped or read.is_secondary or read.is_duplicate or read.is_qcfail:
-            continue
-        this_chr = get_reference(read.reference_name)
-        if (not this_chr is None):
-            if this_chr != last_chr:
-                last_ranges = chr_ranges[this_chr-1]
-                idx = last_ranges[0]
-                last_chr = this_chr
-            # find the bin index of the read
-            while idx + 1 <= last_ranges[1] and snp_pos[idx+1] <= read.reference_start:
-                idx += 1
-            bulk_counts[idx] += 1
-    fp.close()
-    return bulk_counts
-
-
-def generate_bedfile(sorted_chr_pos, outputfile):
-    last_chr = 1
-    bed_regions = []
-    for i,x in enumerate(sorted_chr_pos):
-        if i + 1 < len(sorted_chr_pos) and sorted_chr_pos[i+1][0] != last_chr:
-            bed_regions.append( (f"chr{x[0]}", x[1], chrlengths[last_chr-1]) )
-            last_chr = sorted_chr_pos[i+1][0]
-        elif i + 1 < len(sorted_chr_pos):
-            bed_regions.append( (f"chr{x[0]}", x[1], sorted_chr_pos[i+1][1]) )
-        else:
-            bed_regions.append( (f"chr{x[0]}", x[1], chrlengths[-1]) )
-    with open(outputfile, 'w') as fp:
-        for x in bed_regions:
-            fp.write(f"{x[0]}\t{x[1]}\t{x[2]}\n")
-
-
-def strict_convert_copy_to_states(A_copy, B_copy, counts=None):
-    if counts is None:
-        tmp = A_copy + B_copy
-        tmp = tmp[~np.isnan(tmp)]
-    else:
-        tmp = np.concatenate([ np.ones(counts[i]) * (A_copy[i]+B_copy[i]) for i in range(len(counts)) if ~np.isnan(A_copy[i]+B_copy[i]) ])
-    base_ploidy = np.median(tmp)
-    is_homozygous = (A_copy == 0) | (B_copy == 0)
-    coarse_states = np.array(["neutral"] * A_copy.shape[0])
-    coarse_states[ (A_copy + B_copy < base_ploidy) & (A_copy != B_copy) ] = "del"
-    coarse_states[ (A_copy + B_copy < base_ploidy) & (A_copy == B_copy) ] = "bdel"
-    coarse_states[ (A_copy + B_copy > base_ploidy) & (A_copy != B_copy) ] = "amp"
-    coarse_states[ (A_copy + B_copy > base_ploidy) & (A_copy == B_copy) ] = "bamp"
-    coarse_states[ (A_copy + B_copy == base_ploidy) & (is_homozygous) ] = "loh"
-    coarse_states[coarse_states == "neutral"] = "neu"
-    return coarse_states
 
 
 def summary_events(cnv_segfile, rescombinefile, minlength=10):

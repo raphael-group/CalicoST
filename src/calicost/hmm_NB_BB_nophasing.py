@@ -10,19 +10,16 @@ from tqdm import trange
 import statsmodels.api as sm
 from statsmodels.base.model import GenericLikelihoodModel
 import copy
-from utils_distribution_fitting import *
-from utils_hmm import *
+from calicost.utils_distribution_fitting import *
+from calicost.utils_hmm import *
 import networkx as nx
 
-"""
-Joint NB-BB HMM that accounts for tumor/normal genome proportions. Tumor genome proportion is weighted by mu in BB distribution.
-"""
 
 ############################################################
 # whole inference
 ############################################################
 
-class hmm_nophasing_v2(object):
+class hmm_nophasing(object):
     def __init__(self, params="stmp", t=1-1e-4):
         """
         Attributes
@@ -138,19 +135,12 @@ class hmm_nophasing_v2(object):
                     n, p = convert_params(nb_mean, nb_std)
                     log_emission_rdr[i, idx_nonzero_rdr, s] = scipy.stats.nbinom.logpmf(X[idx_nonzero_rdr, 0, s], n, p)
                 # AF from BetaBinom distribution
-                if ("logmu_shift" in kwargs) and ("sample_length" in kwargs):
-                    this_weighted_tp = []
-                    for c in range(len(kwargs["sample_length"])):
-                        range_s = np.sum(kwargs["sample_length"][:c])
-                        range_t = np.sum(kwargs["sample_length"][:(c+1)])
-                        this_weighted_tp.append( tumor_prop[range_s:range_t,s] * np.exp(log_mu[i, s] - kwargs["logmu_shift"][c,s]) / (tumor_prop[range_s:range_t,s] * np.exp(log_mu[i, s] - kwargs["logmu_shift"][c,s]) + 1 - tumor_prop[range_s:range_t,s]) )
-                    this_weighted_tp = np.concatenate(this_weighted_tp)
-                else:
-                    this_weighted_tp = tumor_prop[:,s]
                 idx_nonzero_baf = np.where(total_bb_RD[:,s] > 0)[0]
                 if len(idx_nonzero_baf) > 0:
-                    mix_p_A = p_binom[i, s] * this_weighted_tp[idx_nonzero_baf] + 0.5 * (1 - this_weighted_tp[idx_nonzero_baf])
-                    mix_p_B = (1 - p_binom[i, s]) * this_weighted_tp[idx_nonzero_baf] + 0.5 * (1 - this_weighted_tp[idx_nonzero_baf])
+                    # mix_p_A = p_binom[i, s] * tumor_prop[s] + 0.5 * (1 - tumor_prop[s])
+                    # mix_p_B = (1 - p_binom[i, s]) * tumor_prop[s] + 0.5 * (1 - tumor_prop[s])
+                    mix_p_A = p_binom[i, s] * tumor_prop[idx_nonzero_baf,s] + 0.5 * (1 - tumor_prop[idx_nonzero_baf,s])
+                    mix_p_B = (1 - p_binom[i, s]) * tumor_prop[idx_nonzero_baf,s] + 0.5 * (1 - tumor_prop[idx_nonzero_baf,s])
                     log_emission_baf[i, idx_nonzero_baf, s] += scipy.stats.betabinom.logpmf(X[idx_nonzero_baf,1,s], total_bb_RD[idx_nonzero_baf,s], mix_p_A * taus[i, s], mix_p_B * taus[i, s])
         return log_emission_rdr, log_emission_baf
     #
@@ -224,7 +214,7 @@ class hmm_nophasing_v2(object):
         return log_beta
 
     #
-    def run_baum_welch_nb_bb(self, X, lengths, n_states, base_nb_mean, total_bb_RD, log_sitewise_transmat=None, tumor_prop=None, \
+    def run_baum_welch_nb_bb(self, X, lengths, n_states, base_nb_mean, total_bb_RD, log_sitewise_transmat=None, tumor_prop=None, tp_weight_by_mu=None, \
         fix_NB_dispersion=False, shared_NB_dispersion=False, fix_BB_dispersion=False, shared_BB_dispersion=False, \
         is_diag=False, init_log_mu=None, init_p_binom=None, init_alphas=None, init_taus=None, max_iter=100, tol=1e-4, **kwargs):
         '''
@@ -255,8 +245,6 @@ class hmm_nophasing_v2(object):
             log_transmat = np.log(transmat)
         else:
             log_transmat = np.zeros((1,1))
-        # initialize log_gamma
-        log_gamma = kwargs["log_gamma"] if "log_gamma" in kwargs else None
         # a trick to speed up BetaBinom optimization: taking only unique values of (B allele count, total SNP covering read count)
         unique_values_nb, mapping_matrices_nb = construct_unique_matrix(X[:,0,:], base_nb_mean)
         unique_values_bb, mapping_matrices_bb = construct_unique_matrix(X[:,1,:], total_bb_RD)
@@ -264,22 +252,13 @@ class hmm_nophasing_v2(object):
         for r in trange(max_iter):
             # E step
             if tumor_prop is None:
-                log_emission_rdr, log_emission_baf = hmm_nophasing_v2.compute_emission_probability_nb_betabinom(X, base_nb_mean, log_mu, alphas, total_bb_RD, p_binom, taus)
+                log_emission_rdr, log_emission_baf = hmm_nophasing.compute_emission_probability_nb_betabinom(X, base_nb_mean, log_mu, alphas, total_bb_RD, p_binom, taus)
                 log_emission = log_emission_rdr + log_emission_baf
             else:
-                # compute mu as adjusted RDR
-                if ((not log_gamma is None) or (r > 0)) and ("m" in self.params):
-                    logmu_shift = []
-                    for c in range(len(kwargs["sample_length"])):
-                        this_pred_cnv = np.argmax(log_gamma[:,np.sum(kwargs["sample_length"][:c]):np.sum(kwargs["sample_length"][:(c+1)])], axis=0)%n_states
-                        logmu_shift.append( scipy.special.logsumexp(log_mu[this_pred_cnv,:] + np.log(kwargs["lambd"]).reshape(-1,1), axis=0) )
-                    logmu_shift = np.vstack(logmu_shift)
-                    log_emission_rdr, log_emission_baf = hmm_nophasing_v2.compute_emission_probability_nb_betabinom_mix(X, base_nb_mean, log_mu, alphas, total_bb_RD, p_binom, taus, tumor_prop, logmu_shift=logmu_shift, sample_length=kwargs["sample_length"])
-                else:
-                    log_emission_rdr, log_emission_baf = hmm_nophasing_v2.compute_emission_probability_nb_betabinom_mix(X, base_nb_mean, log_mu, alphas, total_bb_RD, p_binom, taus, tumor_prop)
+                log_emission_rdr, log_emission_baf = hmm_nophasing.compute_emission_probability_nb_betabinom_mix(X, base_nb_mean, log_mu, alphas, total_bb_RD, p_binom, taus, tumor_prop)
                 log_emission = log_emission_rdr + log_emission_baf
-            log_alpha = hmm_nophasing_v2.forward_lattice(lengths, log_transmat, log_startprob, log_emission, log_sitewise_transmat)
-            log_beta = hmm_nophasing_v2.backward_lattice(lengths, log_transmat, log_startprob, log_emission, log_sitewise_transmat)
+            log_alpha = hmm_nophasing.forward_lattice(lengths, log_transmat, log_startprob, log_emission, log_sitewise_transmat)
+            log_beta = hmm_nophasing.backward_lattice(lengths, log_transmat, log_startprob, log_emission, log_sitewise_transmat)
             log_gamma = compute_posterior_obs(log_alpha, log_beta)
             log_xi = compute_posterior_transition_nophasing(log_alpha, log_beta, log_transmat, log_emission)
             # M step
@@ -307,17 +286,7 @@ class hmm_nophasing_v2(object):
                     new_p_binom, new_taus = update_emission_params_bb_nophasing_uniqvalues(unique_values_bb, mapping_matrices_bb, log_gamma, taus, start_p_binom=p_binom, \
                         fix_BB_dispersion=fix_BB_dispersion, shared_BB_dispersion=shared_BB_dispersion)
                 else:
-                    # compute mu as adjusted RDR
-                    if ("m" in self.params):
-                        mu = []
-                        for c in range(len(kwargs["sample_length"])):
-                            this_pred_cnv = np.argmax(log_gamma[:,np.sum(kwargs["sample_length"][:c]):np.sum(kwargs["sample_length"][:(c+1)])], axis=0)%n_states
-                            mu.append( np.exp(new_log_mu[this_pred_cnv,:]) / np.sum(np.exp(new_log_mu[this_pred_cnv,:]) * kwargs["lambd"].reshape(-1,1), axis=0, keepdims=True) )
-                        mu = np.vstack(mu)
-                        weighted_tp = (tumor_prop * mu) / (tumor_prop * mu + 1 - tumor_prop)
-                    else:
-                        weighted_tp = tumor_prop
-                    new_p_binom, new_taus = update_emission_params_bb_nophasing_uniqvalues_mix(unique_values_bb, mapping_matrices_bb, log_gamma, taus, weighted_tp, start_p_binom=p_binom, \
+                    new_p_binom, new_taus = update_emission_params_bb_nophasing_uniqvalues_mix(unique_values_bb, mapping_matrices_bb, log_gamma, taus, tumor_prop, start_p_binom=p_binom, \
                         fix_BB_dispersion=fix_BB_dispersion, shared_BB_dispersion=shared_BB_dispersion)
             else:
                 new_p_binom = p_binom
