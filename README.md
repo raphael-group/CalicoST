@@ -11,6 +11,18 @@ CalicoST is a probabilistic model that infers allele-specific copy number aberra
 4. Handles normal cell admixture in SRT technologies hat are not single-cell resolution (e.g. 10x Genomics Visium) to infer more accurate allele-specific copy numbers and cancer clones.
 5.  Simultaneously analyzes multiple regional or aligned SRT slices from the same tumor.
 
+# Installation
+First setup a conda environment from the `environment.yml` file:
+```
+cd CalicoST
+conda env create -f environment.yml
+```
+
+Then install CalicoST using pip by
+```
+conda activate calicost_env
+pip install -e .
+```
 
 # Getting started
 With the input data paths and running configurations specified in `config.yaml`, you can run CalicoST by
@@ -19,3 +31,21 @@ snakemake --cores <number threads> --configfile config.yaml --snakefile calicost
 ```
 
 # Software dependencies
+CalicoST uses the following command-line packages and python for extracting the BAF information
+* samtools
+* cellsnp-lite
+* Eagle2
+* pysam
+CalicoST uses the following python packages for the remaining steps to infer allele-specific copy numbers and cancer clones:
+* numpy
+* scipy
+* pandas
+* scikit-learn
+* scanpy
+* anndata
+* numba
+* tqdm
+* statsmodels
+* networkx
+* matplotlib
+* seaborn
