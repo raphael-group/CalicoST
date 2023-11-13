@@ -10,7 +10,66 @@ from matplotlib import pyplot as plt
 import networkx as nx
 import itertools
 from collections import deque
-from utils_hmrf import *
+import argparse
+
+
+def get_LoH_for_phylogeny(df_seglevel_cnv, min_segments):
+    """
+    Treating LoH as irreversible point mutations, output a clone-by-mutation matrix for phylogeny reconstruction.
+    Mutation states: 0 for no LoH, 1 for lossing A allele, 2 for lossing B allele.
+
+    Attributes
+    ----------
+    df_seglevel_cnv : pd.DataFrame, (n_obs, 3+2*n_clones)
+        Dataframe from cnv_*seglevel.tsv output.
+
+    Returns
+    ----------
+    df_loh : pd.DataFrame, (n_clones, n_segments)
+    """
+    def get_shared_intervals(acn_profile):
+        '''
+        Takes in allele-specific copy numbers, output a segmentation of genome such that all clones are in the same CN state within each segment.
+
+        anc_profile : array, (n_obs, 2*n_clones)
+            Allele-specific integer copy numbers for each genomic bin (obs) across all clones.
+        '''
+        intervals = []
+        seg_acn = []
+        s = 0
+        while s < acn_profile.shape[0]:
+            t = np.where( ~np.all(acn_profile[s:,] == acn_profile[s,:], axis=1) )[0]
+            if len(t) == 0:
+                intervals.append( (s, acn_profile.shape[0])  )
+                seg_acn.append( acn_profile[s,:] )
+                s = acn_profile.shape[0]
+            else:
+                t = t[0]
+                intervals.append( (s,s+t) )
+                seg_acn.append( acn_profile[s,:] )
+                s = s+t
+        return intervals, seg_acn
+    
+    clone_ids = [x.split(" ")[0] for x in df_seglevel_cnv.columns[ np.arange(3, df_seglevel_cnv.shape[1], 2) ] ]
+    
+    acn_profile = df_seglevel_cnv.iloc[:,3:].values
+    intervals, seg_acn = get_shared_intervals(acn_profile)
+    df_loh = []
+    for i, acn in enumerate(seg_acn):
+        if np.all(acn != 0):
+            continue
+        if intervals[i][1] - intervals[i][0] < min_segments:
+            continue
+        idx_zero = np.where(acn == 0)[0]
+        idx_clones = (idx_zero / 2).astype(int)
+        is_A = (idx_zero % 2 == 0)
+        # vector of mutation states
+        mut = np.zeros( int(len(acn) / 2), dtype=int )
+        mut[idx_clones] = np.where(is_A, 1, 2)
+        df_loh.append( pd.DataFrame(mut.reshape(1, -1), index=[f"bin_{intervals[i][0]}_{intervals[i][1]}"], columns=clone_ids) )
+
+    df_loh = pd.concat(df_loh).T
+    return df_loh
 
 
 def get_binary_matrix(df_character_matrix):
@@ -82,11 +141,11 @@ def tree_to_newick(T, root=None):
     return "(" + ','.join(map(str, subgs)) + ")"
 
 
-def output_startle_input_files(calicostdir, outdir, midfix="", startle_bin="startle"):
+def output_startle_input_files(calicostdir, outdir, midfix="", startle_bin="startle", min_segments=3):
     # get LoH data frame
     # rows are clones, columns are bins, entries are 0 (no LoH) or 1 (A allele LoH) of 2 (B allele LoH)
     df_seglevel_cnv = pd.read_csv(f"{calicostdir}/cnv{midfix}_seglevel.tsv", header=0, sep="\t")
-    df_loh = get_LoH_for_phylogeny(df_seglevel_cnv, min_num_bins=3)
+    df_loh = get_LoH_for_phylogeny(df_seglevel_cnv, min_segments)
     df_loh.to_csv(f"{outdir}/loh_matrix.tsv", header=True, index=True, sep="\t")
     
     # binarize
@@ -159,3 +218,15 @@ def output_startle_input_files(calicostdir, outdir, midfix="", startle_bin="star
     solT_mut, solT_cell = generate_perfect_phylogeny(df_sol_binary)
     with open(f'{outdir}/loh_tree.newick', 'w') as out:
         out.write(f"{tree_to_newick(solT_cell)};")
+
+
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser()
+    parser.add_argument("-c", "--calicost_dir", help="Directory of a specific random initialization of CalicoST", type=str)
+    parser.add_argument("-s", "--startle_bin", help="The startle executable path", type=str)
+    parser.add_argument("-p", "--ploidy", help="Ploidy of allele-specific integer copy numbers.", default="", type=str)
+    parser.add_argument("--min_segments", help="Minimum number of genome segment to keep an LOH event in phylogenetic tree reconstruction.", default="", type=int)
+    parser.add_argument("-o", "--outputdir", help="output directory", type=str)
+    args = parser.parse_args()
+
+    output_startle_input_files(args.calicost_dir, args.outputdir, midfix=args.ploidy, startle_bin=args.startle_bin)
