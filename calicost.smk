@@ -34,7 +34,7 @@ rule link_or_merge_bam:
             df_entries = pd.read_csv(config["bamlist"], sep='\t', index_col=None, header=0)
             df_barcodes = []
             for i in range(df_entries.shape[0]):
-                tmpdf = pd.read_csv(f"{df_entries.iloc[i,0]}/filtered_feature_bc_matrix/barcodes.tsv.gz", header=None, index_col=None)
+                tmpdf = pd.read_csv(f"{df_entries.iloc[i,2]}/filtered_feature_bc_matrix/barcodes.tsv.gz", header=None, index_col=None)
                 tmpdf.iloc[:,0] = [f"{x}_{df_entries.iloc[i,1]}" for x in tmpdf.iloc[:,0]]
                 df_barcodes.append( tmpdf )
             df_barcodes = pd.concat(df_barcodes, ignore_index=True)

@@ -32,7 +32,7 @@ snakemake --cores <number threads> --configfile config.yaml --snakefile calicost
 
 # Run on a simulated example data
 ### Download data
-The simulated count matrices can be downloaded from the google drive.
+The simulated count matrices can be downloaded from the [google drive](https://drive.google.com/drive/folders/19ZzfhyjKdEPTrQ7kh_HE6QvNfhmx4ng6?usp=drive_link).
 CalicoST requires a reference SNP panel and phasing panel, which can be downloaded from
 * [SNP panel](https://sourceforge.net/projects/cellsnp/files/SNPlist/genome1K.phase3.SNP_AF5e4.chr1toX.hg38.vcf.gz/download). You can also choose other SNP panels from [cellsnp-lite webpage](https://cellsnp-lite.readthedocs.io/en/latest/snp_list.html).
 * [Phasing panel](http://pklab.med.harvard.edu/teng/data/1000G_hg38.zip)
@@ -45,12 +45,28 @@ Replace the following paths in the `config.yaml` file from the downloaded google
 * phasing_panel: the path to the downloaded and unzipped phasing panel.
 * hgtable_file, filtergenelist_file, filterregion_file, outputdir: the path to the corresponding files in the downloaded google drive folder.
 
+To avoid falling into local maxima in CalicoST's optimization objective, we recommend run CalicoST with multiple random initializations with a list random seed specified by `random_state` in the `config.yaml` file. The provided one uses five random initializations.
+
 Then run CalicoST by
 ```
 snakemake --cores 5 --configfile config.yaml --snakefile <calicost_dir>/calicost.smk all
 ```
 
 ### Understanding the output
+Each random initialization of CalicoST generates a folder of `<outputdir>/<output_foldername>/clone*`. 
+
+CalicoST graphs the following plots for visualizing the inferred cancer clones in space and allele-specific copy number profiles for each random initialization.
+* plots/clone_spatial.pdf: The spatial distribution of inferred cancer clones and normal regions (grey color, clone 0 by default)
+* plots/rdr_baf_defaultcolor.pdf: The read depth ratio (RDR) and B allele frequency (BAF) along the genome for each clone. Higher RDR indicates higher total copy numbers, and a deviation-from-0.5 BAF indicates allele imbalance due to allele-specific CNAs.
+* plots/acn_genome.pdf: The default allele-specific copy numbers along the genome.
+* plots/acn_genome_diploid.pdf, plots/acn_genome_triploid.pdf, plots/acn_genome_tetraploid.pdf: Allele-specific copy numbers when enforcing a ploidy.
+
+The allele-specific copy number plots have the following color legend.
+<p align="center">
+<img src="https://github.com/raphael-group/CalicoST/blob/main/docs/_static/img/acn_color_palette.png?raw=true" width="20%" height="auto"/>
+</p>
+
+
 
 
 
