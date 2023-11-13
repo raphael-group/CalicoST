@@ -30,12 +30,37 @@ With the input data paths and running configurations specified in `config.yaml`,
 snakemake --cores <number threads> --configfile config.yaml --snakefile calicost.smk all
 ```
 
+# Run on a simulated example data
+### Download data
+The simulated count matrices can be downloaded from the google drive.
+CalicoST requires a reference SNP panel and phasing panel, which can be downloaded from
+* [SNP panel](https://sourceforge.net/projects/cellsnp/files/SNPlist/genome1K.phase3.SNP_AF5e4.chr1toX.hg38.vcf.gz/download). You can also choose other SNP panels from [cellsnp-lite webpage](https://cellsnp-lite.readthedocs.io/en/latest/snp_list.html).
+* [Phasing panel](http://pklab.med.harvard.edu/teng/data/1000G_hg38.zip)
+
+### Run CalicoST
+Replace the following paths in the `config.yaml` file from the downloaded google drive with the downloaded files on your machine
+* calicost_dir: the path to CalicoST git-cloned code.
+* eagledir: the path to Eagle2 directory
+* region_vcf: the path to the downloaded SNP panel.
+* phasing_panel: the path to the downloaded and unzipped phasing panel.
+* hgtable_file, filtergenelist_file, filterregion_file, outputdir: the path to the corresponding files in the downloaded google drive folder.
+
+Then run CalicoST by
+```
+snakemake --cores 5 --configfile config.yaml --snakefile <calicost_dir>/calicost.smk all
+```
+
+### Understanding the output
+
+
+
 # Software dependencies
 CalicoST uses the following command-line packages and python for extracting the BAF information
 * samtools
 * cellsnp-lite
 * Eagle2
 * pysam
+
 CalicoST uses the following python packages for the remaining steps to infer allele-specific copy numbers and cancer clones:
 * numpy
 * scipy

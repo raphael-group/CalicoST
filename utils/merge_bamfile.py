@@ -4,6 +4,7 @@ import sys
 import pysam
 import pandas as pd
 import subprocess
+import argparse
 
 
 def write_merged_bam(input_bamfile_list, suffix_list, output_bam):
@@ -34,34 +35,32 @@ def write_merged_deconvolution(input_deconvfile_list, suffix_list, output_deconv
 
 
 if __name__ == "__main__":
-    if len(sys.argv) == 1:
-        print("python merge_bamfile.py <mode> <filename_table> <output_dir>")
-        print("\tmode: either 'BAM' or 'deconv' for merging BAM files or deconvolution files respectively")
+    parser = argparse.ArgumentParser()
+    parser.add_argument("-b", "--bamlistfile", help="cellsnplite result directory", type=str)
+    parser.add_argument("-o", "--output_dir", help="output directory", type=str)
+    args = parser.parse_args()
+
+    df = pd.read_csv(args.bamlistfile, sep="\t", header=None, index_col=None)
+    if df.shape[1] == 3:
+        df.columns=["bamfilename", "suffix", "cellrangerdir"]
     else:
-        mode = sys.argv[1]
-        output_dir = sys.argv[3]
-        df = pd.read_csv(sys.argv[2], sep="\t", header=None, index_col=None)
-        if df.shape[1] == 3:
-            df.columns=["bamfilename", "suffix", "cellrangerdir"]
-        else:
-            df.columns=["bamfilename", "suffix", "cellrangerdir", "deconv_filename"]
+        df.columns=["bamfilename", "suffix", "cellrangerdir", "deconv_filename"]
 
-        if mode == "BAM":
-            input_bamfile_list = df.bamfilename.values
-            suffix_list = df.suffix.values
-            write_merged_bam(input_bamfile_list, suffix_list, f"{output_dir}/unsorted_possorted_genome_bam.bam")
+    input_bamfile_list = df.bamfilename.values
+    suffix_list = df.suffix.values
+    write_merged_bam(input_bamfile_list, suffix_list, f"{args.output_dir}/unsorted_possorted_genome_bam.bam")
 
-            # samtools sort BAM file by genomic coordinate
-            p = subprocess.Popen(f"samtools sort -o {output_dir}/possorted_genome_bam.bam {output_dir}/unsorted_possorted_genome_bam.bam", stdout=subprocess.PIPE, stderr=subprocess.PIPE, shell=True)
-            out,err = p.communicate()
+    # samtools sort BAM file by genomic coordinate
+    p = subprocess.Popen(f"samtools sort -o {args.output_dir}/possorted_genome_bam.bam {args.output_dir}/unsorted_possorted_genome_bam.bam", stdout=subprocess.PIPE, stderr=subprocess.PIPE, shell=True)
+    out,err = p.communicate()
 
-            # index sorted BAM file
-            p = subprocess.Popen(f"samtools index {output_dir}/possorted_genome_bam.bam", stdout=subprocess.PIPE, stderr=subprocess.PIPE, shell=True)
-            out,err = p.communicate()
+    # index sorted BAM file
+    p = subprocess.Popen(f"samtools index {args.output_dir}/possorted_genome_bam.bam", stdout=subprocess.PIPE, stderr=subprocess.PIPE, shell=True)
+    out,err = p.communicate()
 
-        elif mode == "deconv":
-            # merge deconvolution file
-            assert "deconv_filename" in df.columns
-            input_deconvfile_list = df.deconv_filename.values
-            suffix_list = df.suffix.values
-            write_merged_deconvolution(input_deconvfile_list, suffix_list, f"{output_dir}/merged_deconvolution.tsv")
+    if df.shape[1] == 4:
+        # merge deconvolution file
+        assert "deconv_filename" in df.columns
+        input_deconvfile_list = df.deconv_filename.values
+        suffix_list = df.suffix.values
+        write_merged_deconvolution(input_deconvfile_list, suffix_list, f"{args.output_dir}/merged_deconvolution.tsv")
