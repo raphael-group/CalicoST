@@ -14,11 +14,10 @@ import seaborn
 from matplotlib.lines import Line2D
 import matplotlib.patches as mpatches
 
-from utils_IO import *
-from utils_phase_switch import *
-from hmrf import *
-from allele_starch import *
-from joint_allele_starch import *
+from calicost.utils_IO import *
+from calicost.utils_phase_switch import *
+from calicost.hmrf import *
+from calicost.arg_parse import *
 
 
 def get_full_palette():

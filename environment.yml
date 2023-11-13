@@ -16,6 +16,7 @@ dependencies:
   - archspec=0.2.2=pyhd8ed1ab_0
   - arpack=3.8.0=nompi_h0baa96a_101
   - array-api-compat=1.4=pyhd8ed1ab_0
+  - asttokens=2.4.1=pyhd8ed1ab_0
   - async-timeout=4.0.3=pyhd8ed1ab_0
   - attmap=0.13.2=pyhd8ed1ab_0
   - attr=2.5.1=h166bdaf_1
@@ -48,6 +49,7 @@ dependencies:
   - coin-or-utils=2.11.9=hee58242_0
   - coincbc=2.10.10=0_metapackage
   - colorama=0.4.6=pyhd8ed1ab_0
+  - comm=0.1.4=pyhd8ed1ab_0
   - conda=23.10.0=py310hff52083_1
   - conda-libmamba-solver=23.11.0=pyhd8ed1ab_0
   - conda-package-handling=2.2.0=pyh38be061_0
@@ -59,12 +61,15 @@ dependencies:
   - cycler=0.12.1=pyhd8ed1ab_0
   - datrie=0.8.2=py310h2372a71_7
   - dbus=1.13.6=h5008d03_3
+  - debugpy=1.8.0=py310hc6cd4ac_1
+  - decorator=5.1.1=pyhd8ed1ab_0
   - defusedxml=0.7.1=pyhd8ed1ab_0
   - docutils=0.20.1=py310hff52083_2
   - dpath=2.1.6=pyha770c72_0
   - dropbox=11.36.2=pyhd8ed1ab_0
   - eido=0.2.1=pyhd8ed1ab_0
   - exceptiongroup=1.1.3=pyhd8ed1ab_0
+  - executing=2.0.1=pyhd8ed1ab_0
   - expat=2.5.0=hcb278e6_1
   - filechunkio=1.8=py_2
   - fmt=10.1.1=h00ab1b0_0
@@ -110,8 +115,13 @@ dependencies:
   - icu=73.2=h59595ed_0
   - idna=3.4=pyhd8ed1ab_0
   - igraph=0.10.7=h66a01bf_1
+  - importlib-metadata=6.8.0=pyha770c72_0
+  - importlib_metadata=6.8.0=hd8ed1ab_0
   - importlib_resources=6.1.1=pyhd8ed1ab_0
   - iniconfig=2.0.0=pyhd8ed1ab_0
+  - ipykernel=6.26.0=pyhf8b6a83_0
+  - ipython=8.17.2=pyh41d4057_0
+  - jedi=0.19.1=pyhd8ed1ab_0
   - jinja2=3.1.2=pyhd8ed1ab_1
   - jmespath=1.0.1=pyhd8ed1ab_0
   - joblib=1.3.2=pyhd8ed1ab_0
@@ -119,6 +129,7 @@ dependencies:
   - jsonpointer=2.4=py310hff52083_3
   - jsonschema=4.19.2=pyhd8ed1ab_0
   - jsonschema-specifications=2023.7.1=pyhd8ed1ab_0
+  - jupyter_client=8.6.0=pyhd8ed1ab_0
   - jupyter_core=5.5.0=py310hff52083_0
   - keyutils=1.6.1=h166bdaf_0
   - kiwisolver=1.4.5=py310hd41b1e2_1
@@ -200,6 +211,7 @@ dependencies:
   - markupsafe=2.1.3=py310h2372a71_1
   - matplotlib=3.8.1=py310hff52083_0
   - matplotlib-base=3.8.1=py310h62c0568_0
+  - matplotlib-inline=0.1.6=pyhd8ed1ab_0
   - mdurl=0.1.0=pyhd8ed1ab_0
   - mpg123=1.32.3=h59595ed_0
   - multidict=6.0.4=py310h2372a71_1
@@ -209,6 +221,7 @@ dependencies:
   - natsort=8.4.0=pyhd8ed1ab_0
   - nbformat=5.9.2=pyhd8ed1ab_0
   - ncurses=6.4=h59595ed_2
+  - nest-asyncio=1.5.8=pyhd8ed1ab_0
   - networkx=3.2.1=pyhd8ed1ab_0
   - nspr=4.35=h27087fc_0
   - nss=3.94=h1d7d5a4_0
@@ -220,10 +233,13 @@ dependencies:
   - packaging=23.2=pyhd8ed1ab_0
   - pandas=2.1.1=py310hcc13569_1
   - paramiko=3.3.1=pyhd8ed1ab_0
+  - parso=0.8.3=pyhd8ed1ab_0
   - patsy=0.5.3=pyhd8ed1ab_0
   - pcre2=10.40=hc3806b6_0
   - peppy=0.35.7=pyhd8ed1ab_0
   - perl=5.32.1=4_hd590300_perl5
+  - pexpect=4.8.0=pyh1a96a4e_2
+  - pickleshare=0.7.5=py_1003
   - pillow=10.1.0=py310h01dd4db_0
   - pip=23.3.1=pyhd8ed1ab_0
   - pixman=0.42.2=h59595ed_0
@@ -233,11 +249,15 @@ dependencies:
   - pluggy=1.3.0=pyhd8ed1ab_0
   - ply=3.11=py_1
   - prettytable=3.9.0=pyhd8ed1ab_0
+  - prompt-toolkit=3.0.39=pyha770c72_0
+  - prompt_toolkit=3.0.39=hd8ed1ab_0
   - protobuf=4.24.4=py310h620c231_0
   - psutil=5.9.5=py310h2372a71_1
   - pthread-stubs=0.4=h36c2ea0_1001
+  - ptyprocess=0.7.0=pyhd3deb0d_0
   - pulp=2.7.0=py310hff52083_1
   - pulseaudio-client=16.1=hb77b528_5
+  - pure_eval=0.2.2=pyhd8ed1ab_0
   - pyasn1=0.5.0=pyhd8ed1ab_0
   - pyasn1-modules=0.3.0=pyhd8ed1ab_0
   - pybind11-abi=4=hd8ed1ab_3
@@ -263,6 +283,7 @@ dependencies:
   - pytz=2023.3.post1=pyhd8ed1ab_0
   - pyu2f=0.1.5=pyhd8ed1ab_0
   - pyyaml=6.0.1=py310h2372a71_1
+  - pyzmq=25.1.1=py310h795f18f_2
   - qt-main=5.15.8=h82b777d_17
   - re2=2023.06.02=h2873b5e_0
   - readline=8.2=h8228510_1
@@ -293,6 +314,7 @@ dependencies:
   - smmap=5.0.0=pyhd8ed1ab_0
   - snakemake=7.32.4=hdfd78af_1
   - snakemake-minimal=7.32.4=pyhdfd78af_1
+  - stack_data=0.6.2=pyhd8ed1ab_0
   - statsmodels=0.14.0=py310h1f7b6fc_2
   - stdlib-list=0.8.0=pyhd8ed1ab_0
   - stone=3.3.1=pyhd8ed1ab_0
@@ -344,6 +366,7 @@ dependencies:
   - yaml-cpp=0.8.0=h59595ed_0
   - yarl=1.9.2=py310h2372a71_1
   - yte=1.5.1=pyha770c72_2
+  - zeromq=4.3.5=h59595ed_0
   - zipp=3.17.0=pyhd8ed1ab_0
   - zlib=1.2.13=hd590300_5
   - zstandard=0.22.0=py310h1275a96_0

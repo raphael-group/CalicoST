@@ -13,10 +13,10 @@ import networkx as nx
 from tqdm import trange
 import copy
 from pathlib import Path
-from hmm_NB_BB_phaseswitch import *
-from utils_distribution_fitting import *
-from utils_IO import *
-from utils_hmrf import *
+from calicost.hmm_NB_BB_phaseswitch import *
+from calicost.utils_distribution_fitting import *
+from calicost.utils_IO import *
+from calicost.utils_hmrf import *
 
 import warnings
 from statsmodels.tools.sm_exceptions import ValueWarning
