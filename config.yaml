@@ -27,6 +27,7 @@ hgtable_file: "/u/congma/ragr-data/users/congma/Codes/STARCH_crazydev/hgTables_h
 filtergenelist_file: "/n/fs/ragr-data/users/congma/references/cellranger_refdata-gex-GRCh38-2020-A/genes/ig_gene_list.txt"
 filterregion_file: "/n/fs/ragr-data/users/congma/references/cellranger_refdata-gex-GRCh38-2020-A/genes/HLA_regions.bed"
 tumorprop_file: "/u/congma/ragr-data/datasets/DingLab/HT112/HT112C1-T1_U1/ht112_u1_rctd_prop.tsv"
+np_threshold: 1.0
 
 # output
 outputdir: "/u/congma/ragr-data/users/congma/Datasets/test_calico"

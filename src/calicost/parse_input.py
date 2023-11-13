@@ -115,10 +115,11 @@ def parse_visium(config):
         
     # remove bins where normal spots have imbalanced SNPs
     if not config["tumorprop_file"] is None:
-        # index_normal = np.where(single_tumor_prop < 0.01)[0]
-        index_normal = np.argsort(single_tumor_prop)[:100]
+        index_normal = np.where(single_tumor_prop < 0.01)[0]
+        if len(index_normal) < 100:
+            index_normal = np.argsort(single_tumor_prop)[:100]
         lengths, single_X, single_base_nb_mean, single_total_bb_RD, log_sitewise_transmat, df_gene_snp = bin_selection_basedon_normal(df_gene_snp, \
-                single_X, single_base_nb_mean, single_total_bb_RD, config["nu"], config["logphase_shift"], index_normal)
+                single_X, single_base_nb_mean, single_total_bb_RD, config["nu"], config["logphase_shift"], index_normal, config['geneticmap_file'])
         assert np.sum(lengths) == single_X.shape[0] 
         assert single_X.shape[0] == single_total_bb_RD.shape[0]
         assert single_X.shape[0] == len(log_sitewise_transmat)
@@ -271,5 +272,5 @@ if __name__ == "__main__":
     print("Configurations:")
     for k in sorted(list(config.keys())):
         print(f"\t{k} : {config[k]}")
-        
+
     _ = run_parse_n_load(config)

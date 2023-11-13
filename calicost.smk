@@ -7,8 +7,8 @@ import calicost.parse_input
 
 rule all:
     input:
-        # expand(f"{config['outputdir']}/{config['output_foldername']}" + "/configfile{r}", r=config['random_state']),
-        f"{config['outputdir']}/{config['output_foldername']}/parsed_inputs/table_bininfo.csv.gz"
+        f"{config['outputdir']}/{config['output_foldername']}/parsed_inputs/table_bininfo.csv.gz",
+        expand(f"{config['outputdir']}/{config['output_foldername']}/summary{{r}}", r=config['random_state'])
 
 
 rule link_or_merge_bam:
@@ -120,7 +120,6 @@ rule parse_final_snp:
     output:
         "{outputdir}/snpinfo/cell_snp_Aallele.npz",
         "{outputdir}/snpinfo/cell_snp_Ballele.npz",
-        "{outputdir}/snpinfo/snp_gene_list.npy",
         "{outputdir}/snpinfo/unique_snp_ids.npy"
     params:
         outputdir="{outputdir}",
@@ -130,7 +129,7 @@ rule parse_final_snp:
     run:
         command = f"python {config['calicost_dir']}/utils/get_snp_matrix.py " + \
             f"-c {params.outputdir}/snpinfo/genotyping -e {params.outputdir}/snpinfo/phasing -b {params.outputdir}/snpinfo/barcodes.txt -o {params.outputdir}/snpinfo/ >> {log} 2>&1"
-        print( command )
+        shell( command )
 
 
 rule write_calicost_configfile:
@@ -184,29 +183,28 @@ rule prepare_calicost_data:
     log:
         "{outputdir}/logs/prepare_calicost_data.log"
     run:
-        command = f"python {config['calicost_dir']}/src/calicost/parse_input.py -c {input[0]} >> {log} 2>&1"
-        print( command )
-        # try:
-        #     calicost_config = calicost.arg_parse.read_configuration_file(input[0])
-        # except:
-        #     calicost_config = calicost.arg_parse.read_joint_configuration_file(input[0])
-        # _ = calicost.parse_input.run_parse_n_load(calicost_config)
+        command = f"OMP_NUM_THREADS=1 python {config['calicost_dir']}/src/calicost/parse_input.py -c {input[0]} >> {log} 2>&1"
+        shell(command)
 
 
-# rule run_calicost:
-#     input:
-#         f"{{outputdir}}/{config['output_foldername']}/configfile{{r}}",
-#         f"{{outputdir}}/{config['output_foldername']}/parsed_inputs/table_bininfo.csv.gz",
-#         f"{{outputdir}}/{config['output_foldername']}/parsed_inputs/table_rdrbaf.csv.gz",
-#         f"{{outputdir}}/{config['output_foldername']}/parsed_inputs/table_meta.csv.gz",
-#         f"{{outputdir}}/{config['output_foldername']}/parsed_inputs/exp_counts.pkl",
-#         f"{{outputdir}}/{config['output_foldername']}/parsed_inputs/adjacency_mat.npz",
-#         f"{{outputdir}}/{config['output_foldername']}/parsed_inputs/smooth_mat.npz"
-#     output:
-#         f"{{outputdir}}/{config['output_foldername']}/summary{{r}}",
-#     params:
-#         outputdir="{outputdir}",
-#         r="{r}"
-#     threads: 1
-#     run:
-
+rule run_calicost:
+    input:
+        f"{{outputdir}}/{config['output_foldername']}/configfile{{r}}",
+        f"{{outputdir}}/{config['output_foldername']}/parsed_inputs/table_bininfo.csv.gz",
+        f"{{outputdir}}/{config['output_foldername']}/parsed_inputs/table_rdrbaf.csv.gz",
+        f"{{outputdir}}/{config['output_foldername']}/parsed_inputs/table_meta.csv.gz",
+        f"{{outputdir}}/{config['output_foldername']}/parsed_inputs/exp_counts.pkl",
+        f"{{outputdir}}/{config['output_foldername']}/parsed_inputs/adjacency_mat.npz",
+        f"{{outputdir}}/{config['output_foldername']}/parsed_inputs/smooth_mat.npz"
+    output:
+        f"{{outputdir}}/{config['output_foldername']}/summary{{r}}",
+    params:
+        outputdir="{outputdir}",
+        r="{r}"
+    threads: 1
+    log:
+        "{outputdir}/logs/calicost_run_{r}.log"
+    run:
+        command = f"OMP_NUM_THREADS=1 python {config['calicost_dir']}/src/calicost/calicost_main.py -c {input[0]} >> {log} 2>&1"
+        shell(command)
+        shell(f"echo {command} > {output}")

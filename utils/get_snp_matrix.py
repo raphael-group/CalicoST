@@ -72,8 +72,10 @@ def cell_by_gene_lefthap_counts(cellsnp_folder, eagle_folder, barcode_list):
         assert len(fname) > 0
         fname = fname[0]
         tmpdf = pd.read_table(fname, compression = 'gzip', comment = '#', sep="\t", names=["CHR","POS","ID","REF","ALT","QUAL","FILTER","INFO","FORMAT","PHASE"])
-        this_snp_ids = [ "{}_{}_{}_{}".format(c, row.POS, row.REF, row.ALT) for i,row in tmpdf.iterrows() ]
-        this_gt = list(tmpdf.iloc[:,-1])
+        # only keep heterozygous SNPs
+        tmpdf = tmpdf[ (tmpdf.PHASE=="0|1") | (tmpdf.PHASE=="1|0") ]
+        this_snp_ids = (str(c) + "_" + tmpdf.POS.astype(str) +"_"+  tmpdf.REF +"_"+ tmpdf.ALT).values
+        this_gt = tmpdf.PHASE.values
         assert len(this_snp_ids) == len(this_gt)
         snp_gt_map.update( {this_snp_ids[i]:this_gt[i] for i in range(len(this_gt))} )
 
