@@ -25,7 +25,7 @@ rule link_or_merge_bam:
     run:
         if "bamlist" in config:
             # merged BAM file
-            shell(f"python {config['calicost_dir']}/utils/merge_bamfile.py BAM {config['bamlist']} {params.outputdir}/ >> {log} 2>&1")
+            shell(f"python {config['calicost_dir']}/utils/merge_bamfile.py -b {config['bamlist']} -o {params.outputdir}/ >> {log} 2>&1")
             shell(f"{config['samtools']} sort -m {params.samtools_sorting_mem} -o {output.bam} {params.outputdir}/unsorted_possorted_genome_bam.bam >> {log} 2>&1")
             shell(f"{config['samtools']} index {output.bam}")
             shell(f"rm -fr {params.outputdir}/unsorted_possorted_genome_bam.bam")
@@ -141,11 +141,10 @@ rule write_calicost_configfile:
         outputdir="{outputdir}",
     threads: 1
     run:
-        template_configuration_file = f"{config['calicost_dir']}/resources/template_configfile_single" if not ("bamlist" in config) else f"{config['calicost_dir']}/resources/template_configfile_joint"
-        try:
-            calicost_config = calicost.arg_parse.read_configuration_file(template_configuration_file)
-        except:
-            calicost_config = calicost.arg_parse.read_joint_configuration_file(template_configuration_file)
+        if "bamlist" in config:
+            calicost_config = calicost.arg_parse.get_default_config_joint()
+        else:
+            calicost_config = calicost.arg_parse.get_default_config_single()
         
         # update input
         calicost_config['snp_dir'] = f"{params.outputdir}/snpinfo/"

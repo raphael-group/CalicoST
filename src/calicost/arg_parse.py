@@ -29,9 +29,9 @@ def load_default_config():
         "secondary_min_umi" : 300,
         "bafonly" : False,
         # phase switch probability
-        "nu" : 1,
-        "logphase_shift" : 1,
-        "npart_phasing" : 2,
+        "nu" : 1.0,
+        "logphase_shift" : -1.0,
+        "npart_phasing" : 3,
         # HMRF configurations
         "n_clones" : None,
         "n_clones_rdr" : 2,
@@ -49,8 +49,8 @@ def load_default_config():
         "construct_adjacency_w" : 1.0,
         # HMM configurations
         "n_states" : None,
-        "params" : None,
-        "t" : None,
+        "params" : "smp",
+        "t" : 1-1e-5,
         "t_phaseing" : 1-1e-4,
         "fix_NB_dispersion" : False,
         "shared_NB_dispersion" : True,
@@ -59,7 +59,7 @@ def load_default_config():
         "max_iter" : 30,
         "tol" : 1e-3,
         "gmm_random_state" : 0,
-        "np_threshold" : 2.0,
+        "np_threshold" : 1.0,
         "np_eventminlen" : 10,
         # integer copy number
         "nonbalance_bafdist" : 1.0,
@@ -228,30 +228,17 @@ def write_config_file(outputfilename, config):
                         fp.write(f"{k} : {config[k]}\n")
             fp.write("\n")
 
-    # with open(outputfilename, 'w') as fp:
-    #     #
-    #     for k in list_argument_io:
-    #         fp.write(f"{k} : {config[k]}\n")
-    #     #
-    #     fp.write("\n")
-    #     fp.write("# supporting files and preprocessing arguments\n")
-    #     for k in list_argument_sup:
-    #         fp.write(f"{k} : {config[k]}\n")
-    #     #
-    #     fp.write("\n")
-    #     fp.write("# phase switch probability\n")
-    #     for k in list_argument_phase:
-    #         fp.write(f"{k} : {config[k]}\n")
-    #     #
-    #     fp.write("\n")
-    #     fp.write("# HMRF configurations\n")
-    #     for k in list_argument_hmrf:
-    #         fp.write(f"{k} : {config[k]}\n")
-    #     #
-    #     fp.write("\n")
-    #     fp.write("# HMM configurations\n")
-    #     for k in list_argument_hmm:
-    #         fp.write(f"{k} : {config[k]}\n")
+
+def get_default_config_single():
+    config_shared, config_joint, config_single, argtype_shared, argtype_joint, argtype_single, _, _ = load_default_config()
+    config = {**config_shared, **config_single}
+    return config
+
+
+def get_default_config_joint():
+    config_shared, config_joint, config_single, argtype_shared, argtype_joint, argtype_single, _, _ = load_default_config()
+    config = {**config_shared, **config_joint}
+    return config
 
 
 def main(argv):
