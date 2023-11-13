@@ -15,10 +15,18 @@ CalicoST is a probabilistic model that infers allele-specific copy number aberra
 First setup a conda environment from the `environment.yml` file:
 ```
 cd CalicoST
-conda env create -f environment.yml
+conda config --add channels conda-forge
+conda config --add channels bioconda
+conda env create -f environment.yml --name calicost_env
 ```
 
-Then install CalicoST using pip by
+Then download Eagle2 by
+```
+wget https://storage.googleapis.com/broad-alkesgroup-public/Eagle/downloads/Eagle_v2.4.1.tar.gz
+tar -xzf Eagle_v2.4.1.tar.gz
+```
+
+Finally, install CalicoST using pip by
 ```
 conda activate calicost_env
 pip install -e .
@@ -44,6 +52,8 @@ Replace the following paths in the `config.yaml` file from the downloaded google
 * region_vcf: the path to the downloaded SNP panel.
 * phasing_panel: the path to the downloaded and unzipped phasing panel.
 * hgtable_file, filtergenelist_file, filterregion_file, outputdir: the path to the corresponding files in the downloaded google drive folder.
+
+NOTE: You should set the outputdir the same as the downloaded google drive folder to run on this specific example.
 
 To avoid falling into local maxima in CalicoST's optimization objective, we recommend run CalicoST with multiple random initializations with a list random seed specified by `random_state` in the `config.yaml` file. The provided one uses five random initializations.
 
