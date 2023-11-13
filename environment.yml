@@ -374,4 +374,3 @@ dependencies:
   - zstd=1.5.5=hfc55251_0
   - pip:
       - tbb==2021.10.0
-prefix: /u/congma/ragr-data/users/congma/environments/miniconda3/envs/calicost_env
