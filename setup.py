@@ -23,7 +23,8 @@ setuptools.setup(
             'statsmodels',
             'networkx',
             'matplotlib',
-            'seaborn'
+            'seaborn',
+            'pysam'
         ],
         include_package_data=True
 )

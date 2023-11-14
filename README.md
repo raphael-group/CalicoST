@@ -132,8 +132,9 @@ CalicoST uses the following command-line packages and python for extracting the 
 * cellsnp-lite
 * Eagle2
 * pysam
+* snakemake
 
-CalicoST uses the following python packages for the remaining steps to infer allele-specific copy numbers and cancer clones:
+CalicoST uses the following packages for the remaining steps to infer allele-specific copy numbers and cancer clones:
 * numpy
 * scipy
 * pandas
@@ -146,3 +147,4 @@ CalicoST uses the following python packages for the remaining steps to infer all
 * networkx
 * matplotlib
 * seaborn
+* snakemake
