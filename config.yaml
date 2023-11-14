@@ -23,6 +23,7 @@ spaceranger_dir: "/u/congma/ragr-data/datasets/DingLab/HT112/U1/"
 
 # CalicoST parameters
 random_state: [0, 1, 2, 3, 4]
+geneticmap_file: "/u/congma/ragr-data/datasets/genetic_map/recomb-hg38/genetic_map_GRCh38_merged.tab"
 hgtable_file: "/u/congma/ragr-data/users/congma/Codes/STARCH_crazydev/hgTables_hg38_gencode.txt"
 filtergenelist_file: "/n/fs/ragr-data/users/congma/references/cellranger_refdata-gex-GRCh38-2020-A/genes/ig_gene_list.txt"
 filterregion_file: "/n/fs/ragr-data/users/congma/references/cellranger_refdata-gex-GRCh38-2020-A/genes/HLA_regions.bed"
@@ -30,5 +31,5 @@ tumorprop_file: "/u/congma/ragr-data/datasets/DingLab/HT112/HT112C1-T1_U1/ht112_
 np_threshold: 1.0
 
 # output
-outputdir: "/u/congma/ragr-data/users/congma/Datasets/test_calico"
-output_foldername: "calicost"
+output_snpinfo: "/u/congma/ragr-data/users/congma/Datasets/test_calico/snpinfo"
+outputdir_calicost: "/u/congma/ragr-data/users/congma/Datasets/test_calico/calicost"
