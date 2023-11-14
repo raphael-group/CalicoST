@@ -50,14 +50,6 @@ if __name__ == "__main__":
     suffix_list = df.suffix.values
     write_merged_bam(input_bamfile_list, suffix_list, f"{args.output_dir}/unsorted_possorted_genome_bam.bam")
 
-    # samtools sort BAM file by genomic coordinate
-    p = subprocess.Popen(f"samtools sort -o {args.output_dir}/possorted_genome_bam.bam {args.output_dir}/unsorted_possorted_genome_bam.bam", stdout=subprocess.PIPE, stderr=subprocess.PIPE, shell=True)
-    out,err = p.communicate()
-
-    # index sorted BAM file
-    p = subprocess.Popen(f"samtools index {args.output_dir}/possorted_genome_bam.bam", stdout=subprocess.PIPE, stderr=subprocess.PIPE, shell=True)
-    out,err = p.communicate()
-
     if df.shape[1] == 4:
         # merge deconvolution file
         assert "deconv_filename" in df.columns
