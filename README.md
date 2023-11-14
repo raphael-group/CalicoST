@@ -51,28 +51,26 @@ CalicoST requires a reference SNP panel and phasing panel, which can be download
 * [Phasing panel](http://pklab.med.harvard.edu/teng/data/1000G_hg38.zip)
 
 ### Run CalicoST
-Replace the following paths in the `config.yaml` file from the downloaded google drive with the downloaded files on your machine
+Replace the following paths in the `example_config.yamll` file from the downloaded google drive with the downloaded files on your machine
 * calicost_dir: the path to CalicoST git-cloned code.
 * eagledir: the path to Eagle2 directory
 * region_vcf: the path to the downloaded SNP panel.
 * phasing_panel: the path to the downloaded and unzipped phasing panel.
-* spaceranger_dir, geneticmap_file, hgtable_file, filtergenelist_file, filterregion_file, outputdir: the path to the corresponding files in the downloaded google drive folder.
 
-NOTE: You should set the outputdir the same as the downloaded google drive folder to run on this specific example.
-
-To avoid falling into local maxima in CalicoST's optimization objective, we recommend run CalicoST with multiple random initializations with a list random seed specified by `random_state` in the `config.yaml` file. The provided one uses five random initializations.
+To avoid falling into local maxima in CalicoST's optimization objective, we recommend run CalicoST with multiple random initializations with a list random seed specified by `random_state` in the `example_config.yaml` file. The provided one uses five random initializations.
 
 Then run CalicoST by
 ```
-snakemake --cores 5 --configfile config.yaml --snakefile <calicost_dir>/calicost.smk all
+cd <directory of Google drived downloaded files>
+snakemake --cores 5 --configfile example_config.yaml --snakefile <calicost_dir>/calicost.smk all
 ```
 
 CalicoST takes about 69 minutes to finish on this example using 5 cores on an HPC.
 
 ### Understanding the output
-Each random initialization of CalicoST generates a folder of `<outputdir>/<output_foldername>/clone*`. 
+The above snakemake run will create a folder `calicost` in the directory of Google drived downloaded files. Within this folder, each random initialization of CalicoST generates a subdirectory of `calicost/clone*`. 
 
-CalicoST outputs the following key files:
+CalicoST generates the following key files of each random initialization:
 * clone_labels.tsv: The inferred clone labels for each spot.
 * cnv_seglevel.tsv: Allele-specific copy numbers for each clone for each genome segment.
 * cnv_genelevel.tsv: The projected allele-specific copy numbers from genome segments to the covered genes.

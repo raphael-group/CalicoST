@@ -10,6 +10,10 @@ from sklearn.kernel_ridge import KernelRidge
 from sklearn.cluster import KMeans
 import scanpy as sc
 import anndata
+import logging
+logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s", datefmt="%Y-%m-%d %H:%M:%S")
+logger = logging.getLogger()
+
 from calicost.utils_phase_switch import *
 from calicost.utils_distribution_fitting import *
 import subprocess
@@ -21,6 +25,9 @@ def load_data(spaceranger_dir, snp_dir, filtergenelist_file, filterregion_file, 
         adata = sc.read_10x_h5(f"{spaceranger_dir}/filtered_feature_bc_matrix.h5")
     elif Path(f"{spaceranger_dir}/filtered_feature_bc_matrix.h5ad").exists():
         adata = sc.read_h5ad(f"{spaceranger_dir}/filtered_feature_bc_matrix.h5ad")
+    else:
+        logging.error(f"{spaceranger_dir} directory doesn't have a filtered_feature_bc_matrix.h5 or filtered_feature_bc_matrix.h5ad file!")
+
     adata.layers["count"] = adata.X.A.astype(int)
     cell_snp_Aallele = scipy.sparse.load_npz(f"{snp_dir}/cell_snp_Aallele.npz")
     cell_snp_Ballele = scipy.sparse.load_npz(f"{snp_dir}/cell_snp_Ballele.npz")
@@ -121,6 +128,8 @@ def load_joint_data(input_filelist, snp_dir, alignment_files, filtergenelist_fil
     ##### read meta sample info #####
     df_meta = pd.read_csv(input_filelist, sep="\t", header=None)
     df_meta.rename(columns=dict(zip( df_meta.columns[:3], ["bam", "sample_id", "spaceranger_dir"] )), inplace=True)
+    logger.info(f"Input spaceranger file list {input_filelist} contains:")
+    logger.info(df_meta)
     df_barcode = pd.read_csv(f"{snp_dir}/barcodes.txt", header=None, names=["combined_barcode"])
     df_barcode["sample_id"] = [x.split("_")[-1] for x in df_barcode.combined_barcode.values]
     df_barcode["barcode"] = [x.split("_")[0] for x in df_barcode.combined_barcode.values]
@@ -141,7 +150,13 @@ def load_joint_data(input_filelist, snp_dir, alignment_files, filtergenelist_fil
         df_this_barcode = copy.copy(df_barcode.iloc[index, :])
         df_this_barcode.index = df_this_barcode.barcode
         # read adata count info
-        adatatmp = sc.read_10x_h5(f"{df_meta['spaceranger_dir'].iloc[i]}/filtered_feature_bc_matrix.h5")
+        if Path(f"{df_meta['spaceranger_dir'].iloc[i]}/filtered_feature_bc_matrix.h5").exists():
+            adatatmp = sc.read_10x_h5(f"{df_meta['spaceranger_dir'].iloc[i]}/filtered_feature_bc_matrix.h5")
+        elif Path(f"{df_meta['spaceranger_dir'].iloc[i]}/filtered_feature_bc_matrix.h5ad").exists():
+            adatatmp = sc.read_h5ad(f"{df_meta['spaceranger_dir'].iloc[i]}/filtered_feature_bc_matrix.h5ad")
+        else:
+            logging.error(f"{df_meta['spaceranger_dir'].iloc[i]} directory doesn't have a filtered_feature_bc_matrix.h5 or filtered_feature_bc_matrix.h5ad file!")
+
         adatatmp.layers["count"] = adatatmp.X.A
         # reorder anndata spots to have the same order as df_this_barcode
         idx_argsort = pd.Categorical(adatatmp.obs.index, categories=list(df_this_barcode.barcode), ordered=True).argsort()
