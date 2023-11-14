@@ -11,6 +11,9 @@ CalicoST is a probabilistic model that infers allele-specific copy number aberra
 4. Handles normal cell admixture in SRT technologies hat are not single-cell resolution (e.g. 10x Genomics Visium) to infer more accurate allele-specific copy numbers and cancer clones.
 5.  Simultaneously analyzes multiple regional or aligned SRT slices from the same tumor.
 
+# System requirements
+The package is tested on Linux operating systems.
+
 # Installation
 First setup a conda environment from the `environment.yml` file:
 ```
@@ -32,6 +35,8 @@ conda activate calicost_env
 pip install -e .
 ```
 
+Setting up the conda environments takes around 10 minutes on an HPC head node.
+
 # Getting started
 With the input data paths and running configurations specified in `config.yaml`, you can run CalicoST by
 ```
@@ -51,7 +56,7 @@ Replace the following paths in the `config.yaml` file from the downloaded google
 * eagledir: the path to Eagle2 directory
 * region_vcf: the path to the downloaded SNP panel.
 * phasing_panel: the path to the downloaded and unzipped phasing panel.
-* hgtable_file, filtergenelist_file, filterregion_file, outputdir: the path to the corresponding files in the downloaded google drive folder.
+* spaceranger_dir, geneticmap_file, hgtable_file, filtergenelist_file, filterregion_file, outputdir: the path to the corresponding files in the downloaded google drive folder.
 
 NOTE: You should set the outputdir the same as the downloaded google drive folder to run on this specific example.
 
@@ -61,6 +66,8 @@ Then run CalicoST by
 ```
 snakemake --cores 5 --configfile config.yaml --snakefile <calicost_dir>/calicost.smk all
 ```
+
+CalicoST takes about 69 minutes to finish on this example using 5 cores on an HPC.
 
 ### Understanding the output
 Each random initialization of CalicoST generates a folder of `<outputdir>/<output_foldername>/clone*`. 
