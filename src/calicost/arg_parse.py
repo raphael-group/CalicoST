@@ -40,11 +40,11 @@ def load_default_config():
         "maxspots_pooling" : 7,
         "tumorprop_threshold" : 0.5, 
         "max_iter_outer" : 20,
-        "nodepotential" : "max", # max or weighted_sum
+        "nodepotential" : "weighted_sum", # max or weighted_sum
         "initialization_method" : "rectangle", # rectangle or datadrive
         "num_hmrf_initialization_start" : 0, 
         "num_hmrf_initialization_end" : 10,
-        "spatial_weight" : 2.0,
+        "spatial_weight" : 1.0,
         "construct_adjacency_method" : "hexagon",
         "construct_adjacency_w" : 1.0,
         # HMM configurations
@@ -57,7 +57,7 @@ def load_default_config():
         "fix_BB_dispersion" : False,
         "shared_BB_dispersion" : True,
         "max_iter" : 30,
-        "tol" : 1e-3,
+        "tol" : 1e-4,
         "gmm_random_state" : 0,
         "np_threshold" : 1.0,
         "np_eventminlen" : 10,

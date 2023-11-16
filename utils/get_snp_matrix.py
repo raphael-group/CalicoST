@@ -62,9 +62,6 @@ def read_cell_by_snp(allele_counts_file):
 
 
 def cell_by_gene_lefthap_counts(cellsnp_folder, eagle_folder, barcode_list):
-    # index of genes and barcodes in the current gene expression matrix
-    barcode_mapper = {x:i for i,x in enumerate(barcode_list)}
-
     # create a (snp_id, GT) map from eagle2 output
     snp_gt_map = {}
     for c in range(1, 23):
@@ -85,6 +82,7 @@ def cell_by_gene_lefthap_counts(cellsnp_folder, eagle_folder, barcode_list):
     df_snp['snp_id'] = df_snp.tmpCHR.astype(str) + "_" + df_snp.POS.astype(str) + "_" + df_snp.REF + "_" + df_snp.ALT
     tmpdf = pd.read_csv(cellsnp_folder + "/cellSNP.samples.tsv", header=None)
     sample_list = np.array(list(tmpdf.iloc[:,0]))
+    barcode_mapper = {x:i for i,x in enumerate(sample_list)}
     # DP and AD
     DP = scipy.io.mmread(cellsnp_folder + "/cellSNP.tag.DP.mtx").tocsr()
     AD = scipy.io.mmread(cellsnp_folder + "/cellSNP.tag.AD.mtx").tocsr()
@@ -100,7 +98,7 @@ def cell_by_gene_lefthap_counts(cellsnp_folder, eagle_folder, barcode_list):
     phased_AD = scipy.sparse.csr_matrix(phased_AD)
 
     # re-order based on barcode_list
-    index = np.array([barcode_mapper[x] for x in sample_list if x in barcode_mapper])
+    index = np.array([barcode_mapper[x] for x in barcode_list if x in barcode_mapper])
     DP = DP[:, index]
     phased_AD = phased_AD[:, index]    
     
