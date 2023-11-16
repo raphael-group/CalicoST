@@ -157,6 +157,8 @@ rule write_calicost_configfile:
         if 'input_filelist' in calicost_config:
             assert 'bamlist' in config
             calicost_config['input_filelist'] = config['bamlist']
+            if Path(f"{config['output_snpinfo']}/merged_deconvolution.tsv").exists():
+                calicost_config['tumorprop_file'] = f"{config['output_snpinfo']}/merged_deconvolution.tsv"
 
         for k in calicost_config.keys():
             if k in config:
@@ -177,7 +179,8 @@ rule prepare_calicost_data:
         f"{{outputdir}}/parsed_inputs/table_meta.csv.gz",
         f"{{outputdir}}/parsed_inputs/exp_counts.pkl",
         f"{{outputdir}}/parsed_inputs/adjacency_mat.npz",
-        f"{{outputdir}}/parsed_inputs/smooth_mat.npz"
+        f"{{outputdir}}/parsed_inputs/smooth_mat.npz",
+        f"{{outputdir}}/initial_phase.npz"
     params:
         outputdir="{outputdir}",
     threads: 1

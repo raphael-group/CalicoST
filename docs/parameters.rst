@@ -58,7 +58,7 @@ n_states: int
     The number of allele-specific copy number states in the HMM for CNA inference.
 
 t: float, optional
-    The self-transition probability of HMM. The higher the value, the higher probability that adjacent genome segments are in the same CNA state.
+    The self-transition probability of HMM. The higher the value, the higher probability that adjacent genome segments are in the same CNA state. Default is 1-1e-5.
 
 max_iter: int, optional
     The number of Baum-Welch steps to perform in HMM. Default is 30.
