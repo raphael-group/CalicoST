@@ -25,7 +25,7 @@ filterregion_file: str, optional
 Phasing parameters
 ------------------
 logphase_shift: float, optional
-    Adjustment to the strength of Markov Model self-transition in phasing. The higher the value, the higher self-transition probability. Default is -1.0.
+    Adjustment to the strength of Markov Model self-transition in phasing. The higher the value, the higher self-transition probability. Default is -2.0.
 
 secondary_min_umi: int, optional
     The minimum UMI count a genome segment has in pseudobulk of spots in the step of genome segmentation. Default is 300.
