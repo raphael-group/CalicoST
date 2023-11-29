@@ -339,6 +339,8 @@ def plot_acn_from_df_anotherscheme(df_cnv, ax_handle, clone_ids=None, clone_name
     if clone_ids is None:
         tmp_ploidy = [ploidy.loc[f"clone {cid}"].values[0] for cid in final_clone_ids]
         rename_cnv_mapped = pd.DataFrame(cnv_mapped.values, index=[f"clone {cid}\nploidy {tmp_ploidy[c]}" for c,cid in enumerate(final_clone_ids)])
+        if len(np.unique(rename_cnv_mapped.values)) == 1:
+            colors = colors + colors
         seaborn.heatmap(rename_cnv_mapped, cmap=LinearSegmentedColormap.from_list('multi-level', colors, len(colors)), linewidths=0, cbar=False, rasterized=rasterized, ax=ax_handle)
     else:
         tmp_ploidy = [ploidy.loc[f"clone {cid}"].values[0] for cid in clone_ids]
@@ -349,6 +351,8 @@ def plot_acn_from_df_anotherscheme(df_cnv, ax_handle, clone_ids=None, clone_name
         if not clone_proportions is None:
             index_str = [f"{index_str[c]}\nu={clone_proportions[c]:.2f}" for c in range(len(clone_ids))]
         rename_cnv_mapped = pd.DataFrame(cnv_mapped.loc[[f"clone {cid}" for cid in clone_ids]].values, index=index_str)
+        if len(np.unique(rename_cnv_mapped.values)) == 1:
+            colors = colors + colors
         seaborn.heatmap(rename_cnv_mapped, cmap=LinearSegmentedColormap.from_list('multi-level', colors, len(colors)), linewidths=0, cbar=False, rasterized=rasterized, ax=ax_handle)
 
     # indicate allele switches

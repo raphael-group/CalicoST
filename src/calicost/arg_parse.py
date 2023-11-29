@@ -30,7 +30,7 @@ def load_default_config():
         "bafonly" : False,
         # phase switch probability
         "nu" : 1.0,
-        "logphase_shift" : -1.0,
+        "logphase_shift" : -2.0,
         "npart_phasing" : 3,
         # HMRF configurations
         "n_clones" : None,
