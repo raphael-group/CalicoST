@@ -477,6 +477,9 @@ def identify_loh_per_clone(single_X, new_assignment, pred_cnv, p_binom, normal_c
     loh_states : array
         An array of copy number states that are identified as LOH.
 
+    is_B_loss : array
+        A boolean array indicating whether B allele is lost (alternative A allele is lost).
+
     rdr_values : array
         An array of RDR values corresponding to LOH states.
     """
@@ -486,6 +489,7 @@ def identify_loh_per_clone(single_X, new_assignment, pred_cnv, p_binom, normal_c
     reshaped_pred_cnv = pred_cnv.reshape((n_obs, n_clones), order='F')
     # LOH states
     loh_states = np.where( (np.abs(p_binom[:,0] - 0.5) > MIN_BAF_DEVIATION) & (np.bincount(pred_cnv, minlength=n_states) >= MIN_BINS) )[0]
+    is_B_lost = (p_binom[loh_states,0] < 0.5)
     # RDR values
     # first get the normal baseline expression per spot per bin
     simple_rdr_normal = np.sum(single_X[:, 0, (normal_candidate==True)], axis=1)
@@ -499,10 +503,10 @@ def identify_loh_per_clone(single_X, new_assignment, pred_cnv, p_binom, normal_c
         rdr_values.append( np.sum(X[:,0,:][reshaped_pred_cnv==s]) / np.sum(base_nb_mean[reshaped_pred_cnv==s]) )
     rdr_values = np.array(rdr_values)
 
-    return loh_states, rdr_values
+    return loh_states, is_B_lost, rdr_values
 
 
-def estimator_tumor_proportion(single_X, single_total_bb_RD, new_assignment, pred_cnv, loh_states, rdr_values):
+def estimator_tumor_proportion(single_X, single_total_bb_RD, new_assignment, pred_cnv, loh_states, is_B_lost, rdr_values):
     """
     Attributes
     ----------
@@ -518,7 +522,7 @@ def estimator_tumor_proportion(single_X, single_total_bb_RD, new_assignment, pre
     pred_cnv : array, shape (n_obs * n_clones)
         Copy number states across bins for each clone.
     
-    loh_states, rdr_values: array
+    loh_states, is_B_lost, rdr_values: array
         Copy number states and RDR values corresponding to LOH.
 
     Formula
@@ -536,7 +540,7 @@ def estimator_tumor_proportion(single_X, single_total_bb_RD, new_assignment, pre
         estimation_based_on_clones = np.ones(n_clones) * np.nan
         summed_T = np.ones(n_clones)
         for c in range(n_clones):
-            B_loh = np.array([ np.sum(single_X[:,1,i][reshaped_pred_cnv[:,c]==s]) for s in loh_states])
+            B_loh = np.array([ np.sum(single_X[:,1,i][reshaped_pred_cnv[:,c]==s]) if is_B_lost[j] else np.sum(single_total_bb_RD[:,i][reshaped_pred_cnv[:,c]==s]) - np.sum(single_X[:,1,i][reshaped_pred_cnv[:,c]==s]) for j,s in enumerate(loh_states)])
             T_loh = np.array([ np.sum(single_total_bb_RD[:,i][reshaped_pred_cnv[:,c]==s]) for s in loh_states])
             if np.all(T_loh == 0):
                 continue
