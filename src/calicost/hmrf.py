@@ -55,7 +55,8 @@ def hmrf_reassignment_posterior(single_X, single_base_nb_mean, single_total_bb_R
         w_node += log_persample_weights[:,sample_ids[i]]
         w_edge = np.zeros(n_clones)
         for j in adjacency_mat[i,:].nonzero()[1]:
-            w_edge[new_assignment[j]] += adjacency_mat[i,j]
+            if new_assignment[j] >= 0:
+                w_edge[new_assignment[j]] += adjacency_mat[i,j]
         new_assignment[i] = np.argmax( w_node + spatial_weight * w_edge )
         #
         posterior[i,:] = np.exp( w_node + spatial_weight * w_edge - scipy.special.logsumexp(w_node + spatial_weight * w_edge) )
@@ -98,7 +99,8 @@ def aggr_hmrf_reassignment(single_X, single_base_nb_mean, single_total_bb_RD, re
         w_node += log_persample_weights[:,sample_ids[i]]
         w_edge = np.zeros(n_clones)
         for j in adjacency_mat[i,:].nonzero()[1]:
-            w_edge[new_assignment[j]] += adjacency_mat[i,j]
+            if new_assignment[j] >= 0:
+                w_edge[new_assignment[j]] += adjacency_mat[i,j]
         new_assignment[i] = np.argmax( w_node + spatial_weight * w_edge )
         #
         posterior[i,:] = np.exp( w_node + spatial_weight * w_edge - scipy.special.logsumexp(w_node + spatial_weight * w_edge) )
@@ -557,8 +559,9 @@ def aggr_hmrfmix_reassignment(single_X, single_base_nb_mean, single_total_bb_RD,
         w_node += log_persample_weights[:,sample_ids[i]]
         w_edge = np.zeros(n_clones)
         for j in adjacency_mat[i,:].nonzero()[1]:
-            # w_edge[new_assignment[j]] += 1
-            w_edge[new_assignment[j]] += adjacency_mat[i,j]
+            if new_assignment[j] >= 0:
+                # w_edge[new_assignment[j]] += 1
+                w_edge[new_assignment[j]] += adjacency_mat[i,j]
         new_assignment[i] = np.argmax( w_node + spatial_weight * w_edge )
         #
         posterior[i,:] = np.exp( w_node + spatial_weight * w_edge - scipy.special.logsumexp(w_node + spatial_weight * w_edge) )
@@ -611,8 +614,9 @@ def hmrfmix_reassignment_posterior(single_X, single_base_nb_mean, single_total_b
         w_node += log_persample_weights[:,sample_ids[i]]
         w_edge = np.zeros(n_clones)
         for j in adjacency_mat[i,:].nonzero()[1]:
-            # w_edge[new_assignment[j]] += 1
-            w_edge[new_assignment[j]] += adjacency_mat[i,j]
+            if new_assignment[j] >= 0:
+                # w_edge[new_assignment[j]] += 1
+                w_edge[new_assignment[j]] += adjacency_mat[i,j]
         new_assignment[i] = np.argmax( w_node + spatial_weight * w_edge )
         #
         posterior[i,:] = np.exp( w_node + spatial_weight * w_edge - scipy.special.logsumexp(w_node + spatial_weight * w_edge) )

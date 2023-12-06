@@ -456,7 +456,7 @@ def identify_normal_spots(single_X, single_total_bb_RD, new_assignment, pred_cnv
     return (baf_deviations <= baf_deviations[sorted_idx[n_normal]])
 
 
-def identify_loh_per_clone(single_X, new_assignment, pred_cnv, p_binom, normal_candidate, MIN_BAF_DEVIATION=0.25, MIN_BINS=10):
+def identify_loh_per_clone(single_X, new_assignment, pred_cnv, p_binom, normal_candidate, MIN_BAF_DEVIATION_RANGE=[0.3, 0.2], MIN_BINS_PER_STATE=10, MIN_BINS_ALL=50):
     """
     Attributes
     ----------
@@ -487,9 +487,16 @@ def identify_loh_per_clone(single_X, new_assignment, pred_cnv, p_binom, normal_c
     n_clones = int(len(pred_cnv) / n_obs)
     n_states = p_binom.shape[0]
     reshaped_pred_cnv = pred_cnv.reshape((n_obs, n_clones), order='F')
+    # clones that have a decent tumor proportion
+    # for each clone, if the clones_hightumor-th BAF deviation is large enough
+    k_baf_deviation = np.sort( np.abs(p_binom[reshaped_pred_cnv, 0]-0.5), axis=0)[-MIN_BINS_ALL,:]
+    clones_hightumor = np.where(k_baf_deviation >= MIN_BAF_DEVIATION_RANGE[1])[0]
     # LOH states
-    loh_states = np.where( (np.abs(p_binom[:,0] - 0.5) > MIN_BAF_DEVIATION) & (np.bincount(pred_cnv, minlength=n_states) >= MIN_BINS) )[0]
-    is_B_lost = (p_binom[loh_states,0] < 0.5)
+    for threshold in np.arange(MIN_BAF_DEVIATION_RANGE[0], MIN_BAF_DEVIATION_RANGE[1]-0.01, -0.01):
+        loh_states = np.where( (np.abs(p_binom[:,0] - 0.5) > threshold) & (np.bincount(pred_cnv, minlength=n_states) >= MIN_BINS_PER_STATE) )[0]
+        is_B_lost = (p_binom[loh_states,0] < 0.5)
+        if np.all([ np.sum(pd.Series(reshaped_pred_cnv[:,c]).isin(loh_states)) >= MIN_BINS_ALL for c in clones_hightumor ]):
+            break
     # RDR values
     # first get the normal baseline expression per spot per bin
     simple_rdr_normal = np.sum(single_X[:, 0, (normal_candidate==True)], axis=1)
@@ -506,7 +513,7 @@ def identify_loh_per_clone(single_X, new_assignment, pred_cnv, p_binom, normal_c
     return loh_states, is_B_lost, rdr_values
 
 
-def estimator_tumor_proportion(single_X, single_total_bb_RD, new_assignment, pred_cnv, loh_states, is_B_lost, rdr_values):
+def estimator_tumor_proportion(single_X, single_total_bb_RD, new_assignment, pred_cnv, loh_states, is_B_lost, rdr_values, MIN_TOTAL=10):
     """
     Attributes
     ----------
@@ -550,7 +557,7 @@ def estimator_tumor_proportion(single_X, single_total_bb_RD, new_assignment, pre
             estimation_based_on_clones[c] = this_estimation
             summed_T[c] = np.sum(T_loh)
         full_tumor_proportion[i,:] = estimation_based_on_clones
-        if not np.isnan(estimation_based_on_clones[ new_assignment[i] ]):
+        if (not np.isnan(estimation_based_on_clones[ new_assignment[i] ])) and summed_T[new_assignment[i]] >= MIN_TOTAL:
             tumor_proportion[i] = estimation_based_on_clones[ new_assignment[i] ]
         else:
             tumor_proportion[i] = estimation_based_on_clones[np.argmax(summed_T)]

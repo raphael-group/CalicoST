@@ -112,17 +112,15 @@ def main(configuration_file):
         # adding RDR information
         if not config["bafonly"]:
             # select normal spots
-            if (config["normalidx_file"] is None) and (config["tumorprop_file"] is None):
-                EPS_BAF = 0.05
-                PERCENT_NORMAL = 40
-                vec_stds = np.std(np.log1p(copy_single_X_rdr @ smooth_mat), axis=0)
-                id_nearnormal_clone = np.argmin(np.sum( np.maximum(np.abs(merged_baf_profiles - 0.5)-EPS_BAF, 0), axis=1))
-                while True:
-                    stdthreshold = np.percentile(vec_stds[merged_res["new_assignment"] == id_nearnormal_clone], PERCENT_NORMAL)
-                    normal_candidate = (vec_stds < stdthreshold) & (merged_res["new_assignment"] == id_nearnormal_clone)
-                    if np.sum(copy_single_X_rdr[:, (normal_candidate==True)]) > single_X.shape[0] * 200 or PERCENT_NORMAL == 100:
-                        break
-                    PERCENT_NORMAL += 10
+            if config["tumorprop_file"] is None:
+                single_X[:,0,:] = copy_single_X_rdr
+                normal_candidate = identify_normal_spots(single_X, single_total_bb_RD, merged_res['new_assignment'], merged_res['pred_cnv'], merged_res['new_p_binom'], min_count=single_X.shape[0] * 200)
+                loh_states, is_B_lost, rdr_values = identify_loh_per_clone(single_X, merged_res['new_assignment'], merged_res['pred_cnv'], merged_res['new_p_binom'], normal_candidate)
+                single_tumor_prop, _ = estimator_tumor_proportion(single_X, single_total_bb_RD, merged_res['new_assignment'], merged_res['pred_cnv'], loh_states, is_B_lost, rdr_values)
+                single_tumor_prop[normal_candidate] = 0
+                # save single_tumor_prop to file
+                pd.DataFrame({"Tumor":single_tumor_prop}, index=barcodes).to_csv(f"{outdir}/loh_estimator_tumor_prop.tsv", header=True, sep="\t")
+                config['tumorprop_file'] = f"{outdir}/loh_estimator_tumor_prop.tsv"
                 # filter bins based on normal
                 index_normal = np.where(normal_candidate)[0]
                 lengths, single_X, single_base_nb_mean, single_total_bb_RD, log_sitewise_transmat, df_gene_snp = bin_selection_basedon_normal(df_gene_snp, \
@@ -130,34 +128,19 @@ def main(configuration_file):
                 assert df_bininfo.shape[0] == copy_single_X_rdr.shape[0]
                 df_bininfo = genesnp_to_bininfo(df_gene_snp)
                 copy_single_X_rdr = copy.copy(single_X[:,0,:])
-                # filter out high-UMI DE genes, which may bias RDR estimates
-                copy_single_X_rdr, _ = filter_de_genes_tri(exp_counts, df_bininfo, normal_candidate, sample_list=sample_list, sample_ids=sample_ids)
-                MIN_NORMAL_COUNT_PERBIN = 20
-                bidx_inconfident = np.where( np.sum(copy_single_X_rdr[:, (normal_candidate==True)], axis=1) < MIN_NORMAL_COUNT_PERBIN )[0]
-                rdr_normal = np.sum(copy_single_X_rdr[:, (normal_candidate==True)], axis=1)
-                rdr_normal[bidx_inconfident] = 0
-                rdr_normal = rdr_normal / np.sum(rdr_normal)
-                copy_single_X_rdr[bidx_inconfident, :] = 0 # avoid ill-defined distributions if normal has 0 count in that bin.
-                copy_single_base_nb_mean = rdr_normal.reshape(-1,1) @ np.sum(copy_single_X_rdr, axis=0).reshape(1,-1)
-                pd.Series(barcodes[normal_candidate==True].index).to_csv(f"{outdir}/normal_candidate_barcodes.txt", header=False, index=False)
-
-            elif (not config["normalidx_file"] is None):
-                # single_base_nb_mean has already been added in loading data step.
-                if not config["tumorprop_file"] is None:
-                    logger.warning(f"Mixed sources of information for normal spots! Using {config['normalidx_file']}")
             else:
-                for prop_threshold in np.arange(0.05, 0.6, 0.05):
-                    normal_candidate = (single_tumor_prop < prop_threshold)
+                for prop_threshold in np.arange(0, 0.6, 0.05):
+                    normal_candidate = (single_tumor_prop <= prop_threshold)
                     if np.sum(copy_single_X_rdr[:, (normal_candidate==True)]) > single_X.shape[0] * 200:
                         break
-                copy_single_X_rdr, _ = filter_de_genes_tri(exp_counts, df_bininfo, normal_candidate, sample_list=sample_list, sample_ids=sample_ids)
-                MIN_NORMAL_COUNT_PERBIN = 20
-                bidx_inconfident = np.where( np.sum(copy_single_X_rdr[:, (normal_candidate==True)], axis=1) < MIN_NORMAL_COUNT_PERBIN )[0]
-                rdr_normal = np.sum(copy_single_X_rdr[:, (normal_candidate==True)], axis=1)
-                rdr_normal[bidx_inconfident] = 0
-                rdr_normal = rdr_normal / np.sum(rdr_normal)
-                copy_single_X_rdr[bidx_inconfident, :] = 0 # avoid ill-defined distributions if normal has 0 count in that bin.
-                copy_single_base_nb_mean = rdr_normal.reshape(-1,1) @ np.sum(copy_single_X_rdr, axis=0).reshape(1,-1)
+            copy_single_X_rdr, _ = filter_de_genes_tri(exp_counts, df_bininfo, normal_candidate, sample_list=sample_list, sample_ids=sample_ids)
+            MIN_NORMAL_COUNT_PERBIN = 20
+            bidx_inconfident = np.where( np.sum(copy_single_X_rdr[:, (normal_candidate==True)], axis=1) < MIN_NORMAL_COUNT_PERBIN )[0]
+            rdr_normal = np.sum(copy_single_X_rdr[:, (normal_candidate==True)], axis=1)
+            rdr_normal[bidx_inconfident] = 0
+            rdr_normal = rdr_normal / np.sum(rdr_normal)
+            copy_single_X_rdr[bidx_inconfident, :] = 0 # avoid ill-defined distributions if normal has 0 count in that bin.
+            copy_single_base_nb_mean = rdr_normal.reshape(-1,1) @ np.sum(copy_single_X_rdr, axis=0).reshape(1,-1)
                 
             # adding back RDR signal
             single_X[:,0,:] = copy_single_X_rdr
@@ -171,7 +154,8 @@ def main(configuration_file):
             for bafc in range(n_baf_clones):
                 prefix = f"clone{bafc}"
                 idx_spots = np.where(merged_baf_assignment == bafc)[0]
-                if np.sum(single_total_bb_RD[:, idx_spots]) < single_X.shape[0] * 20: # put a minimum B allele read count on pseudobulk to split clones
+                total_allele_count = np.sum(single_total_bb_RD[:, idx_spots]) if config["tumorprop_file"] is None else  np.sum(single_total_bb_RD[:, idx_spots[single_tumor_prop[idx_spots] > config["tumorprop_threshold"]]])
+                if total_allele_count < single_X.shape[0] * 50: # put a minimum B allele read count on pseudobulk to split clones
                     continue
                 # initialize clone
                 if config["tumorprop_file"] is None:
@@ -203,10 +187,13 @@ def main(configuration_file):
                         is_diag=True, max_iter=config["max_iter"], tol=config["tol"], spatial_weight=config["spatial_weight"], tumorprop_threshold=config["tumorprop_threshold"])
 
             ##### combine results across clones #####
-            res_combine = {"prev_assignment":np.zeros(single_X.shape[2], dtype=int)}
+            res_combine = {"prev_assignment":-1 * np.ones(single_X.shape[2], dtype=int)}
             offset_clone = 0
             for bafc in range(n_baf_clones):
                 prefix = f"clone{bafc}"
+                # handle the case when not enough total_allele_count to output {prefix}_nstates{config['n_states']}_smp.npz
+                if not Path(f"{outdir}/{prefix}_nstates{config['n_states']}_smp.npz").exists():
+                    continue
                 allres = dict( np.load(f"{outdir}/{prefix}_nstates{config['n_states']}_smp.npz", allow_pickle=True) )
                 r = allres["num_iterations"] - 1
                 res = {"new_log_mu":allres[f"round{r}_new_log_mu"], "new_alphas":allres[f"round{r}_new_alphas"], \
@@ -274,11 +261,11 @@ def main(configuration_file):
             res_combine["new_alphas"][:,:] = np.max(res_combine["new_alphas"])
             res_combine["new_taus"][:,:] = np.min(res_combine["new_taus"])
             # end temp
-            n_final_clones = len(np.unique(res_combine["prev_assignment"]))
+            n_final_clones = len(np.unique(res_combine["prev_assignment"][res_combine["prev_assignment"] >= 0]))
             # per-sample weights across clones
             log_persample_weights = np.zeros((n_final_clones, len(sample_list)))
             for sidx in range(len(sample_list)):
-                index = np.where(sample_ids == sidx)[0]
+                index = np.where((sample_ids == sidx) & (res_combine["prev_assignment"] >= 0))[0]
                 this_persample_weight = np.bincount(res_combine["prev_assignment"][index], minlength=n_final_clones) / len(index)
                 log_persample_weights[:, sidx] = np.where(this_persample_weight > 0, np.log(this_persample_weight), -50)
                 log_persample_weights[:, sidx] = log_persample_weights[:, sidx] - scipy.special.logsumexp(log_persample_weights[:, sidx])
