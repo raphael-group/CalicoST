@@ -1,7 +1,6 @@
 import sys
 sys.path.append( "/".join(sys.argv[0].split("/")[:-1]) + "/../src/" )
-from utils_plotting import *
-from calicost_supervised import *
+from calicost.utils_plotting import *
 import numpy as np
 import pandas as pd
 from pathlib import Path
