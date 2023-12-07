@@ -121,7 +121,8 @@ def choose_adjacency_by_KNN(coords, exp_counts=None, w=1, maxspots_pooling=7):
         # compute the scaling factor to normalize coords such that it has the same sum of variance as PCA
         var_coord = np.sum(np.var(coords, axis=0))
         var_pca = np.sum(np.var(adata.obsm["X_pca"], axis=0))
-        scaling_factor = np.sqrt(var_coord / var_pca)
+        EPS = 1e-4
+        scaling_factor = np.sqrt(var_coord / var_pca) if var_coord > EPS and var_pca > EPS else 1
 
     # pairwise spatial distance
     pair_spatial_dist = scipy.spatial.distance.squareform(scipy.spatial.distance.pdist(coords / scaling_factor))
