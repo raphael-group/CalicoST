@@ -121,18 +121,21 @@ def main(configuration_file):
                 # save single_tumor_prop to file
                 pd.DataFrame({"Tumor":single_tumor_prop}, index=barcodes).to_csv(f"{outdir}/loh_estimator_tumor_prop.tsv", header=True, sep="\t")
                 config['tumorprop_file'] = f"{outdir}/loh_estimator_tumor_prop.tsv"
-                # filter bins based on normal
-                index_normal = np.where(normal_candidate)[0]
-                lengths, single_X, single_base_nb_mean, single_total_bb_RD, log_sitewise_transmat, df_gene_snp = bin_selection_basedon_normal(df_gene_snp, \
-                    single_X, single_base_nb_mean, single_total_bb_RD, config['nu'], config['logphase_shift'], index_normal, config['geneticmap_file'])
-                assert df_bininfo.shape[0] == copy_single_X_rdr.shape[0]
-                df_bininfo = genesnp_to_bininfo(df_gene_snp)
-                copy_single_X_rdr = copy.copy(single_X[:,0,:])
             else:
                 for prop_threshold in np.arange(0, 0.6, 0.05):
                     normal_candidate = (single_tumor_prop <= prop_threshold)
                     if np.sum(copy_single_X_rdr[:, (normal_candidate==True)]) > single_X.shape[0] * 200:
                         break
+            # remove bins where normal spots have imbalanced SNPs
+            index_normal = np.where(normal_candidate)[0]
+            lengths, single_X, single_base_nb_mean, single_total_bb_RD, log_sitewise_transmat, df_gene_snp = bin_selection_basedon_normal(df_gene_snp, \
+                single_X, single_base_nb_mean, single_total_bb_RD, config['nu'], config['logphase_shift'], index_normal, config['geneticmap_file'])
+            assert np.sum(lengths) == single_X.shape[0] 
+            assert single_X.shape[0] == single_total_bb_RD.shape[0]
+            assert single_X.shape[0] == len(log_sitewise_transmat)
+            df_bininfo = genesnp_to_bininfo(df_gene_snp)
+            copy_single_X_rdr = copy.copy(single_X[:,0,:])
+            # get baseline expression single_base_nb_mean
             copy_single_X_rdr, _ = filter_de_genes_tri(exp_counts, df_bininfo, normal_candidate, sample_list=sample_list, sample_ids=sample_ids)
             MIN_NORMAL_COUNT_PERBIN = 20
             bidx_inconfident = np.where( np.sum(copy_single_X_rdr[:, (normal_candidate==True)], axis=1) < MIN_NORMAL_COUNT_PERBIN )[0]
@@ -288,8 +291,6 @@ def main(configuration_file):
                         smooth_mat, adjacency_mat, res_combine["prev_assignment"], copy.copy(sample_ids), log_persample_weights, spatial_weight=config["spatial_weight"], hmmclass=hmm_nophasing_v2, return_posterior=True)
             res_combine["total_llf"] = total_llf
             res_combine["new_assignment"] = new_assignment
-            # res_combine = dict(np.load(f"{outdir}/original_rdrbaf_final_nstates{config['n_states']}_smp.npz", allow_pickle=True))
-            # posterior = np.load(f"{outdir}/original_posterior_clone_probability.npy")
             # re-order clones such that normal clones are always clone 0
             res_combine, posterior = reorder_results(res_combine, posterior, single_tumor_prop)
             # save results
