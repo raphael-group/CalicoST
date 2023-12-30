@@ -576,7 +576,7 @@ def eval_neymanpearson_bafonly(log_emission_baf_c1, pred_c1, log_emission_baf_c2
 def eval_neymanpearson_rdrbaf(log_emission_rdr_c1, log_emission_baf_c1, pred_c1, log_emission_rdr_c2, log_emission_baf_c2, pred_c2, bidx, n_states, res, p):
     assert log_emission_baf_c1.shape[0] == n_states or log_emission_baf_c1.shape[0] == 2 * n_states
     # likelihood under the corresponding state
-    llf_original = 0.5 * np.append(log_emission_rdr_c1[pred_c1[bidx], bidx] + log_emission_baf_c1[pred_c1[bidx], bidx], \
+    llf_original = np.append(log_emission_rdr_c1[pred_c1[bidx], bidx] + log_emission_baf_c1[pred_c1[bidx], bidx], \
         log_emission_rdr_c2[pred_c2[bidx], bidx] + log_emission_baf_c2[pred_c2[bidx], bidx]).reshape(-1,1)
     # likelihood under the switched state
     if log_emission_baf_c1.shape[0] == 2 * n_states:
@@ -589,7 +589,7 @@ def eval_neymanpearson_rdrbaf(log_emission_rdr_c1, log_emission_baf_c1, pred_c1,
     else:
         switch_pred_c1 = pred_c2
         switch_pred_c2 = pred_c1
-    llf_switch = 0.5 * np.append(log_emission_rdr_c1[switch_pred_c1[bidx], bidx] + log_emission_baf_c1[switch_pred_c1[bidx], bidx], \
+    llf_switch = np.append(log_emission_rdr_c1[switch_pred_c1[bidx], bidx] + log_emission_baf_c1[switch_pred_c1[bidx], bidx], \
         log_emission_rdr_c2[switch_pred_c2[bidx], bidx] + log_emission_baf_c2[switch_pred_c2[bidx], bidx]).reshape(-1,1)
     # log likelihood difference
     return np.mean(llf_original) - np.mean(llf_switch)

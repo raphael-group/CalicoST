@@ -205,22 +205,6 @@ def rectangle_initialize_initial_clone(coords, n_clones, random_state=0):
     return initial_clone_index
 
 
-def sample_initialize_initial_clone(adata, sample_list, n_clones, random_state=0):
-    np.random.seed(random_state)
-    occurences = 1 + np.random.multinomial(len(sample_list) - n_clones, pvals=np.ones(n_clones) / n_clones)
-    sample_clone_id = sum([[i] * occurences[i] for i in range(len(occurences))], [])
-    sample_clone_id = np.array(sample_clone_id)
-    np.random.shuffle(sample_clone_id)
-    print(sample_clone_id)
-    clone_id = np.zeros(adata.shape[0], dtype=int)
-    for i, sname in enumerate(sample_list):
-        index = np.where(adata.obs["sample"] == sname)[0]
-        clone_id[index] = sample_clone_id[i]
-    print(np.bincount(clone_id))
-    initial_clone_index = [np.where(clone_id == i)[0] for i in range(n_clones)]
-    return initial_clone_index
-
-
 def fixed_rectangle_initialization(coords, x_part, y_part):
     #
     px = np.linspace(0, 1, x_part+1)
@@ -457,7 +441,7 @@ def identify_normal_spots(single_X, single_total_bb_RD, new_assignment, pred_cnv
     return (baf_deviations <= baf_deviations[sorted_idx[n_normal]])
 
 
-def identify_loh_per_clone(single_X, new_assignment, pred_cnv, p_binom, normal_candidate, MIN_BAF_DEVIATION_RANGE=[0.3, 0.2], MIN_BINS_PER_STATE=10, MIN_BINS_ALL=50):
+def identify_loh_per_clone(single_X, new_assignment, pred_cnv, p_binom, normal_candidate, MIN_BAF_DEVIATION_RANGE=[0.25, 0.15], MIN_BINS_PER_STATE=10, MIN_BINS_ALL=50):
     """
     Attributes
     ----------
@@ -492,11 +476,16 @@ def identify_loh_per_clone(single_X, new_assignment, pred_cnv, p_binom, normal_c
     # for each clone, if the clones_hightumor-th BAF deviation is large enough
     k_baf_deviation = np.sort( np.abs(p_binom[reshaped_pred_cnv, 0]-0.5), axis=0)[-MIN_BINS_ALL,:]
     clones_hightumor = np.where(k_baf_deviation >= MIN_BAF_DEVIATION_RANGE[1])[0]
+    if len(clones_hightumor) == 0:
+        clones_hightumor = np.argsort(k_baf_deviation)[-1:]
+    if len(clones_hightumor) == n_clones:
+        clones_hightumor = np.argsort(k_baf_deviation)[1:]
     # LOH states
     for threshold in np.arange(MIN_BAF_DEVIATION_RANGE[0], MIN_BAF_DEVIATION_RANGE[1]-0.01, -0.01):
         loh_states = np.where( (np.abs(p_binom[:,0] - 0.5) > threshold) & (np.bincount(pred_cnv, minlength=n_states) >= MIN_BINS_PER_STATE) )[0]
         is_B_lost = (p_binom[loh_states,0] < 0.5)
         if np.all([ np.sum(pd.Series(reshaped_pred_cnv[:,c]).isin(loh_states)) >= MIN_BINS_ALL for c in clones_hightumor ]):
+            print(f"BAF deviation threshold = {threshold}, LOH states: {loh_states}")
             break
     # RDR values
     # first get the normal baseline expression per spot per bin
@@ -514,7 +503,7 @@ def identify_loh_per_clone(single_X, new_assignment, pred_cnv, p_binom, normal_c
     return loh_states, is_B_lost, rdr_values
 
 
-def estimator_tumor_proportion(single_X, single_total_bb_RD, new_assignment, pred_cnv, loh_states, is_B_lost, rdr_values, MIN_TOTAL=10):
+def estimator_tumor_proportion(single_X, single_total_bb_RD, new_assignment, pred_cnv, loh_states, is_B_lost, rdr_values, MIN_TOTAL=10, UNIQUE_THRESHOLD=20):
     """
     Attributes
     ----------
@@ -542,12 +531,27 @@ def estimator_tumor_proportion(single_X, single_total_bb_RD, new_assignment, pre
     n_clones = int(len(pred_cnv) / n_obs)
     reshaped_pred_cnv = pred_cnv.reshape((n_obs, n_clones), order='F')
 
+    # Handle the edge case where loh bins in one clone are almost a subset of loh bins in another clone
+    # This case may be caused by mixture of normal cells in the first clone so that the HMM states don't fully capture loh regions.
+    # Solution: only consider the clones that have enough unique loh bins. 
+    # Solution-cont: Or if all clones contain similar loh bins, select the clone with the largest number of loh bins
+    num_unique_loh_bins = []
+    for c in range(n_clones):
+        this_loh_bins = set(list( np.where(pd.Series(reshaped_pred_cnv[:,c]).isin(loh_states))[0] ))
+        idx_remaining = np.array([i for i in range(n_clones) if i != c])
+        other_loh_bins = set(list( np.where( pd.DataFrame(reshaped_pred_cnv[:,idx_remaining]).isin(loh_states).sum(axis=1) > 0 )[0] ))
+        num_unique_loh_bins.append( len(this_loh_bins - other_loh_bins) )
+    num_unique_loh_bins = np.array(num_unique_loh_bins)
+    clone_to_consider = np.where(num_unique_loh_bins >= UNIQUE_THRESHOLD)[0]
+    if len(clone_to_consider) == 0:
+        clone_to_consider = np.argsort( pd.DataFrame(reshaped_pred_cnv).isin(loh_states).sum(axis=0).values )[-1:]
+
     tumor_proportion = np.zeros(n_spots)
     full_tumor_proportion = np.zeros((n_spots, n_clones))
     for i in range(n_spots):
         estimation_based_on_clones = np.ones(n_clones) * np.nan
         summed_T = np.ones(n_clones)
-        for c in range(n_clones):
+        for c in clone_to_consider:
             B_loh = np.array([ np.sum(single_X[:,1,i][reshaped_pred_cnv[:,c]==s]) if is_B_lost[j] else np.sum(single_total_bb_RD[:,i][reshaped_pred_cnv[:,c]==s]) - np.sum(single_X[:,1,i][reshaped_pred_cnv[:,c]==s]) for j,s in enumerate(loh_states)])
             T_loh = np.array([ np.sum(single_total_bb_RD[:,i][reshaped_pred_cnv[:,c]==s]) for s in loh_states])
             if np.all(T_loh == 0):

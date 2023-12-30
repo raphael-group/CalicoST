@@ -113,31 +113,18 @@ def parse_visium(config):
     # lengths, single_X, single_base_nb_mean, single_total_bb_RD, log_sitewise_transmat, sorted_chr_pos, sorted_chr_pos_last, x_gene_list, n_snps = perform_binning_new(lengths, single_X, \
     #     single_base_nb_mean, single_total_bb_RD, sorted_chr_pos, sorted_chr_pos_last, x_gene_list, n_snps, phase_indicator, refined_lengths, config["binsize"], config["rdrbinsize"], config["nu"], config["logphase_shift"], secondary_min_umi=secondary_min_umi)
         
-    # remove bins where normal spots have imbalanced SNPs
-    if not config["tumorprop_file"] is None:
-        index_normal = np.where(single_tumor_prop < 0.01)[0]
-        if len(index_normal) < 100:
-            index_normal = np.argsort(single_tumor_prop)[:100]
-        lengths, single_X, single_base_nb_mean, single_total_bb_RD, log_sitewise_transmat, df_gene_snp = bin_selection_basedon_normal(df_gene_snp, \
-                single_X, single_base_nb_mean, single_total_bb_RD, config["nu"], config["logphase_shift"], index_normal, config['geneticmap_file'])
-        assert np.sum(lengths) == single_X.shape[0] 
-        assert single_X.shape[0] == single_total_bb_RD.shape[0]
-        assert single_X.shape[0] == len(log_sitewise_transmat)
-
-    # create RDR-BAF table
-    table_bininfo = genesnp_to_bininfo(df_gene_snp)
-    table_bininfo['LOG_PHASE_TRANSITION'] = log_sitewise_transmat
-
-    table_rdrbaf = []
-    for i in range(single_X.shape[2]):
-        table_rdrbaf.append( pd.DataFrame({"BARCODES":adata.obs.index[i], "EXP":single_X[:,0,i], "TOT":single_total_bb_RD[:,i], "B":single_X[:,1,i]}) )
-    table_rdrbaf = pd.concat(table_rdrbaf, ignore_index=True)
-
-    # create meta info table
-    # note that table_meta.BARCODES is equal to the unique ones of table_rdrbaf.BARCODES in the original order
-    table_meta = pd.DataFrame({"BARCODES":adata.obs.index, "SAMPLE":adata.obs["sample"], "X":coords[:,0], "Y":coords[:,1]})
-    if not single_tumor_prop is None:
-        table_meta["TUMOR_PROPORTION"] = single_tumor_prop
+    # # remove bins where normal spots have imbalanced SNPs
+    # if not config["tumorprop_file"] is None:
+    #     for prop_threshold in np.arange(0, 0.6, 0.05):
+    #         normal_candidate = (single_tumor_prop <= prop_threshold)
+    #         if np.sum(single_X[:, 0, (normal_candidate==True)]) > single_X.shape[0] * 200:
+    #             break
+    #     index_normal = np.where(normal_candidate)[0]
+    #     lengths, single_X, single_base_nb_mean, single_total_bb_RD, log_sitewise_transmat, df_gene_snp = bin_selection_basedon_normal(df_gene_snp, \
+    #             single_X, single_base_nb_mean, single_total_bb_RD, config["nu"], config["logphase_shift"], index_normal, config['geneticmap_file'])
+    #     assert np.sum(lengths) == single_X.shape[0] 
+    #     assert single_X.shape[0] == single_total_bb_RD.shape[0]
+    #     assert single_X.shape[0] == len(log_sitewise_transmat)
 
     # expression count dataframe
     exp_counts = pd.DataFrame.sparse.from_spmatrix( scipy.sparse.csc_matrix(adata.layers["count"]), index=adata.obs.index, columns=adata.var.index)
@@ -165,6 +152,31 @@ def parse_visium(config):
     smooth_mat = scipy.sparse.csr_matrix( smooth_mat )
     n_pooled = np.median(np.sum(smooth_mat > 0, axis=0).A.flatten())
     print(f"Set up number of spots to pool in HMRF: {n_pooled}")
+
+    # If adjacency matrix is only constructed using gene expression similarity (e.g. scRNA-seq data)
+    # Then, directly replace coords by the umap of gene expression, to avoid potential inconsistency in HMRF initialization
+    if config["construct_adjacency_method"] == "KNN" and config["construct_adjacency_w"] == 0:
+        sc.pp.normalize_total(adata, target_sum=np.median(np.sum(exp_counts.values,axis=1)) )
+        sc.pp.log1p(adata)
+        sc.tl.pca(adata)
+        sc.pp.neighbors(adata)
+        sc.tl.umap(adata)
+        coords = adata.obsm["X_umap"]
+
+    # create RDR-BAF table
+    table_bininfo = genesnp_to_bininfo(df_gene_snp)
+    table_bininfo['LOG_PHASE_TRANSITION'] = log_sitewise_transmat
+
+    table_rdrbaf = []
+    for i in range(single_X.shape[2]):
+        table_rdrbaf.append( pd.DataFrame({"BARCODES":adata.obs.index[i], "EXP":single_X[:,0,i], "TOT":single_total_bb_RD[:,i], "B":single_X[:,1,i]}) )
+    table_rdrbaf = pd.concat(table_rdrbaf, ignore_index=True)
+
+    # create meta info table
+    # note that table_meta.BARCODES is equal to the unique ones of table_rdrbaf.BARCODES in the original order
+    table_meta = pd.DataFrame({"BARCODES":adata.obs.index, "SAMPLE":adata.obs["sample"], "X":coords[:,0], "Y":coords[:,1]})
+    if not single_tumor_prop is None:
+        table_meta["TUMOR_PROPORTION"] = single_tumor_prop
     
     return table_bininfo, table_rdrbaf, table_meta, exp_counts, adjacency_mat, smooth_mat, df_gene_snp
 
