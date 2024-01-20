@@ -29,6 +29,7 @@ def main(configuration_file):
 
     n_states_for_tumorprop = 5
     n_clones_for_tumorprop = 3
+    n_rdrclones_for_tumorprop = 2
     max_outer_iter_for_tumorprop = 10
     max_iter_for_tumorprop = 20
     MIN_PROP_UNCERTAINTY = 0.05
@@ -52,13 +53,56 @@ def main(configuration_file):
     res = load_hmrf_last_iteration(f"{config['output_dir']}/{prefix}_nstates{n_states_for_tumorprop}_sp.npz")
     merging_groups, merged_res = merge_by_minspots(res["new_assignment"], res, single_total_bb_RD, min_spots_thresholds=config["min_spots_per_clone"], min_umicount_thresholds=config["min_avgumi_per_clone"]*single_X.shape[0])
 
+    # further refine clones
+    combined_assignment = copy.copy(merged_res['new_assignment'])
+    offset_clone = 0
+    combined_p_binom = []
+    offset_state = 0
+    combined_pred_cnv = []
+    for bafc in range(len(merging_groups)):
+        prefix = f"initialhmm_clone{bafc}"
+        idx_spots = np.where(merged_res['new_assignment'] == bafc)[0]
+        total_allele_count = np.sum(single_total_bb_RD[:, idx_spots])
+        if total_allele_count < single_X.shape[0] * 50: # put a minimum B allele read count on pseudobulk to split clones
+            continue
+        # initialize clone
+        initial_clone_index = rectangle_initialize_initial_clone(coords[idx_spots], n_rdrclones_for_tumorprop, random_state=0)
+        # save clone initialization into npz file
+        if not Path(f"{config['output_dir']}/{prefix}_nstates{n_states_for_tumorprop}_sp.npz").exists():
+            initial_assignment = np.zeros(len(idx_spots), dtype=int)
+            for c,idx in enumerate(initial_clone_index):
+                initial_assignment[idx] = c
+            allres = {"barcodes":barcodes[idx_spots], "num_iterations":0, "round-1_assignment":initial_assignment}
+            np.savez(f"{config['output_dir']}/{prefix}_nstates{n_states_for_tumorprop}_sp.npz", **allres)
+        
+        copy_slice_sample_ids = copy.copy(sample_ids[idx_spots])
+        hmrf_concatenate_pipeline(config['output_dir'], prefix, single_X[:,:,idx_spots], lengths, single_base_nb_mean[:,idx_spots], single_total_bb_RD[:,idx_spots], initial_clone_index, n_states=n_states_for_tumorprop, \
+            log_sitewise_transmat=log_sitewise_transmat, smooth_mat=smooth_mat[np.ix_(idx_spots,idx_spots)], adjacency_mat=adjacency_mat[np.ix_(idx_spots,idx_spots)], sample_ids=copy_slice_sample_ids, max_iter_outer=10, nodepotential=config["nodepotential"], \
+            hmmclass=hmm_nophasing_v2, params="sp", t=config["t"], random_state=config["gmm_random_state"], \
+            fix_NB_dispersion=config["fix_NB_dispersion"], shared_NB_dispersion=config["shared_NB_dispersion"], \
+            fix_BB_dispersion=config["fix_BB_dispersion"], shared_BB_dispersion=config["shared_BB_dispersion"], \
+            is_diag=True, max_iter=max_iter_for_tumorprop, tol=config["tol"], spatial_weight=config["spatial_weight"])
+    
+        cloneres = load_hmrf_last_iteration(f"{config['output_dir']}/{prefix}_nstates{n_states_for_tumorprop}_sp.npz")
+        combined_assignment[idx_spots] = cloneres['new_assignment'] + offset_clone
+        offset_clone += np.max(cloneres['new_assignment']) + 1
+        combined_p_binom.append(cloneres['new_p_binom'])
+        combined_pred_cnv.append(cloneres['pred_cnv'] + offset_state)
+        offset_state += cloneres['new_p_binom'].shape[0]
+    combined_p_binom = np.vstack(combined_p_binom)
+    combined_pred_cnv = np.concatenate(combined_pred_cnv)
+
     # loh_states, is_B_lost = identify_loh_per_clone(single_X, res['new_assignment'], res['pred_cnv'], res['new_p_binom'], normal_candidate=None)
     # normal_candidate, rdr_values = get_rdr_for_loh_states(single_X, single_total_bb_RD, res['new_assignment'], res['pred_cnv'], loh_states, is_B_lost, min_count=single_X.shape[0] * 200, MIN_TOTAL=10)
     # single_tumor_prop, _ = estimator_tumor_proportion(single_X, single_total_bb_RD, res['new_assignment'], res['pred_cnv'], loh_states, is_B_lost, rdr_values)
 
     normal_candidate = identify_normal_spots(single_X, single_total_bb_RD, merged_res['new_assignment'], merged_res['pred_cnv'], merged_res['new_p_binom'], min_count=single_X.shape[0] * 200)
-    loh_states, is_B_lost, rdr_values = identify_loh_per_clone(single_X, merged_res['new_assignment'], merged_res['pred_cnv'], merged_res['new_p_binom'], normal_candidate)
-    single_tumor_prop, _ = estimator_tumor_proportion(single_X, single_total_bb_RD, merged_res['new_assignment'], merged_res['pred_cnv'], loh_states, is_B_lost, rdr_values)
+    # loh_states, is_B_lost, rdr_values = identify_loh_per_clone(single_X, merged_res['new_assignment'], merged_res['pred_cnv'], merged_res['new_p_binom'], normal_candidate)
+    # single_tumor_prop, _ = estimator_tumor_proportion(single_X, single_total_bb_RD, merged_res['new_assignment'], merged_res['pred_cnv'], loh_states, is_B_lost, rdr_values)
+    loh_states, is_B_lost, rdr_values, clones_hightumor = identify_loh_per_clone(single_X, combined_assignment, combined_pred_cnv, combined_p_binom, normal_candidate, single_total_bb_RD)
+    assignments = pd.DataFrame({'coarse':merged_res['new_assignment'], 'combined':combined_assignment})
+    single_tumor_prop, _ = estimator_tumor_proportion(single_X, single_total_bb_RD, assignments, combined_pred_cnv, loh_states, is_B_lost, rdr_values, clones_hightumor)
+    # MIN_PROP_UNCERTAINTY = 0
     single_tumor_prop = np.where(single_tumor_prop < MIN_PROP_UNCERTAINTY, MIN_PROP_UNCERTAINTY, single_tumor_prop)
     single_tumor_prop[normal_candidate] = 0
     # save single_tumor_prop to file
