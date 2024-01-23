@@ -29,7 +29,7 @@ def main(configuration_file):
 
     n_states_for_tumorprop = 5
     n_clones_for_tumorprop = 3
-    n_rdrclones_for_tumorprop = 2
+    n_rdrclones_for_tumorprop = 3 #2
     max_outer_iter_for_tumorprop = 10
     max_iter_for_tumorprop = 20
     MIN_PROP_UNCERTAINTY = 0.05
@@ -92,17 +92,15 @@ def main(configuration_file):
     combined_p_binom = np.vstack(combined_p_binom)
     combined_pred_cnv = np.concatenate(combined_pred_cnv)
 
-    # loh_states, is_B_lost = identify_loh_per_clone(single_X, res['new_assignment'], res['pred_cnv'], res['new_p_binom'], normal_candidate=None)
-    # normal_candidate, rdr_values = get_rdr_for_loh_states(single_X, single_total_bb_RD, res['new_assignment'], res['pred_cnv'], loh_states, is_B_lost, min_count=single_X.shape[0] * 200, MIN_TOTAL=10)
-    # single_tumor_prop, _ = estimator_tumor_proportion(single_X, single_total_bb_RD, res['new_assignment'], res['pred_cnv'], loh_states, is_B_lost, rdr_values)
-
     normal_candidate = identify_normal_spots(single_X, single_total_bb_RD, merged_res['new_assignment'], merged_res['pred_cnv'], merged_res['new_p_binom'], min_count=single_X.shape[0] * 200)
-    # loh_states, is_B_lost, rdr_values = identify_loh_per_clone(single_X, merged_res['new_assignment'], merged_res['pred_cnv'], merged_res['new_p_binom'], normal_candidate)
-    # single_tumor_prop, _ = estimator_tumor_proportion(single_X, single_total_bb_RD, merged_res['new_assignment'], merged_res['pred_cnv'], loh_states, is_B_lost, rdr_values)
     loh_states, is_B_lost, rdr_values, clones_hightumor = identify_loh_per_clone(single_X, combined_assignment, combined_pred_cnv, combined_p_binom, normal_candidate, single_total_bb_RD)
     assignments = pd.DataFrame({'coarse':merged_res['new_assignment'], 'combined':combined_assignment})
-    single_tumor_prop, _ = estimator_tumor_proportion(single_X, single_total_bb_RD, assignments, combined_pred_cnv, loh_states, is_B_lost, rdr_values, clones_hightumor)
-    # MIN_PROP_UNCERTAINTY = 0
+    # pool across adjacency spot to increase the UMIs covering LOH region
+    _, tp_smooth_mat = multislice_adjacency(sample_ids, sample_list, coords, single_total_bb_RD, exp_counts, 
+                                            across_slice_adjacency_mat=None, construct_adjacency_method=config['construct_adjacency_method'], 
+                                            maxspots_pooling=7, construct_adjacency_w=config['construct_adjacency_w'])
+    single_tumor_prop, _ = estimator_tumor_proportion(single_X, single_total_bb_RD, assignments, combined_pred_cnv, loh_states, is_B_lost, rdr_values, clones_hightumor, smooth_mat=tp_smooth_mat)
+    # post-processing to remove negative tumor proportions
     single_tumor_prop = np.where(single_tumor_prop < MIN_PROP_UNCERTAINTY, MIN_PROP_UNCERTAINTY, single_tumor_prop)
     single_tumor_prop[normal_candidate] = 0
     # save single_tumor_prop to file
