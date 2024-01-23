@@ -359,6 +359,8 @@ def main(configuration_file):
                         df_genelevel_cnv = copy.copy( tmpdf[~tmpdf[f"clone{s} A"].isnull()].astype(int) )
                     else:
                         df_genelevel_cnv = df_genelevel_cnv.join( tmpdf[~tmpdf[f"clone{s} A"].isnull()].astype(int) )
+                if len(state_cnv) == 0:
+                    continue
                 # output gene-level copy number
                 df_genelevel_cnv.to_csv(f"{outdir}/cnv{medfix[o]}_genelevel.tsv", header=True, index=True, sep="\t")
                 # output segment-level copy number
@@ -400,6 +402,8 @@ def main(configuration_file):
             # plot allele-specific copy number
             for o,max_medploidy in enumerate([None, 2, 3, 4]):
                 cn_file = f"{outdir}/cnv{medfix[o]}_seglevel.tsv"
+                if not Path(cn_file).exists():
+                    continue
                 df_cnv = pd.read_csv(cn_file, header=0, sep="\t")
                 df_cnv = expand_df_cnv(df_cnv)
                 df_cnv = df_cnv[~df_cnv.iloc[:,-1].isnull()]
