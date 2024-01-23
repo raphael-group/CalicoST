@@ -130,26 +130,9 @@ def parse_visium(config):
     exp_counts = pd.DataFrame.sparse.from_spmatrix( scipy.sparse.csc_matrix(adata.layers["count"]), index=adata.obs.index, columns=adata.var.index)
 
     # smooth and adjacency matrix for each sample
-    adjacency_mat = []
-    smooth_mat = []
-    for sname in sample_list:
-        index = np.where(adata.obs["sample"] == sname)[0]
-        this_coords = np.array(coords[index,:])
-        if config["construct_adjacency_method"] == "hexagon":
-            tmpsmooth_mat, tmpadjacency_mat = choose_adjacency_by_readcounts(this_coords, single_total_bb_RD[:,index], maxspots_pooling=config["maxspots_pooling"])
-        elif config["construct_adjacency_method"] == "KNN":
-            tmpsmooth_mat, tmpadjacency_mat = choose_adjacency_by_KNN(this_coords, exp_counts.iloc[index,:], w=config["construct_adjacency_w"], maxspots_pooling=config["maxspots_pooling"])
-        else:
-            logging.error("Unknown adjacency construction method")
-        # tmpsmooth_mat, tmpadjacency_mat = choose_adjacency_by_readcounts_slidedna(this_coords, maxspots_pooling=config["maxspots_pooling"])
-        adjacency_mat.append( tmpadjacency_mat.A )
-        smooth_mat.append( tmpsmooth_mat.A )
-    adjacency_mat = scipy.linalg.block_diag(*adjacency_mat)
-    adjacency_mat = scipy.sparse.csr_matrix( adjacency_mat )
-    if not across_slice_adjacency_mat is None:
-        adjacency_mat += across_slice_adjacency_mat
-    smooth_mat = scipy.linalg.block_diag(*smooth_mat)
-    smooth_mat = scipy.sparse.csr_matrix( smooth_mat )
+    adjacency_mat, smooth_mat = multislice_adjacency(sample_ids, sample_list, coords, single_total_bb_RD, exp_counts, 
+                                                     across_slice_adjacency_mat, construct_adjacency_method=config['construct_adjacency_method'], 
+                                                     maxspots_pooling=config['maxspots_pooling'], construct_adjacency_w=config['construct_adjacency_w'])
     n_pooled = np.median(np.sum(smooth_mat > 0, axis=0).A.flatten())
     print(f"Set up number of spots to pool in HMRF: {n_pooled}")
 

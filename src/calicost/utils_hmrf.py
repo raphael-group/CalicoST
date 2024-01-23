@@ -149,6 +149,30 @@ def choose_adjacency_by_readcounts_slidedna(coords, maxspots_pooling=30):
     return smooth_mat, adjacency_mat
 
 
+def multislice_adjacency(sample_ids, sample_list, coords, single_total_bb_RD, exp_counts, across_slice_adjacency_mat, construct_adjacency_method, maxspots_pooling, construct_adjacency_w):
+    adjacency_mat = []
+    smooth_mat = []
+    for i,sname in enumerate(sample_list):
+        index = np.where(sample_ids == i)[0]
+        this_coords = np.array(coords[index,:])
+        if construct_adjacency_method == "hexagon":
+            tmpsmooth_mat, tmpadjacency_mat = choose_adjacency_by_readcounts(this_coords, single_total_bb_RD[:,index], maxspots_pooling=maxspots_pooling)
+        elif construct_adjacency_method == "KNN":
+            tmpsmooth_mat, tmpadjacency_mat = choose_adjacency_by_KNN(this_coords, exp_counts.iloc[index,:], w=construct_adjacency_w, maxspots_pooling=maxspots_pooling)
+        else:
+            raise("Unknown adjacency construction method")
+        # tmpsmooth_mat, tmpadjacency_mat = choose_adjacency_by_readcounts_slidedna(this_coords, maxspots_pooling=config["maxspots_pooling"])
+        adjacency_mat.append( tmpadjacency_mat.A )
+        smooth_mat.append( tmpsmooth_mat.A )
+    adjacency_mat = scipy.linalg.block_diag(*adjacency_mat)
+    adjacency_mat = scipy.sparse.csr_matrix( adjacency_mat )
+    if not across_slice_adjacency_mat is None:
+        adjacency_mat += across_slice_adjacency_mat
+    smooth_mat = scipy.linalg.block_diag(*smooth_mat)
+    smooth_mat = scipy.sparse.csr_matrix( smooth_mat )
+    return adjacency_mat, smooth_mat
+
+
 def rectangle_initialize_initial_clone(coords, n_clones, random_state=0):
     """
     Initialize clone assignment by partition space into p * p blocks (s.t. p * p >= n_clones), and assign each block a clone id.
@@ -598,7 +622,7 @@ def identify_loh_per_clone(single_X, new_assignment, pred_cnv, p_binom, normal_c
     return loh_states, is_B_lost, rdr_values[loh_states], clones_hightumor
 
 
-def estimator_tumor_proportion(single_X, single_total_bb_RD, assignments, pred_cnv, loh_states, is_B_lost, rdr_values, clone_to_consider, MIN_TOTAL=10, UNIQUE_THRESHOLD=20):
+def estimator_tumor_proportion(single_X, single_total_bb_RD, assignments, pred_cnv, loh_states, is_B_lost, rdr_values, clone_to_consider, smooth_mat=None, MIN_TOTAL=10):
     """
     Attributes
     ----------
@@ -631,11 +655,16 @@ def estimator_tumor_proportion(single_X, single_total_bb_RD, assignments, pred_c
     tumor_proportion = np.zeros(n_spots)
     full_tumor_proportion = np.zeros((n_spots, n_clones))
     for i in range(n_spots):
+        # get adjacent spots for smoothing
+        if smooth_mat is not None:
+            idx_adj = smooth_mat[i,:].nonzero()[1]
+        else:
+            idx_adj = np.array([i])
         estimation_based_on_clones = np.ones(n_clones) * np.nan
         summed_T = np.ones(n_clones)
         for c in clone_to_consider:
-            B_loh = np.array([ np.sum(single_X[:,1,i][reshaped_pred_cnv[:,c]==s]) if is_B_lost[j] else np.sum(single_total_bb_RD[:,i][reshaped_pred_cnv[:,c]==s]) - np.sum(single_X[:,1,i][reshaped_pred_cnv[:,c]==s]) for j,s in enumerate(loh_states)])
-            T_loh = np.array([ np.sum(single_total_bb_RD[:,i][reshaped_pred_cnv[:,c]==s]) for s in loh_states])
+            B_loh = np.array([ np.sum(single_X[:,1,idx_adj][reshaped_pred_cnv[:,c]==s]) if is_B_lost[j] else np.sum(single_total_bb_RD[:,idx_adj][reshaped_pred_cnv[:,c]==s]) - np.sum(single_X[:,1,idx_adj][reshaped_pred_cnv[:,c]==s]) for j,s in enumerate(loh_states)])
+            T_loh = np.array([ np.sum(single_total_bb_RD[:,idx_adj][reshaped_pred_cnv[:,c]==s]) for s in loh_states])
             if np.all(T_loh == 0):
                 continue
             features =(T_loh / 2.0 + rdr_values * B_loh - B_loh)[T_loh>0].reshape(-1,1)
