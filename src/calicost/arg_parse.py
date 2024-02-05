@@ -7,6 +7,13 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(
 logger = logging.getLogger()
 
 
+FOLDER_BAFCLONES = "bafclone"
+FOLDER_FILTERASE = "filtered_inputs"
+FOLDER_RDRBAFCLONES = 'rdrbafclone'
+FOLDER_INTEGER_CN = 'results'
+FOLDER_PLOTS = 'plots'
+
+
 def load_default_config():
     config_joint = {
         "input_filelist" : None,
