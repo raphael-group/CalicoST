@@ -3,6 +3,7 @@ import pandas as pd
 import argparse
 import itertools
 import math
+import subprocess
 import numpy as np
 import seaborn as sns
 from matplotlib import pyplot as plt
@@ -199,6 +200,7 @@ def output_startle_input_files(calicostdir, outdir, midfix="", startle_bin="star
     m_mutations = df_binary.shape[1]
     n_clones = df_binary.shape[0]
     command = f"{startle_bin} -m {m_mutations} -n {n_clones} {outdir}/loh_one_indices.txt {outdir}/loh_missing_indices.txt {outdir}/loh_counts.txt {outdir}/loh_character_mutation_mapping.txt {outdir}/loh_weights.txt {outdir}/loh_cpp_output.txt"
+    print( command )
     p = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, shell=True)
     out,err = p.communicate()
 
@@ -223,10 +225,10 @@ def output_startle_input_files(calicostdir, outdir, midfix="", startle_bin="star
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("-c", "--calicost_dir", help="Directory of a specific random initialization of CalicoST", type=str)
-    parser.add_argument("-s", "--startle_bin", help="The startle executable path", type=str)
+    parser.add_argument("-s", "--startle_bin", help="The startle executable path", default="startle", type=str)
     parser.add_argument("-p", "--ploidy", help="Ploidy of allele-specific integer copy numbers.", default="", type=str)
-    parser.add_argument("--min_segments", help="Minimum number of genome segment to keep an LOH event in phylogenetic tree reconstruction.", default="", type=int)
+    parser.add_argument("--min_segments", help="Minimum number of genome segment to keep an LOH event in phylogenetic tree reconstruction.", default=3, type=int)
     parser.add_argument("-o", "--outputdir", help="output directory", type=str)
     args = parser.parse_args()
 
-    output_startle_input_files(args.calicost_dir, args.outputdir, midfix=args.ploidy, startle_bin=args.startle_bin)
+    output_startle_input_files(args.calicost_dir, args.outputdir, midfix=args.ploidy, startle_bin=args.startle_bin, min_segments=args.min_segments)
