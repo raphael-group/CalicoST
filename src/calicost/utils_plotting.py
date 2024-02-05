@@ -1362,7 +1362,7 @@ def plot_clones_in_space(coords, assignment, sample_list=None, sample_ids=None, 
     return fig
 
 
-def plot_individual_spots_in_space(coords, assignment, single_tumor_prop=None, sample_list=None, sample_ids=None, palette="Set2"):
+def plot_individual_spots_in_space(coords, assignment, single_tumor_prop=None, sample_list=None, sample_ids=None, base_width=4, base_height=3, palette="Set2"):
     # combine coordinates across samples
     shifted_coords = copy.copy(coords)
     if not (sample_ids is None):
@@ -1382,7 +1382,7 @@ def plot_individual_spots_in_space(coords, assignment, single_tumor_prop=None, s
         copy_single_tumor_prop = copy.copy(single_tumor_prop)
         copy_single_tumor_prop[np.isnan(copy_single_tumor_prop)] = 0.5
     
-    fig, axes = plt.subplots(1, 1, figsize=(4*n_samples, 3), dpi=200, facecolor="white")
+    fig, axes = plt.subplots(1, 1, figsize=(base_width*n_samples, base_height), dpi=200, facecolor="white")
     if "clone 0" in final_clone_ids:
         colorlist = ['lightgrey'] + seaborn.color_palette("Set2", n_final_clones-1).as_hex()
     else:

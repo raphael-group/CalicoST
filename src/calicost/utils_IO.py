@@ -880,7 +880,8 @@ def create_bin_ranges(df_gene_snp, single_total_bb_RD, refined_lengths, secondar
     breakpoints = np.concatenate([ np.cumsum(refined_lengths), np.where(block_lengths > max_binlength)[0], np.where(block_lengths > max_binlength)[0]+1 ])
     breakpoints =np.sort(np.unique(breakpoints))
     # append 0 in the front of breakpoints so that each pair of adjacent breakpoints can be an input to greedy_binning_nobreak
-    breakpoints = np.append( [0], breakpoints )
+    if breakpoints[0] != 0:
+        breakpoints = np.append( [0], breakpoints )
     assert np.all(breakpoints[:-1] < breakpoints[1:])
 
     # loop over breakpoints and bin each block
