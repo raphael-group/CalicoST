@@ -22,6 +22,9 @@ def main(configuration_file):
     except:
         config = read_joint_configuration_file(configuration_file)
 
+    # make output directory
+    subprocess.Popen(f"mkdir -p {config['output_dir']}", shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE).communicate()
+
     lengths, single_X, single_base_nb_mean, single_total_bb_RD, log_sitewise_transmat, df_bininfo, df_gene_snp, \
         barcodes, coords, single_tumor_prop, sample_list, sample_ids, adjacency_mat, smooth_mat, exp_counts = run_parse_n_load(config)
     

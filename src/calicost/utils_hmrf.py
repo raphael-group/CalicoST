@@ -541,7 +541,7 @@ def identify_normal_spots(single_X, single_total_bb_RD, new_assignment, pred_cnv
 #     return loh_states, is_B_lost, rdr_values, clones_hightumor
 
 
-def identify_loh_per_clone(single_X, new_assignment, pred_cnv, p_binom, normal_candidate, single_total_bb_RD, MIN_SNPUMI=10, MAX_RDR=1, MIN_BAF_DEVIATION_RANGE=[0.25, 0.12], MIN_BINS_PER_STATE=10, MIN_BINS_ALL=40):
+def identify_loh_per_clone(single_X, new_assignment, pred_cnv, p_binom, normal_candidate, single_total_bb_RD, MIN_SNPUMI=10, MAX_RDR=1, MIN_BAF_DEVIATION_RANGE=[0.25, 0.12], MIN_BINS_PER_STATE=10, MIN_BINS_ALL=25):
     """
     Attributes
     ----------
@@ -680,12 +680,6 @@ def estimator_tumor_proportion(single_X, single_total_bb_RD, assignments, pred_c
                 tumor_proportion[i] = estimation_based_on_clones[np.argmax(summed_T)]
             else:
                 tumor_proportion[i] = np.nan
-            # this_c = assignments.coarse.values[i]
-            # idx_clones_samecoarse = clone_mapping[clone_mapping.coarse==this_c].combined.values
-            # if np.max(summed_T[idx_clones_samecoarse]) >= MIN_TOTAL:
-            #     tumor_proportion[i] = estimation_based_on_clones[idx_clones_samecoarse][np.argmax(summed_T[idx_clones_samecoarse])]
-            # else:
-            #     tumor_proportion[i] = estimation_based_on_clones[np.argmax(summed_T)]
 
     tumor_proportion = np.where(tumor_proportion < 0, 0, tumor_proportion)
     return tumor_proportion, full_tumor_proportion
