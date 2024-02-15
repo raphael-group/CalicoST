@@ -435,25 +435,31 @@ def plot_acn_from_df_anotherscheme(df_cnv, ax_handle, clone_ids=None, clone_name
         h = len(final_clone_ids) if clone_ids is None else len(clone_ids)
         # ax_handle.add_patch(plt.Rectangle(xy=(0, h + chrbar_thickness), width=df_cnv.shape[0], height=chrbar_thickness, color='white', lw=0, transform=ax_handle.transData, clip_on=False, rasterized=rasterized))
 
-        for c in np.unique(chr_ids.values):
+        for i,c in enumerate(np.unique(chr_ids.values)):
             interval = np.where(chr_ids.values == c)[0]
             # add vertical separation between chromosomes
             if not np.max(interval) + 1 >= df_cnv.shape[0]:
                 ax_handle.axvline(x=np.max(interval), color='black', lw=0.5, ymin=-0.5/(h+1), clip_on = False)
             mid = np.percentile(interval, 45)
-            ax_handle.text(mid-10, h + chrbar_thickness, str(c), transform=ax_handle.transData)
+            if i % 2 == 0:
+                ax_handle.text(mid, h + chrbar_thickness, str(c), ha='center', transform=ax_handle.transData)
+            else:
+                ax_handle.text(mid, h + 2*chrbar_thickness, str(c), ha='center', transform=ax_handle.transData)
     elif chrbar_pos == "top":
         chr_ids = df_cnv.CHR
         h = len(final_clone_ids) if clone_ids is None else len(clone_ids)
         # ax_handle.add_patch(plt.Rectangle(xy=(0, h + chrbar_thickness), width=df_cnv.shape[0], height=chrbar_thickness, color='white', lw=0, transform=ax_handle.transData, clip_on=False, rasterized=rasterized))
 
-        for c in np.unique(chr_ids.values):
+        for i,c in enumerate(np.unique(chr_ids.values)):
             interval = np.where(chr_ids.values == c)[0]
             # add vertical separation between chromosomes
             if not np.max(interval) + 1 >= df_cnv.shape[0]:
                 ax_handle.axvline(x=np.max(interval), color='black', lw=0.5, ymax=1+0.5/(h+1), clip_on = False)
             mid = np.percentile(interval, 45)
-            ax_handle.text(mid-10, -0.1*chrbar_thickness, str(c), transform=ax_handle.transData)
+            if i % 2 == 0:
+                ax_handle.text(mid, -0.1*chrbar_thickness, str(c), ha='center', transform=ax_handle.transData)
+            else:
+                ax_handle.text(mid, -0.8*chrbar_thickness, str(c), ha='center', transform=ax_handle.transData)
 
     ax_handle.set_yticklabels(ax_handle.get_yticklabels(), rotation=0)
     if remove_xticks:
