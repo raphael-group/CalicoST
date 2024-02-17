@@ -45,7 +45,7 @@ snakemake --cores <number threads> --configfile config.yaml --snakefile calicost
 
 # Run on a simulated example data
 ### Download data
-The simulated count matrices can be downloaded from the [google drive](https://drive.google.com/drive/folders/19ZzfhyjKdEPTrQ7kh_HE6QvNfhmx4ng6?usp=drive_link).
+The simulated count matrices can be downloaded from the [google drive](https://drive.google.com/file/d/1ZE8F6DuO4xWiHzAt5aMR65FM5rhpBT-Y/view?usp=sharing).
 CalicoST requires a reference SNP panel and phasing panel, which can be downloaded from
 * [SNP panel](https://sourceforge.net/projects/cellsnp/files/SNPlist/genome1K.phase3.SNP_AF5e4.chr1toX.hg38.vcf.gz/download). You can also choose other SNP panels from [cellsnp-lite webpage](https://cellsnp-lite.readthedocs.io/en/latest/snp_list.html).
 * [Phasing panel](http://pklab.med.harvard.edu/teng/data/1000G_hg38.zip)
