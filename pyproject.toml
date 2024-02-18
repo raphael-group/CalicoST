@@ -1,0 +1,61 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "CalicoST"
+version = "1.0.0"
+authors = [
+  { name="Cong Ma", email="congma@princeton.edu" },
+  { name="Metin Balaban", email="metin@princeton.edu" },
+  { name="Jingxian Liu", email="jingxian.liu@wustl.edu" },
+  { name="Siqi Chen", email="siqichen@wustl.edu" },
+  { name="Li Ding", email="lding@wustl.edu" },
+  { name="Ben Raphael", email="braphael@cs.princeton.edu" },
+]
+description = "Inferring allele-specific copy number aberrations and tumor phylogeography from spatially resolved transcriptomics"
+readme = "README.md"
+requires-python = ">=3.8"
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "License :: OSI Approved :: BSD License",
+    "Operating System :: OS Independent",
+]
+dependencies = [
+  'numpy', 
+  'scipy', 
+  'pandas',
+  'scikit-learn',
+  'scanpy',
+  'anndata',
+  'numba',
+  'tqdm',
+  'statsmodels',
+  'networkx',
+  'matplotlib',
+  'seaborn',
+  'pysam',
+  'ete3'
+]
+
+[project.optional-dependencies]
+docs = [
+    "ipython",
+    "ipywidgets>=8.0.0",
+    "sphinx>=5.3",
+    "sphinx-autodoc-annotation",
+    "sphinx-autodoc-typehints>=1.10.3",
+    "sphinx_rtd_theme",
+    "sphinxcontrib-bibtex>=2.3.0",
+    "sphinxcontrib-spelling>=7.6.2",
+    "nbsphinx>=0.8.1",
+    "myst-nb>=0.17.1",
+    "sphinx_copybutton>=0.5.0",
+]
+
+[project.urls]
+"Homepage" = "https://github.com/raphael-group/CalicoST"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+include = ["calicost*"]
