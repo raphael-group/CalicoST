@@ -24,7 +24,8 @@ setuptools.setup(
             'networkx',
             'matplotlib',
             'seaborn',
-            'pysam'
+            'pysam',
+            'ete3'
         ],
         include_package_data=True
 )
