@@ -22,9 +22,6 @@ def main(configuration_file):
     except:
         config = read_joint_configuration_file(configuration_file)
 
-    # make output directory
-    subprocess.Popen(f"mkdir -p {config['output_dir']}", shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE).communicate()
-
     lengths, single_X, single_base_nb_mean, single_total_bb_RD, log_sitewise_transmat, df_bininfo, df_gene_snp, \
         barcodes, coords, single_tumor_prop, sample_list, sample_ids, adjacency_mat, smooth_mat, exp_counts = run_parse_n_load(config)
     
@@ -67,6 +64,11 @@ def main(configuration_file):
         idx_spots = np.where(merged_res['new_assignment'] == bafc)[0]
         total_allele_count = np.sum(single_total_bb_RD[:, idx_spots])
         if total_allele_count < single_X.shape[0] * 50: # put a minimum B allele read count on pseudobulk to split clones
+            combined_assignment[idx_spots] = offset_clone
+            offset_clone += 1
+            combined_p_binom.append(merged_res['new_p_binom'])
+            combined_pred_cnv.append(merged_res['pred_cnv'] + offset_state)
+            offset_state += merged_res['new_p_binom'].shape[0]
             continue
         # initialize clone
         initial_clone_index = rectangle_initialize_initial_clone(coords[idx_spots], n_rdrclones_for_tumorprop, random_state=0)

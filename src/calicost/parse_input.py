@@ -98,7 +98,7 @@ def parse_visium(config):
     if not Path(f"{config['output_dir']}/initial_phase.npz").exists():
         initial_clone_for_phasing = perform_partition(coords, sample_ids, x_part=config["npart_phasing"], y_part=config["npart_phasing"], single_tumor_prop=single_tumor_prop, threshold=config["tumorprop_threshold"])
         phase_indicator, refined_lengths = initial_phase_given_partition(single_X, lengths, single_base_nb_mean, single_total_bb_RD, single_tumor_prop, initial_clone_for_phasing, 5, log_sitewise_transmat, \
-            "sp", config["t_phaseing"], config["gmm_random_state"], config["fix_NB_dispersion"], config["shared_NB_dispersion"], config["fix_BB_dispersion"], config["shared_BB_dispersion"], 30, 1e-3)
+            "sp", config["t_phaseing"], config["gmm_random_state"], config["fix_NB_dispersion"], config["shared_NB_dispersion"], config["fix_BB_dispersion"], config["shared_BB_dispersion"], 30, 1e-3, threshold=config["tumorprop_threshold"])
         np.savez(f"{config['output_dir']}/initial_phase.npz", phase_indicator=phase_indicator, refined_lengths=refined_lengths)
         # map phase indicator to individual snps
         df_gene_snp['phase'] = np.where(df_gene_snp.snp_id.isnull(), None, df_gene_snp.block_id.map({i:x for i,x in enumerate(phase_indicator)}) )

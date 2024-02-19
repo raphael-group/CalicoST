@@ -645,6 +645,11 @@ def estimator_tumor_proportion(single_X, single_total_bb_RD, assignments, pred_c
     ----------
     0.5 ( 1-theta ) / (theta * RDR + 1 - theta) = B_count / Total_count for each LOH state.
     """
+    def estimate_purity(T_loh, B_loh, rdr_values):
+        features =(T_loh / 2.0 + rdr_values * B_loh - B_loh)[T_loh>0].reshape(-1,1)
+        y = (T_loh / 2.0 - B_loh)[T_loh>0]
+        return np.linalg.lstsq(features, y, rcond=None)[0]
+    #
     n_obs = single_X.shape[0]
     n_spots = single_X.shape[2]
     n_clones = int(len(pred_cnv) / n_obs)
@@ -660,26 +665,34 @@ def estimator_tumor_proportion(single_X, single_total_bb_RD, assignments, pred_c
             idx_adj = smooth_mat[i,:].nonzero()[1]
         else:
             idx_adj = np.array([i])
-        estimation_based_on_clones = np.ones(n_clones) * np.nan
-        summed_T = np.ones(n_clones)
+        estimation_based_on_clones_single = np.ones(n_clones) * np.nan
+        estimation_based_on_clones_smoothed = np.ones(n_clones) * np.nan
+        summed_T_single = np.ones(n_clones)
+        summed_T_smoothed = np.ones(n_clones)
         for c in clone_to_consider:
+            # single
+            B_loh = np.array([ np.sum(single_X[:,1,i][reshaped_pred_cnv[:,c]==s]) if is_B_lost[j] else np.sum(single_total_bb_RD[:,i][reshaped_pred_cnv[:,c]==s]) - np.sum(single_X[:,1,i][reshaped_pred_cnv[:,c]==s]) for j,s in enumerate(loh_states)])
+            T_loh = np.array([ np.sum(single_total_bb_RD[:,i][reshaped_pred_cnv[:,c]==s]) for s in loh_states])
+            if np.all(T_loh == 0):
+                continue
+            estimation_based_on_clones_single[c] = estimate_purity(T_loh, B_loh, rdr_values)
+            summed_T_single[c] = np.sum(T_loh)
+            # smoothed
             B_loh = np.array([ np.sum(single_X[:,1,idx_adj][reshaped_pred_cnv[:,c]==s]) if is_B_lost[j] else np.sum(single_total_bb_RD[:,idx_adj][reshaped_pred_cnv[:,c]==s]) - np.sum(single_X[:,1,idx_adj][reshaped_pred_cnv[:,c]==s]) for j,s in enumerate(loh_states)])
             T_loh = np.array([ np.sum(single_total_bb_RD[:,idx_adj][reshaped_pred_cnv[:,c]==s]) for s in loh_states])
             if np.all(T_loh == 0):
                 continue
-            features =(T_loh / 2.0 + rdr_values * B_loh - B_loh)[T_loh>0].reshape(-1,1)
-            y = (T_loh / 2.0 - B_loh)[T_loh>0]
-            this_estimation = np.linalg.lstsq(features, y, rcond=None)[0]
-            estimation_based_on_clones[c] = this_estimation
-            summed_T[c] = np.sum(T_loh)
-        full_tumor_proportion[i,:] = estimation_based_on_clones
-        if (not np.isnan(estimation_based_on_clones[ assignments.combined.values[i] ])) and summed_T[assignments.combined.values[i]] >= MIN_TOTAL:
-            tumor_proportion[i] = estimation_based_on_clones[ assignments.combined.values[i] ]
+            estimation_based_on_clones_smoothed[c] = estimate_purity(T_loh, B_loh, rdr_values)
+            summed_T_smoothed[c] = np.sum(T_loh)
+        full_tumor_proportion[i,:] = estimation_based_on_clones_single
+        if (assignments.combined.values[i] in clone_to_consider) and summed_T_single[assignments.combined.values[i]] >= MIN_TOTAL:
+            tumor_proportion[i] = estimation_based_on_clones_single[ assignments.combined.values[i] ]
+        elif (assignments.combined.values[i] in clone_to_consider) and summed_T_smoothed[assignments.combined.values[i]] >= MIN_TOTAL:
+            tumor_proportion[i] = estimation_based_on_clones_smoothed[ assignments.combined.values[i] ]
+        elif not assignments.combined.values[i] in clone_to_consider:
+            tumor_proportion[i] = estimation_based_on_clones_single[np.argmax(summed_T_single)]
         else:
-            if not assignments.combined.values[i] in clone_to_consider:
-                tumor_proportion[i] = estimation_based_on_clones[np.argmax(summed_T)]
-            else:
-                tumor_proportion[i] = np.nan
+            tumor_proportion[i] = np.nan
 
     tumor_proportion = np.where(tumor_proportion < 0, 0, tumor_proportion)
     return tumor_proportion, full_tumor_proportion
