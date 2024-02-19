@@ -48,13 +48,13 @@ def infer_initial_phase(single_X, lengths, single_base_nb_mean, single_total_bb_
 
 
 def initial_phase_given_partition(single_X, lengths, single_base_nb_mean, single_total_bb_RD, single_tumor_prop, initial_clone_index, n_states, log_sitewise_transmat, \
-    params, t, random_state, fix_NB_dispersion, shared_NB_dispersion, fix_BB_dispersion, shared_BB_dispersion, max_iter, tol, min_snpumi=2e3):
+    params, t, random_state, fix_NB_dispersion, shared_NB_dispersion, fix_BB_dispersion, shared_BB_dispersion, max_iter, tol, threshold, min_snpumi=2e3):
     EPS_BAF = 0.05
     if single_tumor_prop is None:
         X, base_nb_mean, total_bb_RD = merge_pseudobulk_by_index(single_X, single_base_nb_mean, single_total_bb_RD, initial_clone_index)
         tumor_prop = None
     else:
-        X, base_nb_mean, total_bb_RD, tumor_prop = merge_pseudobulk_by_index_mix(single_X, single_base_nb_mean, single_total_bb_RD, initial_clone_index, single_tumor_prop)
+        X, base_nb_mean, total_bb_RD, tumor_prop = merge_pseudobulk_by_index_mix(single_X, single_base_nb_mean, single_total_bb_RD, initial_clone_index, single_tumor_prop, threshold=threshold)
 
     # pseudobulk HMM for phase_prob
     baf_profiles = np.zeros((X.shape[2], X.shape[0]))
