@@ -23,7 +23,7 @@ Getting started with CalicoST
 Browse the Tutorials to get started with CalicoST `here <notebooks/tutorials/index>`_.
 
 .. toctree::
-    :maxdepth: 2
+    :maxdepth: 1
 
     installation
     tutorials
