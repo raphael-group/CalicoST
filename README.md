@@ -23,10 +23,24 @@ conda config --add channels bioconda
 conda env create -f environment.yml --name calicost_env
 ```
 
-Then download Eagle2 by
+Next download Eagle2 by
 ```
 wget https://storage.googleapis.com/broad-alkesgroup-public/Eagle/downloads/Eagle_v2.4.1.tar.gz
 tar -xzf Eagle_v2.4.1.tar.gz
+```
+
+Then install Startle by
+```
+git clone --recurse-submodules https://github.com/raphael-group/startle.git
+cd startle
+mkdir build; cd build
+cmake -DLIBLEMON_ROOT=<lemon path>\
+        -DCPLEX_INC_DIR=<cplex include path>\
+        -DCPLEX_LIB_DIR=<cplex lib path>\
+        -DCONCERT_INC_DIR=<concert include path>\
+        -DCONCERT_LIB_DIR=<concert lib path>\
+        ..
+make
 ```
 
 Finally, install CalicoST using pip by
@@ -42,6 +56,8 @@ With the input data paths and running configurations specified in `config.yaml`,
 ```
 snakemake --cores <number threads> --configfile config.yaml --snakefile calicost.smk all
 ```
+
+Check out our [readthedocs](https://calicost.readthedocs.io/en/latest/) for tutorials on the simulated data and prostate cancer data.
 
 # Run on a simulated example data
 ### Download data
