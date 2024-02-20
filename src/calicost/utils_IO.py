@@ -1317,3 +1317,19 @@ def summary_events(cnv_segfile, rescombinefile, minlength=10):
     df_concise_events["BAF_diff"] = baf_diff
 
     return df_concise_events[["CHR", "START", "END", "BinSTART", "BinEND", "RDR", "BAF", "RDR_diff", "BAF_diff", "CN", "Label", "involved_clones"]]
+
+
+def get_best_initialization(output_dir):  
+    """
+    find the best HMRF initialization random seed
+    """
+    # get a list */rdrbaf_final_nstates*_smp.npz files within output_dir
+    rdrbaf_files = [x for x in Path(output_dir).rglob("rdrbaf_final_nstates*_smp.npz")]
+    df = []
+    for file in rdrbaf_files:
+        outdir = file.parent
+        res_combine = dict(np.load(str(file)), allow_pickle=True)
+        df.append( pd.DataFrame({'outdir':str(outdir), "log-likelihood":res_combine["total_llf"]}, index=[0]) )
+    df = pd.concat(df, ignore_index=True)
+    idx = np.argmax(df["log-likelihood"])
+    return df["outdir"].iloc[idx]
