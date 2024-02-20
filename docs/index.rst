@@ -3,7 +3,7 @@ CalicoST - Inferring allele-specific copy number aberrations and tumor phylogeog
 
 .. image:: https://raw.githubusercontent.com/raphael-group/CalicoST/main/docs/_static/img/overview4_combine.png
     :alt: CalicoST overview
-    :width: 400px
+    :width: 800px
     :align: center
 
 CalicoST is a probabilistic model that infers allele-specific copy number aberrations and tumor phylogeography from spatially resolved transcriptomics.CalicoST has the following key features:
