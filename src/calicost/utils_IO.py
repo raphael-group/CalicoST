@@ -19,7 +19,7 @@ from calicost.utils_distribution_fitting import *
 import subprocess
 
 
-def load_data(spaceranger_dir, snp_dir, filtergenelist_file, filterregion_file, normalidx_file, min_snpumis=50):
+def load_data(spaceranger_dir, snp_dir, filtergenelist_file, filterregion_file, normalidx_file, min_snpumis=50, min_percent_expressed_spots=0.005):
     ##### read raw UMI count matrix #####
     if Path(f"{spaceranger_dir}/filtered_feature_bc_matrix.h5").exists():
         adata = sc.read_10x_h5(f"{spaceranger_dir}/filtered_feature_bc_matrix.h5")
@@ -63,19 +63,19 @@ def load_data(spaceranger_dir, snp_dir, filtergenelist_file, filterregion_file, 
     adata = adata[ pd.Categorical(adata.obs.index, categories=list(snp_barcodes.barcodes), ordered=True).argsort(), : ]
 
     # filter out spots with too small number of UMIs
-    indicator = (np.sum(adata.layers["count"], axis=1) > 100)
+    indicator = (np.sum(adata.layers["count"], axis=1) > min_snpumis)
     adata = adata[indicator, :]
     cell_snp_Aallele = cell_snp_Aallele[indicator, :]
     cell_snp_Ballele = cell_snp_Ballele[indicator, :]
 
     # filter out spots with too small number of SNP-covering UMIs
-    indicator = ( np.sum(cell_snp_Aallele, axis=1).A.flatten() + np.sum(cell_snp_Ballele, axis=1).A.flatten() > min_snpumis )
+    indicator = ( np.sum(cell_snp_Aallele, axis=1).A.flatten() + np.sum(cell_snp_Ballele, axis=1).A.flatten() >= min_snpumis )
     adata = adata[indicator, :]
     cell_snp_Aallele = cell_snp_Aallele[indicator, :]
     cell_snp_Ballele = cell_snp_Ballele[indicator, :]
 
     # filter out genes that are expressed in <0.5% cells
-    indicator = (np.sum(adata.X > 0, axis=0) >= 0.005 * adata.shape[0]).A.flatten()
+    indicator = (np.sum(adata.X > 0, axis=0) >= min_percent_expressed_spots * adata.shape[0]).A.flatten()
     genenames = set(list(adata.var.index[indicator]))
     adata = adata[:, indicator]
     print(adata)
@@ -124,7 +124,7 @@ def load_data(spaceranger_dir, snp_dir, filtergenelist_file, filterregion_file, 
     return adata, cell_snp_Aallele.A, cell_snp_Ballele.A, unique_snp_ids
 
 
-def load_joint_data(input_filelist, snp_dir, alignment_files, filtergenelist_file, filterregion_file, normalidx_file, min_snpumis=50):
+def load_joint_data(input_filelist, snp_dir, alignment_files, filtergenelist_file, filterregion_file, normalidx_file, min_snpumis=50, min_percent_expressed_spots=0.005):
     ##### read meta sample info #####
     df_meta = pd.read_csv(input_filelist, sep="\t", header=None)
     df_meta.rename(columns=dict(zip( df_meta.columns[:3], ["bam", "sample_id", "spaceranger_dir"] )), inplace=True)
@@ -228,7 +228,7 @@ def load_joint_data(input_filelist, snp_dir, alignment_files, filtergenelist_fil
         across_slice_adjacency_mat += across_slice_adjacency_mat.T
     
     # filter out spots with too small number of UMIs
-    indicator = (np.sum(adata.layers["count"], axis=1) > min_snpumis)
+    indicator = (np.sum(adata.layers["count"], axis=1) >= min_snpumis)
     adata = adata[indicator, :]
     cell_snp_Aallele = cell_snp_Aallele[indicator, :]
     cell_snp_Ballele = cell_snp_Ballele[indicator, :]
@@ -236,15 +236,15 @@ def load_joint_data(input_filelist, snp_dir, alignment_files, filtergenelist_fil
         across_slice_adjacency_mat = across_slice_adjacency_mat[indicator,:][:,indicator]
 
     # filter out spots with too small number of SNP-covering UMIs
-    indicator = ( np.sum(cell_snp_Aallele, axis=1).A.flatten() + np.sum(cell_snp_Ballele, axis=1).A.flatten() > min_snpumis )
+    indicator = ( np.sum(cell_snp_Aallele, axis=1).A.flatten() + np.sum(cell_snp_Ballele, axis=1).A.flatten() >= min_snpumis )
     adata = adata[indicator, :]
     cell_snp_Aallele = cell_snp_Aallele[indicator, :]
     cell_snp_Ballele = cell_snp_Ballele[indicator, :]
     if not (across_slice_adjacency_mat is None):
         across_slice_adjacency_mat = across_slice_adjacency_mat[indicator,:][:,indicator]
 
-    # filter out genes that are expressed in <0.5% cells
-    indicator = (np.sum(adata.X > 0, axis=0) >= 0.005 * adata.shape[0]).A.flatten()
+    # filter out genes that are expressed in <min_percent_expressed_spots cells
+    indicator = (np.sum(adata.X > 0, axis=0) >= min_percent_expressed_spots * adata.shape[0]).A.flatten()
     genenames = set(list(adata.var.index[indicator]))
     adata = adata[:, indicator]
     print(adata)
@@ -1106,7 +1106,7 @@ def filter_de_genes_tri(exp_counts, df_bininfo, normal_candidate, sample_list=No
         #
         umi_threshold = np.percentile( np.sum(tmpadata.layers["count"], axis=0), quantile_threshold )
         #
-        sc.pp.filter_cells(tmpadata, min_genes=200)
+        # sc.pp.filter_cells(tmpadata, min_genes=200)
         sc.pp.filter_genes(tmpadata, min_cells=10)
         med = np.median( np.sum(tmpadata.layers["count"], axis=1) )
         # sc.pp.normalize_total(tmpadata, target_sum=1e4)

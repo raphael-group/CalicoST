@@ -61,7 +61,7 @@ def parse_visium(config):
         KNN smoothing matrix.
     """
     if "input_filelist" in config:
-        adata, cell_snp_Aallele, cell_snp_Ballele, unique_snp_ids, across_slice_adjacency_mat = load_joint_data(config["input_filelist"], config["snp_dir"], config["alignment_files"], config["filtergenelist_file"], config["filterregion_file"], config["normalidx_file"])
+        adata, cell_snp_Aallele, cell_snp_Ballele, unique_snp_ids, across_slice_adjacency_mat = load_joint_data(config["input_filelist"], config["snp_dir"], config["alignment_files"], config["filtergenelist_file"], config["filterregion_file"], config["normalidx_file"], config['min_snpumi_perspot'], config['min_percent_expressed_spots'])
         sample_list = [adata.obs["sample"][0]]
         for i in range(1, adata.shape[0]):
             if adata.obs["sample"][i] != sample_list[-1]:
@@ -72,7 +72,7 @@ def parse_visium(config):
             index = np.where(adata.obs["sample"] == sname)[0]
             sample_ids[index] = s
     else:
-        adata, cell_snp_Aallele, cell_snp_Ballele, unique_snp_ids = load_data(config["spaceranger_dir"], config["snp_dir"], config["filtergenelist_file"], config["filterregion_file"], config["normalidx_file"])
+        adata, cell_snp_Aallele, cell_snp_Ballele, unique_snp_ids = load_data(config["spaceranger_dir"], config["snp_dir"], config["filtergenelist_file"], config["filterregion_file"], config["normalidx_file"], config['min_snpumi_perspot'], config['min_percent_expressed_spots'])
         adata.obs["sample"] = "unique_sample"
         sample_list = [adata.obs["sample"][0]]
         sample_ids = np.zeros(adata.shape[0], dtype=int)
