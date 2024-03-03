@@ -12,7 +12,7 @@ CalicoST is a probabilistic model that infers allele-specific copy number aberra
 5.  Simultaneously analyzes multiple regional or aligned SRT slices from the same tumor.
 
 # System requirements
-The package is tested on Linux operating systems.
+The package has tested on the following Linux operating systems: SpringdaleOpenEnterprise 9.2 (Parma) and CentOS Linux 7 (Core).
 
 # Installation
 First setup a conda environment from the `environment.yml` file:
@@ -52,7 +52,7 @@ pip install -e .
 Setting up the conda environments takes around 10 minutes on an HPC head node.
 
 # Getting started
-With the input data paths and running configurations specified in `config.yaml`, you can run CalicoST by
+CalicoST requires the coordinate information of genes and SNPs, the information files for GRCh38 genome are available from either of the [example data tarball](https://github.com/raphael-group/CalicoST/tree/main/examples). Specify the information file paths, your input SRT data paths, and running configurations in `config.yaml`, and then you can run CalicoST by
 ```
 snakemake --cores <number threads> --configfile config.yaml --snakefile calicost.smk all
 ```
@@ -61,13 +61,13 @@ Check out our [readthedocs](https://calicost.readthedocs.io/en/latest/) for tuto
 
 # Run on a simulated example data
 ### Download data
-The simulated count matrices can be downloaded from the [google drive](https://drive.google.com/file/d/1en4vxdwoXt4j51vj8SyRdsszcPSyAErP/view?usp=sharing).
+The simulated count matrices are available from [`examples/CalicoST_example.tar.gz`](https://github.com/raphael-group/CalicoST/blob/main/examples/CalicoST_example.tar.gz).
 CalicoST requires a reference SNP panel and phasing panel, which can be downloaded from
 * [SNP panel](https://sourceforge.net/projects/cellsnp/files/SNPlist/genome1K.phase3.SNP_AF5e4.chr1toX.hg38.vcf.gz/download). You can also choose other SNP panels from [cellsnp-lite webpage](https://cellsnp-lite.readthedocs.io/en/latest/snp_list.html).
 * [Phasing panel](http://pklab.med.harvard.edu/teng/data/1000G_hg38.zip)
 
 ### Run CalicoST
-Replace the following paths in the `example_config.yamll` file from the downloaded google drive with the downloaded files on your machine
+Untar the downloaded example data. Replace the following paths in the `example_config.yaml`  of the downloaded example data with paths on your machine
 * calicost_dir: the path to CalicoST git-cloned code.
 * eagledir: the path to Eagle2 directory
 * region_vcf: the path to the downloaded SNP panel.
@@ -77,14 +77,14 @@ To avoid falling into local maxima in CalicoST's optimization objective, we reco
 
 Then run CalicoST by
 ```
-cd <directory of Google drived downloaded files>
+cd <directory of downloaded example data>
 snakemake --cores 5 --configfile example_config.yaml --snakefile <calicost_dir>/calicost.smk all
 ```
 
 CalicoST takes about 69 minutes to finish on this example using 5 cores on an HPC.
 
 ### Understanding the output
-The above snakemake run will create a folder `calicost` in the directory of Google drived downloaded files. Within this folder, each random initialization of CalicoST generates a subdirectory of `calicost/clone*`. 
+The above snakemake run will create a folder `calicost` in the directory of downloaded example data. Within this folder, each random initialization of CalicoST generates a subdirectory of `calicost/clone*`. 
 
 CalicoST generates the following key files of each random initialization:
 * clone_labels.tsv: The inferred clone labels for each spot.
