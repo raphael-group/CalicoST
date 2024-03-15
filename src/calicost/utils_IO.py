@@ -648,11 +648,13 @@ def summarize_counts_for_blocks(df_gene_snp, adata, cell_snp_Aallele, cell_snp_B
         # BAF (SNPs)
         involved_snps_ids = [x for x in df_block_contents.snp_id.values[b] if not x is None]
         involved_snp_idx = np.array([map_snp_index[x] for x in involved_snps_ids])
-        single_X[b, 1, :] = np.sum( cell_snp_Aallele[:, involved_snp_idx], axis=1 )
-        single_total_bb_RD[b, :] = np.sum( cell_snp_Aallele[:, involved_snp_idx], axis=1 ) + np.sum( cell_snp_Ballele[:, involved_snp_idx], axis=1 )
+        if len(involved_snp_idx) > 0:
+            single_X[b, 1, :] = np.sum( cell_snp_Aallele[:, involved_snp_idx], axis=1 )
+            single_total_bb_RD[b, :] = np.sum( cell_snp_Aallele[:, involved_snp_idx], axis=1 ) + np.sum( cell_snp_Ballele[:, involved_snp_idx], axis=1 )
         # RDR (genes)
         involved_genes = list(set([x for x in df_block_contents.gene.values[b] if not x is None]))
-        single_X[b, 0, :] = np.sum( adata.layers['count'][:, adata.var.index.isin(involved_genes)], axis=1 )
+        if len(involved_genes) > 0:
+            single_X[b, 0, :] = np.sum( adata.layers['count'][:, adata.var.index.isin(involved_genes)], axis=1 )
 
     # lengths
     lengths = np.zeros(len(df_gene_snp.CHR.unique()), dtype=int)

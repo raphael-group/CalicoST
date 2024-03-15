@@ -200,6 +200,55 @@ def stateaccuracy_allele_starch(configuration_file, r_hmrf_initialization, hatch
     return percent_category, sorted_chr_pos
 
 
+def stateaccuracy_calicost_fromdf(configuration_file, r_hmrf_initialization, df_compare, midfix="", ordered_chr=[str(c) for c in range(1,23)], fun_hatchetconvert=convert_copy_to_states, binsize=1e5, purity_threshold=0.3):
+    """
+    df_compare : DataFrame
+        Contains the following columns: CHR, START, END, Acopy_clone1, Bcopy_clone1, Acopy_clone2, Bcopy_clone2, ...
+    """
+    try:
+        config = read_configuration_file(configuration_file)
+    except:
+        config = read_joint_configuration_file(configuration_file)
+    
+    # starch results
+    outdir = f"{config['output_dir']}/clone{config['n_clones']}_rectangle{r_hmrf_initialization}_w{config['spatial_weight']:.1f}"
+    df_starch_cnv = pd.read_csv(f"{outdir}/cnv_{midfix}seglevel.tsv", sep="\t", header=0)
+    df_starch_cnv.CHR = df_starch_cnv.CHR.astype(str)
+    # check agreement with ordered_chr
+    ordered_chr_map = {ordered_chr[i]:i for i in range(len(ordered_chr))}
+    if ~np.any( df_starch_cnv.CHR.isin(ordered_chr) ):
+        df_starch_cnv["CHR"] = df_starch_cnv.CHR.map(lambda x: x.replace("chr", ""))
+    df_starch_cnv = df_starch_cnv[df_starch_cnv.CHR.isin(ordered_chr)]
+    df_starch_cnv["int_chrom"] = df_starch_cnv.CHR.map(ordered_chr_map)
+    # sort by int_chrom and START
+    df_starch_cnv = df_starch_cnv.sort_values(by=["int_chrom", "START"])
+    sorted_chr_pos = [[df_starch_cnv.int_chrom.iloc[i], df_starch_cnv.START.iloc[i]] for i in range(df_starch_cnv.shape[0])]
+    df_starch_cnv.drop(columns=["int_chrom"], inplace=True)
+    clone_ids = np.unique([ x.split(" ")[0][5:] for x in df_starch_cnv.columns[3:] ])
+    coarse_states_inferred = np.array([fun_hatchetconvert(df_starch_cnv[f"clone{cid} A"].values, df_starch_cnv[f"clone{cid} B"].values, counts=((df_starch_cnv.END.values-df_starch_cnv.START.values) / binsize).astype(int)) for cid in clone_ids])
+    
+    # format change on df_compare
+    df_compare["CHR"] = df_compare["CHR"].astype(str)
+    if ~np.any( df_compare.CHR.isin(ordered_chr) ):
+        df_compare["CHR"] = df_compare.CHR.map(lambda x: x.replace("chr", ""))
+    df_compare = df_compare[df_compare.CHR.isin(ordered_chr)]
+    df_compare["int_chrom"] = df_compare.CHR.map(ordered_chr_map)
+    # sort by int_chrom and START
+    df_compare = df_compare.sort_values(by=["int_chrom", "START"])
+    
+    snp_seg_index = map_hatchet_to_bins(df_compare, sorted_chr_pos)
+    ref_clones = [x[6:] for x in df_compare.columns if x.startswith("Acopy_")]
+    coarse_states_compare = np.array([fun_hatchetconvert(df_compare[f"Acopy_{sid}"].values, df_compare[f"Bcopy_{sid}"].values, counts=((df_compare.END.values-df_compare.START.values) / binsize).astype(int)) for sid in ref_clones])
+
+    percent_category = np.zeros( (len(clone_ids), len(ref_clones)) )
+    for s,sid in enumerate(ref_clones):
+        # accuracy
+        for c,cid in enumerate(clone_ids):
+            # coarse
+            percent_category[c, s] = 1.0 * np.sum(coarse_states_inferred[c] == coarse_states_compare[s][snp_seg_index]) / len(snp_seg_index)
+    return percent_category, sorted_chr_pos
+
+
 def exactaccuracy_allele_starch(configuration_file, r_hmrf_initialization, hatchet_wes_file, midfix="", ordered_chr=[str(c) for c in range(1,23)], purity_threshold=0.3):
     try:
         config = read_configuration_file(configuration_file)
@@ -289,6 +338,60 @@ def stateaccuracy_numbat(numbat_dirs, hatchet_wes_file, sorted_chr_pos, ordered_
     percent_category = np.vstack(percent_category)
     states_numbat = np.array(states_numbat)
     return percent_category, coarse_states_wes[:,snp_seg_index], states_numbat
+
+
+def stateaccuracy_numbat_fromdf(numbat_dirs, df_compare, sorted_chr_pos, ordered_chr=[str(c) for c in range(1,23)], fun_hatchetconvert=convert_copy_to_states, binsize=1e5):
+    ordered_chr_map = {ordered_chr[i]:i for i in range(len(ordered_chr))}
+    
+    # format change on df_compare
+    df_compare["CHR"] = df_compare["CHR"].astype(str)
+    if ~np.any( df_compare.CHR.isin(ordered_chr) ):
+        df_compare["CHR"] = df_compare.CHR.map(lambda x: x.replace("chr", ""))
+    df_compare = df_compare[df_compare.CHR.isin(ordered_chr)]
+    df_compare["int_chrom"] = df_compare.CHR.map(ordered_chr_map)
+    # sort by int_chrom and START
+    df_compare = df_compare.sort_values(by=["int_chrom", "START"])
+    
+    snp_seg_index = map_hatchet_to_bins(df_compare, sorted_chr_pos)
+    ref_clones = [x[6:] for x in df_compare.columns if x.startswith("Acopy_")]
+    coarse_states_compare = np.array([fun_hatchetconvert(df_compare[f"Acopy_{sid}"].values, df_compare[f"Bcopy_{sid}"].values, counts=((df_compare.END.values-df_compare.START.values) / binsize).astype(int)) for sid in ref_clones])
+
+    percent_category = []
+    states_numbat = []
+    for dirname in numbat_dirs:
+        tmpdf_numbat = pd.read_csv(f"{dirname}/bulk_clones_final.tsv.gz", header=0, sep="\t")
+        n_numbat_samples = len( np.unique(tmpdf_numbat["sample"]) )
+        # check chromosome name
+        tmpdf_numbat.CHROM = tmpdf_numbat.CHROM.astype(str)
+        if ~np.any( tmpdf_numbat.CHROM.isin(ordered_chr) ):
+            tmpdf_numbat["CHROM"] = tmpdf_numbat.CHROM.map(lambda x: x.replace("chr", ""))
+        tmpdf_numbat = tmpdf_numbat[tmpdf_numbat.CHROM.isin(ordered_chr)]
+        tmpdf_numbat["int_chrom"] = tmpdf_numbat.CHROM.map(ordered_chr_map)
+        tmpdf_numbat.sort_values(by=['int_chrom', 'POS'], inplace=True)
+
+        this_percent_category = np.zeros((n_numbat_samples, len(ref_clones)))
+        for sidx,s in enumerate(np.unique(tmpdf_numbat["sample"])):
+            tmpdf_sample = tmpdf_numbat[tmpdf_numbat["sample"] == s][["int_chrom", "POS", "cnv_state"]]
+            index = np.ones(len(sorted_chr_pos), dtype=int) * -1
+            j = 0
+            for i in range(len(sorted_chr_pos)):
+                this_chr = sorted_chr_pos[i][0]
+                this_pos = sorted_chr_pos[i][1]
+                while (j < tmpdf_sample.shape[0]) and ((tmpdf_sample.int_chrom.values[j] < this_chr) or (tmpdf_sample.int_chrom.values[j] == this_chr and tmpdf_sample.POS.values[j] < this_pos)):
+                    j += 1
+                if j < tmpdf_sample.shape[0] and tmpdf_sample.int_chrom.values[j] == this_chr:
+                    index[i] = j
+                else:
+                    index[i] = j -1
+            for c in range(len(ref_clones)):
+                this_percent_category[sidx, c] = 1.0 * np.sum(tmpdf_sample["cnv_state"].values[index] == coarse_states_compare[c][snp_seg_index]) / len(snp_seg_index)
+
+            states_numbat.append( tmpdf_sample["cnv_state"].values[index] )
+        percent_category.append(this_percent_category)
+
+    percent_category = np.vstack(percent_category)
+    states_numbat = np.array(states_numbat)
+    return percent_category, coarse_states_compare[:,snp_seg_index], states_numbat
 
 
 def cna_precisionrecall_numbat(numbat_dirs, hatchet_wes_file, sorted_chr_pos, ordered_chr=[str(c) for c in range(1,23)], fun_hatchetconvert=convert_copy_to_states, binsize=1e5):

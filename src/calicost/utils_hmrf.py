@@ -8,6 +8,7 @@ import copy
 import anndata
 import scanpy as sc
 from statsmodels.tools.sm_exceptions import ValueWarning
+from calicost.utils_distribution_fitting import *
 
 
 def compute_adjacency_mat(coords, unit_xsquared=9, unit_ysquared=3):
@@ -645,10 +646,15 @@ def estimator_tumor_proportion(single_X, single_total_bb_RD, assignments, pred_c
     ----------
     0.5 ( 1-theta ) / (theta * RDR + 1 - theta) = B_count / Total_count for each LOH state.
     """
+    # def estimate_purity(T_loh, B_loh, rdr_values):
+    #     features =(T_loh / 2.0 + rdr_values * B_loh - B_loh)[T_loh>0].reshape(-1,1)
+    #     y = (T_loh / 2.0 - B_loh)[T_loh>0]
+    #     return np.linalg.lstsq(features, y, rcond=None)[0]
     def estimate_purity(T_loh, B_loh, rdr_values):
-        features =(T_loh / 2.0 + rdr_values * B_loh - B_loh)[T_loh>0].reshape(-1,1)
-        y = (T_loh / 2.0 - B_loh)[T_loh>0]
-        return np.linalg.lstsq(features, y, rcond=None)[0]
+        idx = np.where(T_loh > 0)[0]
+        model = BAF_Binom(endog=B_loh[idx], exog=np.ones((len(idx),1)), weights=np.ones(len(idx)), exposure=T_loh[idx], offset=np.log(rdr_values[idx]), scaling=0.5)
+        res = model.fit(disp=False)
+        return 1.0 / (1.0 + np.exp(res.params))
     #
     n_obs = single_X.shape[0]
     n_spots = single_X.shape[2]
