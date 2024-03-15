@@ -227,3 +227,46 @@ class Weighted_BetaBinom_fixdispersion_mix(GenericLikelihoodModel):
                                                maxiter=maxiter, maxfun=maxfun,
                                                **kwds)
 
+
+class BAF_Binom(GenericLikelihoodModel):
+    """
+    Binomial model endog ~ BetaBin(exposure, tau * p, tau * (1 - p)), where p = exog @ params[:-1] and tau = params[-1].
+    This function fits the BetaBin params when samples are weighted by weights: max_{params} \sum_{s} weights_s * log P(endog_s | exog_s; params)
+
+    Attributes
+    ----------
+    endog : array, (n_samples,)
+        Y values.
+
+    exog : array, (n_samples, n_features)
+        Design matrix.
+
+    weights : array, (n_samples,)
+        Sample weights.
+
+    exposure : array, (n_samples,)
+        Total number of trials. In BAF case, this is the total number of SNP-covering UMIs.
+    """
+    def __init__(self, endog, exog, weights, exposure, offset, scaling, **kwds):
+        super(BAF_Binom, self).__init__(endog, exog, **kwds)
+        self.weights = weights
+        self.exposure = exposure
+        self.offset = offset
+        self.scaling = scaling
+    #
+    def nloglikeobs(self, params):
+        linear_term = self.exog @ params
+        p = self.scaling / (1 + np.exp(-linear_term + self.offset))
+        llf = scipy.stats.binom.logpmf(self.endog, self.exposure, p)
+        neg_sum_llf = -llf.dot(self.weights)
+        return neg_sum_llf
+    #
+    def fit(self, start_params=None, maxiter=10000, maxfun=5000, **kwds):
+        if start_params is None:
+            if hasattr(self, 'start_params'):
+                start_params = self.start_params
+            else:
+                start_params = 0.5 / np.sum(self.exog.shape[1]) *  np.ones(self.nparams)
+        return super(BAF_Binom, self).fit(start_params=start_params,
+                                               maxiter=maxiter, maxfun=maxfun,
+                                               **kwds)
