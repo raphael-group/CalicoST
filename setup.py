@@ -25,7 +25,8 @@ setuptools.setup(
             'matplotlib',
             'seaborn',
             'pysam',
-            'ete3'
+            'ete3',
+            'ipykernel'
         ],
         include_package_data=True
 )
