@@ -15,21 +15,33 @@ CalicoST is a probabilistic model that infers allele-specific copy number aberra
 The package has tested on the following Linux operating systems: SpringdaleOpenEnterprise 9.2 (Parma) and CentOS Linux 7 (Core).
 
 # Installation
+## Minimum installation
 First setup a conda environment from the `environment.yml` file:
 ```
 cd CalicoST
-conda config --add channels conda-forge
-conda config --add channels bioconda
 conda env create -f environment.yml --name calicost_env
 ```
 
-Next download Eagle2 by
+
+Then, install CalicoST using pip by
 ```
-wget https://storage.googleapis.com/broad-alkesgroup-public/Eagle/downloads/Eagle_v2.4.1.tar.gz
+conda activate calicost_env
+pip install -e .
+```
+
+Setting up the conda environments takes around 10 minutes on an HPC head node.
+
+## Additional installation for SNP parsing
+CalicoST requires allele count matrices for reference-phased A and B alleles for inferring allele-specific CNAs, and provides a snakemake pipeline for obtaining the required matrices from a BAM file. Run the following commands in CalicoST directory for installing additional packages for snakemake preprocessing pipeline.
+
+```
+mkdir external
+wget --directory-prefix=external https://storage.googleapis.com/broad-alkesgroup-public/Eagle/downloads/Eagle_v2.4.1.tar.gz
 tar -xzf Eagle_v2.4.1.tar.gz
 ```
 
-Then install Startle by
+## Additional installation for reconstructing phylogeny
+Based on the inferred cancer clones and allele-specific CNAs by CalicoST, we apply Startle to reconstruct a phylogenetic tree along the clones. Install Startle by
 ```
 git clone --recurse-submodules https://github.com/raphael-group/startle.git
 cd startle
@@ -43,13 +55,6 @@ cmake -DLIBLEMON_ROOT=<lemon path>\
 make
 ```
 
-Finally, install CalicoST using pip by
-```
-conda activate calicost_env
-pip install -e .
-```
-
-Setting up the conda environments takes around 10 minutes on an HPC head node.
 
 # Getting started
 CalicoST requires the coordinate information of genes and SNPs, the information files for GRCh38 genome are available from either of the [example data tarball](https://github.com/raphael-group/CalicoST/tree/main/examples). Specify the information file paths, your input SRT data paths, and running configurations in `config.yaml`, and then you can run CalicoST by
