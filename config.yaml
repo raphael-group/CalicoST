@@ -17,15 +17,5 @@ chromosomes: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19,
 # input
 spaceranger_dir: <Replace with Spaceranger directory>
 
-# CalicoST parameters
-random_state: [0, 1, 2, 3, 4]
-geneticmap_file: <Replace with git cloned CalicoST directory>/GRCh38_resources/genetic_map_GRCh38_merged.tab.gz
-hgtable_file: <Replace with git cloned CalicoST directory>/GRCh38_resources/hgTables_hg38_gencode.txt
-filtergenelist_file: <Replace with git cloned CalicoST directory>/GRCh38_resources/ig_gene_list.txt
-filterregion_file: <Replace with git cloned CalicoST directory>/GRCh38_resources/HLA_regions.bed
-tumorprop_file: "/u/congma/ragr-data/datasets/DingLab/HT112/HT112C1-T1_U1/ht112_u1_rctd_prop.tsv"
-np_threshold: 1.0
-
 # output
 output_snpinfo: <Replace with output directory of preprocessing>
-outputdir_calicost: <Replace with output directory of CalicoST>
