@@ -9,7 +9,7 @@ CalicoST is a probabilistic model that infers allele-specific copy number aberra
 2. Assigns each spot a clone label indicating whether the spot is primarily normal cells or a cancer clone with aberration copy number profile.
 3. Infers a phylogeny relating the identified cancer clones as well as a phylogeography that combines genetic evolution and spatial dissemination of clones.
 4. Handles normal cell admixture in SRT technologies hat are not single-cell resolution (e.g. 10x Genomics Visium) to infer more accurate allele-specific copy numbers and cancer clones.
-5.  Simultaneously analyzes multiple regional or aligned SRT slices from the same tumor.
+5.  Simultaneously analyzes multiple regions or aligned SRT slices from the same tumor.
 
 # System requirements
 The package has tested on the following Linux operating systems: SpringdaleOpenEnterprise 9.2 (Parma) and CentOS Linux 7 (Core).
@@ -33,7 +33,7 @@ pip install -e .
 Setting up the conda environments takes around 10 minutes on an HPC head node.
 
 ## Additional installation for SNP parsing
-CalicoST requires allele count matrices for reference-phased A and B alleles for inferring allele-specific CNAs, and provides a snakemake pipeline for obtaining the required matrices from a BAM file. Run the following commands in CalicoST directory for installing additional packages for snakemake preprocessing pipeline.
+CalicoST requires allele count matrices for reference-phased A and B alleles for inferring allele-specific CNAs, and provides a snakemake pipeline for obtaining the required matrices from a BAM file. Run the following commands in CalicoST directory for installing additional package, [Eagle2](https://alkesgroup.broadinstitute.org/Eagle/), for snakemake preprocessing pipeline.
 
 ```
 mkdir external
@@ -59,7 +59,18 @@ make
 
 # Getting started
 ### Preprocessing: genotyping and reference-based phasing
-CalicoST requires the coordinate information of genes and SNPs, the information files for GRCh38 genome are available from either of the [example data tarball](https://github.com/raphael-group/CalicoST/tree/main/examples). Specify the information file paths, your input SRT data paths, and running configurations in `config.yaml`, and then you can run CalicoST by
+To infer allele-specific CNAs, we generate allele count matrices in the preprocessing step by genotyping using the BAM file by cellsnp-lite (included in the conda environment) and reference-based phasing by Eagle2. Download the following panels for genotyping and reference-based phasing.
+* [SNP panel](https://sourceforge.net/projects/cellsnp/files/SNPlist/genome1K.phase3.SNP_AF5e4.chr1toX.hg38.vcf.gz/download) - 0.5GB in size. You can also choose other SNP panels from [cellsnp-lite webpage](https://cellsnp-lite.readthedocs.io/en/latest/snp_list.html).
+* [Phasing panel](http://pklab.med.harvard.edu/teng/data/1000G_hg38.zip)- 9.0GB in size.. Unzip the panel after downloading.
+
+Replace the following paths `config.yaml`:
+* `region_vcf`: Replace with the path of downloaded SNP panel.
+* `phasing_panel`: Replace with the unzipped directory of the downloaded phasing panel.
+* `spaceranger_dir`: Replace with the spaceranger directory of your Visium data, which should contain the BAM file `possorted_genome_bam.bam`.
+* `output_snpinfo`: Replace with the desired output directory.
+* Replace `calicost_dir` and `eagledir` with the path to the cloned CalicoST directory and downloaded Eagle2 directory.
+
+Then you can run preprocessing pipeline by
 ```
 snakemake --cores <number threads> --configfile config.yaml --snakefile calicost.smk all
 ```
@@ -198,3 +209,17 @@ CalicoST uses the following packages for the remaining steps to infer allele-spe
 * matplotlib
 * seaborn
 * snakemake
+
+
+# Citations
+The CalicoST manuscript is available on bioRxiv. If you use CalicoST for your work, please cite our paper.
+```
+@article{ma2024inferring,
+  title={Inferring allele-specific copy number aberrations and tumor phylogeography from spatially resolved transcriptomics},
+  author={Ma, Cong and Balaban, Metin and Liu, Jingxian and Chen, Siqi and Ding, Li and Raphael, Benjamin},
+  journal={bioRxiv},
+  pages={2024--03},
+  year={2024},
+  publisher={Cold Spring Harbor Laboratory}
+}
+```
