@@ -1,0 +1,57 @@
+
+spaceranger_dir : <Replace with Spaceranger directory>
+snp_dir : <Replace with output directory of preprocessing>
+output_dir : <Replace with output directory>
+
+# supporting files and preprocessing arguments
+geneticmap_file : <Replace with CalicoST directory>/GRCh38_resources/genetic_map_GRCh38_merged.tab.gz
+hgtable_file : <Replace with CalicoST directory>/GRCh38_resources/hgTables_hg38_gencode.txt
+normalidx_file : None
+tumorprop_file : None
+alignment_files : 
+supervision_clone_file : None
+filtergenelist_file : <Replace with CalicoST directory>/GRCh38_resources/ig_gene_list.txt
+filterregion_file : <Replace with CalicoST directory>/GRCh38_resources/HLA_regions.bed
+secondary_min_umi : 400
+bafonly : False
+
+# phase switch probability
+nu : 1.0
+logphase_shift : -2.0
+npart_phasing : 3
+
+# HMRF configurations
+n_clones : 5
+n_clones_rdr : 2
+min_spots_per_clone : 100
+min_avgumi_per_clone : 10
+maxspots_pooling : 19
+tumorprop_threshold : 0.5
+max_iter_outer : 20
+nodepotential : weighted_sum
+initialization_method : rectangle
+num_hmrf_initialization_start : 0
+num_hmrf_initialization_end : 1
+spatial_weight : 1.0
+construct_adjacency_method : hexagon
+construct_adjacency_w : 1.0
+
+# HMM configurations
+n_states : 7
+params : smp
+t : 1-1e-4
+t_phaseing : 0.9999
+fix_NB_dispersion : False
+shared_NB_dispersion : True
+fix_BB_dispersion : False
+shared_BB_dispersion : True
+max_iter : 30
+tol : 0.0001
+gmm_random_state : 0
+np_threshold : 1.0
+np_eventminlen : 10
+
+# integer copy number
+nonbalance_bafdist : 1.0
+nondiploid_rdrdist : 10.0
+
