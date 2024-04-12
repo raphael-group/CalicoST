@@ -1,10 +1,6 @@
 # path to executables or their parent directories
-calicost_dir: "/u/congma/ragr-data/users/congma/Codes/CalicoST/"
-cellsnplite: "cellsnp-lite"
-samtools: "samtools"
-bgzip: "bgzip"
-tabix: "tabix"
-eagledir: "/u/congma/ragr-data/users/congma/environments/Eagle_v2.4.1/"
+calicost_dir: <Replace with git cloned CalicoST directory>
+eagledir: <Replace with downloaded Eagle2 directory>
 
 # running parameters
 # samtools sort (only used when joingly calling from multiple slices)
@@ -13,23 +9,23 @@ samtools_sorting_mem: "4G"
 UMItag: "Auto"
 cellTAG: "CB"
 nthreads_cellsnplite: 20
-region_vcf: "/u/congma/ragr-data/users/congma/references/snplist/genome1K.phase3.SNP_AF5e4.chr1toX.hg38.vcf.gz"
+region_vcf: <Replace with downloaded SNP panel path>
 # Eagle phasing
-phasing_panel: "/u/congma/ragr-data/users/congma/references/phasing_ref/1000G_hg38/"
+phasing_panel: <Replace with downloaded phasing panel directory>
 chromosomes: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22]
 
 # input
-spaceranger_dir: "/u/congma/ragr-data/datasets/DingLab/HT112/U1/"
+spaceranger_dir: <Replace with Spaceranger directory>
 
 # CalicoST parameters
 random_state: [0, 1, 2, 3, 4]
-geneticmap_file: "/u/congma/ragr-data/datasets/genetic_map/recomb-hg38/genetic_map_GRCh38_merged.tab"
-hgtable_file: "/u/congma/ragr-data/users/congma/Codes/STARCH_crazydev/hgTables_hg38_gencode.txt"
-filtergenelist_file: "/n/fs/ragr-data/users/congma/references/cellranger_refdata-gex-GRCh38-2020-A/genes/ig_gene_list.txt"
-filterregion_file: "/n/fs/ragr-data/users/congma/references/cellranger_refdata-gex-GRCh38-2020-A/genes/HLA_regions.bed"
+geneticmap_file: <Replace with git cloned CalicoST directory>/GRCh38_resources/genetic_map_GRCh38_merged.tab.gz
+hgtable_file: <Replace with git cloned CalicoST directory>/GRCh38_resources/hgTables_hg38_gencode.txt
+filtergenelist_file: <Replace with git cloned CalicoST directory>/GRCh38_resources/ig_gene_list.txt
+filterregion_file: <Replace with git cloned CalicoST directory>/GRCh38_resources/HLA_regions.bed
 tumorprop_file: "/u/congma/ragr-data/datasets/DingLab/HT112/HT112C1-T1_U1/ht112_u1_rctd_prop.tsv"
 np_threshold: 1.0
 
 # output
-output_snpinfo: "/u/congma/ragr-data/users/congma/Datasets/test_calico/snpinfo"
-outputdir_calicost: "/u/congma/ragr-data/users/congma/Datasets/test_calico/calicost"
+output_snpinfo: <Replace with output directory of preprocessing>
+outputdir_calicost: <Replace with output directory of CalicoST>
