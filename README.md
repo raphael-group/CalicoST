@@ -18,6 +18,7 @@ The package has tested on the following Linux operating systems: SpringdaleOpenE
 ## Minimum installation
 First setup a conda environment from the `environment.yml` file:
 ```
+git clone git@github.com:raphael-group/CalicoST.git
 cd CalicoST
 conda env create -f environment.yml --name calicost_env
 ```
@@ -57,21 +58,44 @@ make
 
 
 # Getting started
+### Preprocessing: genotyping and reference-based phasing
 CalicoST requires the coordinate information of genes and SNPs, the information files for GRCh38 genome are available from either of the [example data tarball](https://github.com/raphael-group/CalicoST/tree/main/examples). Specify the information file paths, your input SRT data paths, and running configurations in `config.yaml`, and then you can run CalicoST by
 ```
 snakemake --cores <number threads> --configfile config.yaml --snakefile calicost.smk all
 ```
 
-Check out our [readthedocs](https://calicost.readthedocs.io/en/latest/) for tutorials on the simulated data and prostate cancer data.
+### Inferring tumor purity per spot (optional)
+Replace the paths in the parameter configuration file `configuration_purity` with the corresponding data/reference file paths and run
+```
+OMP_NUM_THREADS=1 <CalicoST directory>/src/calicost/estimate_tumor_proportion.py -c configuration_purity
+```
 
-# Run on a simulated example data
-### Download data
-The simulated count matrices are available from [`examples/CalicoST_example.tar.gz`](https://github.com/raphael-group/CalicoST/blob/main/examples/CalicoST_example.tar.gz).
-CalicoST requires a reference SNP panel and phasing panel, which can be downloaded from
+### Inferring clones and allele-specific CNAs
+Replace the paths in parameter configuration file `configuration_cna` with the corresponding data/reference file paths and run
+```
+OMP_NUM_THREADS=1 python <CalicoST directory>/src/calicost/calicost_main.py -c configuration_cna
+```
+
+### Reconstruct phylogeography
+
+```
+python <CalicoST directory>/src/calicost/phylogeny_startle.py -c <CalicoST clone and CNA output directory> -s <startle executable path> -o <output directory>
+```
+
+
+# Tutorials
+Check out our [readthedocs](https://calicost.readthedocs.io/en/latest/) for the following tutorials:
+1. [Inferring clones and allele-specific CNAs on simulated data](https://calicost.readthedocs.io/en/latest/notebooks/tutorials/simulated_data_tutorial.html)
+The simulated count matrices and parameter configuration file are available from [`examples/CalicoST_example.tar.gz`](https://github.com/raphael-group/CalicoST/blob/main/examples/CalicoST_example.tar.gz). CalicoST takes about 69 minutes to finish on this example on an HPC.
+
+2. [Inferring tumor purity, clones, allele-specific CNAs, and phylogeography on prostate cancer data](https://calicost.readthedocs.io/en/latest/notebooks/tutorials/prostate_tutorial.html)
+The transcript count, allele count matrices, and running configuration fies are available from [`examples/tutorial.tar.gz`](https://github.com/raphael-group/CalicoST/blob/main/examples/tutorial.tar.gz). This sample contains five slices and over 10000 spots, CalicoST takes about 8h to finish on this example on an HPC.
+
+<!-- CalicoST requires a reference SNP panel and phasing panel, which can be downloaded from
 * [SNP panel](https://sourceforge.net/projects/cellsnp/files/SNPlist/genome1K.phase3.SNP_AF5e4.chr1toX.hg38.vcf.gz/download). You can also choose other SNP panels from [cellsnp-lite webpage](https://cellsnp-lite.readthedocs.io/en/latest/snp_list.html).
-* [Phasing panel](http://pklab.med.harvard.edu/teng/data/1000G_hg38.zip)
+* [Phasing panel](http://pklab.med.harvard.edu/teng/data/1000G_hg38.zip) -->
 
-### Run CalicoST
+<!-- ### Run CalicoST
 Untar the downloaded example data. Replace the following paths in the `example_config.yaml`  of the downloaded example data with paths on your machine
 * calicost_dir: the path to CalicoST git-cloned code.
 * eagledir: the path to Eagle2 directory
@@ -86,7 +110,7 @@ cd <directory of downloaded example data>
 snakemake --cores 5 --configfile example_config.yaml --snakefile <calicost_dir>/calicost.smk all
 ```
 
-CalicoST takes about 69 minutes to finish on this example using 5 cores on an HPC.
+CalicoST takes about 69 minutes to finish on this example using 5 cores on an HPC. -->
 
 ### Understanding the output
 The above snakemake run will create a folder `calicost` in the directory of downloaded example data. Within this folder, each random initialization of CalicoST generates a subdirectory of `calicost/clone*`. 

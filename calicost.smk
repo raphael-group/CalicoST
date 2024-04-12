@@ -8,7 +8,7 @@ import calicost.parse_input
 rule all:
     input:
         f"{config['output_snpinfo']}/cell_snp_Aallele.npz",
-        expand(f"{config['outputdir_calicost']}/summary{{r}}", r=config['random_state'])
+        # expand(f"{config['outputdir_calicost']}/summary{{r}}", r=config['random_state'])
 
 
 rule link_or_merge_bam:
