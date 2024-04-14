@@ -14,20 +14,9 @@ CalicoST is a probabilistic model that infers allele-specific copy number aberra
 5. Simultaneously analyzes multiple regional or aligned SRT slices from the same tumor.
 
 
-Installation
-------------
-Find the details of installation `here <installation>`_.
-
-Getting started with CalicoST
------------------------------
-Browse the Tutorials to get started with CalicoST `here <notebooks/tutorials/index>`_.
-
 .. toctree::
     :maxdepth: 1
 
-    installation
-    tutorials
     parameters
-    references
 
 .. _github: https://github.com/raphael-group/CalicoST
