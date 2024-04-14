@@ -97,7 +97,7 @@ python <CalicoST directory>/src/calicost/phylogeny_startle.py -c <CalicoST clone
 # Tutorials
 Check out our [readthedocs](https://calicost.readthedocs.io/en/latest/) for the following tutorials:
 1. [Inferring clones and allele-specific CNAs on simulated data](https://calicost.readthedocs.io/en/latest/notebooks/tutorials/simulated_data_tutorial.html)
-The simulated count matrices and parameter configuration file are available from [`examples/CalicoST_example.tar.gz`](https://github.com/raphael-group/CalicoST/blob/main/examples/CalicoST_example.tar.gz). CalicoST takes about 69 minutes to finish on this example on an HPC.
+The simulated count matrices and parameter configuration file are available from [`examples/simulated_example.tar.gz`](https://github.com/raphael-group/CalicoST/blob/main/examples/simulated_example.tar.gz). CalicoST takes about 69 minutes to finish on this example on an HPC.
 
 2. [Inferring tumor purity, clones, allele-specific CNAs, and phylogeography on prostate cancer data](https://calicost.readthedocs.io/en/latest/notebooks/tutorials/prostate_tutorial.html)
 The transcript count, allele count matrices, and running configuration fies are available from [`examples/tutorial.tar.gz`](https://github.com/raphael-group/CalicoST/blob/main/examples/tutorial.tar.gz). This sample contains five slices and over 10000 spots, CalicoST takes about 8h to finish on this example on an HPC.
