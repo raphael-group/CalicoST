@@ -1,7 +1,7 @@
 
 spaceranger_dir : <Replace with Spaceranger directory>
 snp_dir : <Replace with output directory of preprocessing>
-output_dir : <Replace with output directory>
+output_dir : <Replace with output directory, must be existing>
 
 # supporting files and preprocessing arguments
 geneticmap_file : <Replace with CalicoST directory>/GRCh38_resources/genetic_map_GRCh38_merged.tab.gz
