@@ -1,12 +1,13 @@
 Installation
 ============
+## Minimum installation
 First setup a conda environment from the `environment.yml` file:
 ```
+git clone https://github.com/raphael-group/CalicoST.git
 cd CalicoST
-conda config --add channels conda-forge
-conda config --add channels bioconda
 conda env create -f environment.yml --name calicost_env
 ```
+
 
 Then, install CalicoST using pip by
 ```
@@ -14,16 +15,19 @@ conda activate calicost_env
 pip install -e .
 ```
 
-Install dependencies
---------------------
-CalicoST depends on two additional softwares that cannot be installed using conda in the previous step. If you need to use the corresponding steps in CalicoST, you need to install them manually as follows:
+Setting up the conda environments takes around 15 minutes on an HPC head node.
 
-1. [**Eagle2**](https://alkesgroup.broadinstitute.org/Eagle/): Eagle2 is used in the preprocessing step to parse B allele count matrix from the BAM file.
+## Additional installation for SNP parsing
+CalicoST requires allele count matrices for reference-phased A and B alleles for inferring allele-specific CNAs, and provides a snakemake pipeline for obtaining the required matrices from a BAM file. Run the following commands in CalicoST directory for installing additional package, [Eagle2](https://alkesgroup.broadinstitute.org/Eagle/), for snakemake preprocessing pipeline.
+
 ```
-wget https://storage.googleapis.com/broad-alkesgroup-public/Eagle/downloads/Eagle_v2.4.1.tar.gz
-tar -xzf Eagle_v2.4.1.tar.gz
+mkdir external
+wget --directory-prefix=external https://storage.googleapis.com/broad-alkesgroup-public/Eagle/downloads/Eagle_v2.4.1.tar.gz
+tar -xzf external/Eagle_v2.4.1.tar.gz -C external
 ```
-2. [**Startle**](https://github.com/raphael-group/startle): Startle is used in the phylogeny-reconstruction step to reconstruct a phylogeny based on CalicoST-inferred CNAs and cancer clones.
+
+## Additional installation for reconstructing phylogeny
+Based on the inferred cancer clones and allele-specific CNAs by CalicoST, we apply Startle to reconstruct a phylogenetic tree along the clones. Install Startle by
 ```
 git clone --recurse-submodules https://github.com/raphael-group/startle.git
 cd startle
@@ -36,3 +40,9 @@ cmake -DLIBLEMON_ROOT=<lemon path>\
         ..
 make
 ```
+
+Prepare reference files for SNP parsing
+--------------------
+We followed the recommended pipeline by [Numbat](https://kharchenkolab.github.io/numbat/) for parsing SNP information from BAM file(s): first genotyping using the BAM file by cellsnp-lite (included in the conda environment) and reference-based phasing by Eagle2. Download the following panels for genotyping and reference-based phasing.
+* [SNP panel](https://sourceforge.net/projects/cellsnp/files/SNPlist/genome1K.phase3.SNP_AF5e4.chr1toX.hg38.vcf.gz) - 0.5GB in size. You can also choose other SNP panels from [cellsnp-lite webpage](https://cellsnp-lite.readthedocs.io/en/latest/snp_list.html).
+* [Phasing panel](http://pklab.med.harvard.edu/teng/data/1000G_hg38.zip)- 9.0GB in size. Unzip the panel after downloading.
