@@ -30,7 +30,7 @@ conda activate calicost_env
 pip install -e .
 ```
 
-Setting up the conda environments takes around 10 minutes on an HPC head node.
+Setting up the conda environments takes around 15 minutes on an HPC head node.
 
 ## Additional installation for SNP parsing
 CalicoST requires allele count matrices for reference-phased A and B alleles for inferring allele-specific CNAs, and provides a snakemake pipeline for obtaining the required matrices from a BAM file. Run the following commands in CalicoST directory for installing additional package, [Eagle2](https://alkesgroup.broadinstitute.org/Eagle/), for snakemake preprocessing pipeline.
@@ -38,7 +38,7 @@ CalicoST requires allele count matrices for reference-phased A and B alleles for
 ```
 mkdir external
 wget --directory-prefix=external https://storage.googleapis.com/broad-alkesgroup-public/Eagle/downloads/Eagle_v2.4.1.tar.gz
-tar -xzf Eagle_v2.4.1.tar.gz
+tar -xzf external/Eagle_v2.4.1.tar.gz -C external
 ```
 
 ## Additional installation for reconstructing phylogeny
@@ -59,9 +59,9 @@ make
 
 # Getting started
 ### Preprocessing: genotyping and reference-based phasing
-To infer allele-specific CNAs, we generate allele count matrices in the preprocessing step by genotyping using the BAM file by cellsnp-lite (included in the conda environment) and reference-based phasing by Eagle2. Download the following panels for genotyping and reference-based phasing.
-* [SNP panel](https://sourceforge.net/projects/cellsnp/files/SNPlist/genome1K.phase3.SNP_AF5e4.chr1toX.hg38.vcf.gz/download) - 0.5GB in size. You can also choose other SNP panels from [cellsnp-lite webpage](https://cellsnp-lite.readthedocs.io/en/latest/snp_list.html).
-* [Phasing panel](http://pklab.med.harvard.edu/teng/data/1000G_hg38.zip)- 9.0GB in size.. Unzip the panel after downloading.
+To infer allele-specific CNAs, we generate allele count matrices in this preprocessing step. We followed the recommended pipeline by [Numbat](https://kharchenkolab.github.io/numbat/), which is designed for scRNA-seq data to infer clones and CNAs: first genotyping using the BAM file by cellsnp-lite (included in the conda environment) and reference-based phasing by Eagle2. Download the following panels for genotyping and reference-based phasing.
+* [SNP panel](https://sourceforge.net/projects/cellsnp/files/SNPlist/genome1K.phase3.SNP_AF5e4.chr1toX.hg38.vcf.gz) - 0.5GB in size. You can also choose other SNP panels from [cellsnp-lite webpage](https://cellsnp-lite.readthedocs.io/en/latest/snp_list.html).
+* [Phasing panel](http://pklab.med.harvard.edu/teng/data/1000G_hg38.zip)- 9.0GB in size. Unzip the panel after downloading.
 
 Replace the following paths `config.yaml`:
 * `region_vcf`: Replace with the path of downloaded SNP panel.
