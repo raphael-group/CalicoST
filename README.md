@@ -18,7 +18,7 @@ The package has tested on the following Linux operating systems: SpringdaleOpenE
 ## Minimum installation
 First setup a conda environment from the `environment.yml` file:
 ```
-git clone git@github.com:raphael-group/CalicoST.git
+git clone https://github.com/raphael-group/CalicoST.git
 cd CalicoST
 conda env create -f environment.yml --name calicost_env
 ```
@@ -87,6 +87,13 @@ Replace the paths in parameter configuration file `configuration_cna` with the c
 OMP_NUM_THREADS=1 python <CalicoST directory>/src/calicost/calicost_main.py -c configuration_cna
 ```
 
+When jointly inferring clones and CNAs across multiple SRT slices, prepare a table with the following columns (See [`examples/example_input_filelist`](https://github.com/raphael-group/CalicoST/blob/main/examples/example_input_filelist) as an example). 
+Path to BAM file | sample ID | Path to Spaceranger outs
+Modify `configuration_cna_multi` with paths to the table and run
+```
+OMP_NUM_THREADS=1 python <CalicoST directory>/src/calicost/calicost_main.py -c configuration_cna_multi
+```
+
 ### Reconstruct phylogeography
 
 ```
@@ -97,7 +104,7 @@ python <CalicoST directory>/src/calicost/phylogeny_startle.py -c <CalicoST clone
 # Tutorials
 Check out our [readthedocs](https://calicost.readthedocs.io/en/latest/) for the following tutorials:
 1. [Inferring clones and allele-specific CNAs on simulated data](https://calicost.readthedocs.io/en/latest/notebooks/tutorials/simulated_data_tutorial.html)
-The simulated count matrices and parameter configuration file are available from [`examples/simulated_example.tar.gz`](https://github.com/raphael-group/CalicoST/blob/main/examples/simulated_example.tar.gz). CalicoST takes about 69 minutes to finish on this example on an HPC.
+The simulated count matrices and parameter configuration file are available from [`examples/simulated_example.tar.gz`](https://github.com/raphael-group/CalicoST/blob/main/examples/simulated_example.tar.gz). CalicoST takes about 2h to finish on this example on an HPC.
 
 2. [Inferring tumor purity, clones, allele-specific CNAs, and phylogeography on prostate cancer data](https://calicost.readthedocs.io/en/latest/notebooks/tutorials/prostate_tutorial.html)
 The transcript count, allele count matrices, and running configuration fies are available from [`examples/tutorial.tar.gz`](https://github.com/raphael-group/CalicoST/blob/main/examples/tutorial.tar.gz). This sample contains five slices and over 10000 spots, CalicoST takes about 8h to finish on this example on an HPC.
