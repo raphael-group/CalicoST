@@ -27,7 +27,8 @@ def load_data(spaceranger_dir, snp_dir, filtergenelist_file, filterregion_file, 
         adata = sc.read_h5ad(f"{spaceranger_dir}/filtered_feature_bc_matrix.h5ad")
     else:
         logging.error(f"{spaceranger_dir} directory doesn't have a filtered_feature_bc_matrix.h5 or filtered_feature_bc_matrix.h5ad file!")
-
+        raise RuntimeError()
+        
     adata.layers["count"] = adata.X.A.astype(int)
     cell_snp_Aallele = scipy.sparse.load_npz(f"{snp_dir}/cell_snp_Aallele.npz")
     cell_snp_Ballele = scipy.sparse.load_npz(f"{snp_dir}/cell_snp_Ballele.npz")
