@@ -4,11 +4,11 @@
 <img src="https://github.com/raphael-group/CalicoST/blob/main/docs/_static/img/overview4_combine.png?raw=true" width="100%" height="auto"/>
 </p>
 
-CalicoST is a probabilistic model that infers allele-specific copy number aberrations and tumor phylogeography from spatially resolved transcriptomics.CalicoST has the following key features:
+CalicoST is a probabilistic model that infers allele-specific copy number aberrations and tumor phylogeography from spatially resolved transcriptomics.  CalicoST has the following key features:
 1. Identifies allele-specific integer copy numbers for each transcribed region, revealing events such as copy neutral loss of heterozygosity (CNLOH) and mirrored subclonal CNAs that are invisible to total copy number analysis.
 2. Assigns each spot a clone label indicating whether the spot is primarily normal cells or a cancer clone with aberration copy number profile.
 3. Infers a phylogeny relating the identified cancer clones as well as a phylogeography that combines genetic evolution and spatial dissemination of clones.
-4. Handles normal cell admixture in SRT technologies hat are not single-cell resolution (e.g. 10x Genomics Visium) to infer more accurate allele-specific copy numbers and cancer clones.
+4. Handles normal cell admixture in SRT technologies that are not single-cell resolution (e.g. 10x Genomics Visium) to infer more accurate allele-specific copy numbers and cancer clones.
 5.  Simultaneously analyzes multiple regions or aligned SRT slices from the same tumor.
 
 # System requirements
@@ -33,7 +33,7 @@ pip install -e .
 Setting up the conda environments takes around 15 minutes on an HPC head node.
 
 ## Additional installation for SNP parsing
-CalicoST requires allele count matrices for reference-phased A and B alleles for inferring allele-specific CNAs, and provides a snakemake pipeline for obtaining the required matrices from a BAM file. Run the following commands in CalicoST directory for installing additional package, [Eagle2](https://alkesgroup.broadinstitute.org/Eagle/), for snakemake preprocessing pipeline.
+CalicoST requires allele count matrices for reference-phased A and B alleles for inferring allele-specific CNAs, and provides a snakemake pipeline for obtaining the required matrices from a BAM file. Run the following commands in CalicoST directory for installing additional package, [Eagle2](https://alkesgroup.broadinstitute.org/Eagle/), for the snakemake preprocessing pipeline:
 
 ```
 mkdir external
@@ -55,16 +55,17 @@ cmake -DLIBLEMON_ROOT=<lemon path>\
         ..
 make
 ```
-
+Required dependencies include [LEMON](https://lemon.cs.elte.hu/trac/lemon/wiki/InstallLinux), [CPLEX and concert](https://www.ibm.com/products/ilog-cplex-optimization-studio/cplex-optimizer),
+perl and python3, as listed by the required paths.
 
 # Getting started
 ### Preprocessing: genotyping and reference-based phasing
-To infer allele-specific CNAs, we generate allele count matrices in this preprocessing step. We followed the recommended pipeline by [Numbat](https://kharchenkolab.github.io/numbat/), which is designed for scRNA-seq data to infer clones and CNAs: first genotyping using the BAM file by cellsnp-lite (included in the conda environment) and reference-based phasing by Eagle2. Download the following panels for genotyping and reference-based phasing.
-* [SNP panel](https://sourceforge.net/projects/cellsnp/files/SNPlist/genome1K.phase3.SNP_AF5e4.chr1toX.hg38.vcf.gz) - 0.5GB in size. You can also choose other SNP panels from [cellsnp-lite webpage](https://cellsnp-lite.readthedocs.io/en/latest/main/data.html#data-list-of-common-snps).
-* [Phasing panel](http://pklab.med.harvard.edu/teng/data/1000G_hg38.zip)- 9.0GB in size. Unzip the panel after downloading.
+To infer allele-specific CNAs, we generate allele count matrices in a preprocessing step.  We followed the recommended pipeline by [Numbat](https://kharchenkolab.github.io/numbat/), which is designed for scRNA-seq data to infer clones and CNAs: first genotyping the BAM file with cellsnp-lite (included in the conda environment) and reference-based phasing by Eagle2. Download the following panels for genotyping and reference-based phasing.
+* [SNP panel](https://sourceforge.net/projects/cellsnp/files/SNPlist/genome1K.phase3.SNP_AF5e4.chr1toX.hg38.vcf.gz) - 0.5GB in size. You can also choose other SNP panels from [cellsnp-lite webpage](https://cellsnp-lite.readthedocs.io/en/latest/main/data.html).
+* [Phasing panel](http://pklab.med.harvard.edu/teng/data/1000G_hg38.zip)- 9.0GB in size.  Unzip the panel after downloading.
 
-Replace the following paths `config.yaml`:
-* `region_vcf`: Replace with the path of downloaded SNP panel.
+Replace the following paths in `config.yaml`:
+* `region_vcf`: Replace with the path of the downloaded SNP panel.
 * `phasing_panel`: Replace with the unzipped directory of the downloaded phasing panel.
 * `spaceranger_dir`: Replace with the spaceranger directory of your Visium data, which should contain the BAM file `possorted_genome_bam.bam`.
 * `output_snpinfo`: Replace with the desired output directory.
