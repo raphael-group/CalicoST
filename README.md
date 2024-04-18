@@ -64,15 +64,15 @@ To infer allele-specific CNAs, we generate allele count matrices in a preprocess
 * [Phasing panel](http://pklab.med.harvard.edu/teng/data/1000G_hg38.zip)- 9.0GB in size.  Unzip the panel after downloading.
 
 Replace the following paths in `config.yaml`:
+* `calicost_dir` and `eagledir` with the path to the cloned CalicoST directory and downloaded Eagle2 directory.
 * `region_vcf`: Replace with the path of the downloaded SNP panel.
 * `phasing_panel`: Replace with the unzipped directory of the downloaded phasing panel.
 * `spaceranger_dir`: Replace with the spaceranger directory of your Visium data, which should contain the BAM file `possorted_genome_bam.bam`.
 * `output_snpinfo`: Replace with the desired output directory.
-* Replace `calicost_dir` and `eagledir` with the path to the cloned CalicoST directory and downloaded Eagle2 directory.
 
-Then you can run preprocessing pipeline by
+Then you can run the preprocessing pipeline by
 ```
-snakemake --cores <number threads> --configfile config.yaml --snakefile calicost.smk all
+snakemake --cores <number cores> --configfile config.yaml --snakefile calicost.smk all
 ```
 
 ### Inferring tumor purity per spot (optional)
