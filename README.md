@@ -70,10 +70,12 @@ Replace the following paths in `config.yaml`:
 * `spaceranger_dir`: Replace with the spaceranger directory of your Visium data, which should contain the BAM file `possorted_genome_bam.bam`.
 * `output_snpinfo`: Replace with the desired output directory.
 
-Then you can run the preprocessing pipeline by
+Then you can run the pre-processing pipeline by
 ```
 snakemake --cores <number cores> --configfile config.yaml --snakefile calicost.smk all
 ```
+First, see the tutorials and examples below.
+
 
 ### Inferring tumor purity per spot (optional)
 Replace the paths in the parameter configuration file `configuration_purity` with the corresponding data/reference file paths and run
@@ -97,7 +99,6 @@ OMP_NUM_THREADS=1 python <CalicoST directory>/src/calicost/calicost_main.py -c c
 ```
 
 ### Reconstruct phylogeography
-
 ```
 python <CalicoST directory>/src/calicost/phylogeny_startle.py -c <CalicoST clone and CNA output directory> -s <startle executable path> -o <output directory>
 ```
@@ -125,19 +126,18 @@ To avoid falling into local maxima in CalicoST's optimization objective, we reco
 Then run CalicoST by
 ```
 cd <directory of downloaded example data>
+
 snakemake --cores 5 --configfile example_config.yaml --snakefile <calicost_dir>/calicost.smk all
 ```
+CalicoST takes about 69 minutes to finish this example hen using 5 cores on an HPC. -->
 
-CalicoST takes about 69 minutes to finish on this example using 5 cores on an HPC. -->
 
 ### Understanding the output
-The above snakemake run will create a folder `calicost` in the directory of downloaded example data.  Within this folder, each random initialization of CalicoST generates a subdirectory of `calicost/clone*`. 
-
-CalicoST generates the following key files of each random initialization:
+The above example snakemake run will create a folder `calicost` in the directory of downloaded example data.  Within this folder, each random initialization of CalicoST generates a subdirectory of `calicost/clone*`.  CalicoST generates the following key files of each random initialization:
 * clone_labels.tsv: The inferred clone labels for each spot.
 * cnv_seglevel.tsv: Allele-specific copy numbers for each clone for each genome segment.
 * cnv_genelevel.tsv: The projected allele-specific copy numbers from genome segments to the covered genes.
-* cnv_diploid_seglevel.tsv, cnv_triploid_seglevel.tsv, cnv_tetraploid_seglevel.tsv, cnv_diploid_genelevel.tsv, cnv_triploid_genelevel.tsv, cnv_tetraploid_genelevel.tsv: Allele-specific copy numbers when enforcing a ploidy for each genome segment or each gene.
+* cnv_{ploidy}_seglevel.tsv, cnv_{ploidy}_genelevel.tsv: Allele-specific copy numbers when enforcing a ploidy of {diploid, triploid, tetraploid} for each genome segment or gene.
 
 See the following examples of the key files.
 ```

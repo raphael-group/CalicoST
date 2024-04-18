@@ -1,2 +1,3 @@
 - cmake command?
 - <CalicoST clone and CNA output directory>
+- example runs does nothing with standard outs, snpinfo as files are present.
