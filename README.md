@@ -131,7 +131,7 @@ snakemake --cores 5 --configfile example_config.yaml --snakefile <calicost_dir>/
 CalicoST takes about 69 minutes to finish on this example using 5 cores on an HPC. -->
 
 ### Understanding the output
-The above snakemake run will create a folder `calicost` in the directory of downloaded example data. Within this folder, each random initialization of CalicoST generates a subdirectory of `calicost/clone*`. 
+The above snakemake run will create a folder `calicost` in the directory of downloaded example data.  Within this folder, each random initialization of CalicoST generates a subdirectory of `calicost/clone*`. 
 
 CalicoST generates the following key files of each random initialization:
 * clone_labels.tsv: The inferred clone labels for each spot.
