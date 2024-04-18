@@ -40,7 +40,7 @@ wget --directory-prefix=external https://storage.googleapis.com/broad-alkesgroup
 tar -xzf external/Eagle_v2.4.1.tar.gz -C external
 ```
 
-## Additional installation for reconstructing phylogeny
+## Optional installation for reconstructing phylogeny
 Based on the inferred cancer clones and allele-specific CNAs by CalicoST, we apply Startle to reconstruct a phylogenetic tree along the clones. Install Startle by
 ```
 git clone --recurse-submodules https://github.com/raphael-group/startle.git
@@ -78,7 +78,7 @@ snakemake --cores <number cores> --configfile config.yaml --snakefile calicost.s
 ### Inferring tumor purity per spot (optional)
 Replace the paths in the parameter configuration file `configuration_purity` with the corresponding data/reference file paths and run
 ```
-OMP_NUM_THREADS=1 <CalicoST directory>/src/calicost/estimate_tumor_proportion.py -c configuration_purity
+OMP_NUM_THREADS=1 python <CalicoST directory>/src/calicost/estimate_tumor_proportion.py -c configuration_purity
 ```
 
 ### Inferring clones and allele-specific CNAs
@@ -87,9 +87,11 @@ Replace the paths in parameter configuration file `configuration_cna` with the c
 OMP_NUM_THREADS=1 python <CalicoST directory>/src/calicost/calicost_main.py -c configuration_cna
 ```
 
-When jointly inferring clones and CNAs across multiple SRT slices, prepare a table with the following columns (See [`examples/example_input_filelist`](https://github.com/raphael-group/CalicoST/blob/main/examples/example_input_filelist) as an example). 
+When jointly inferring clones and CNAs across multiple SRT slices, prepare a tsv with the following columns (See [`examples/example_input_filelist`](https://github.com/raphael-group/CalicoST/blob/main/examples/example_input_filelist) as an example).
+```
 Path to BAM file | sample ID | Path to Spaceranger outs
-Modify `configuration_cna_multi` with paths to the table and run
+```
+Modify `configuration_cna_multi` with paths to the tsv,etc. and run
 ```
 OMP_NUM_THREADS=1 python <CalicoST directory>/src/calicost/calicost_main.py -c configuration_cna_multi
 ```
@@ -107,11 +109,9 @@ Check out our [readthedocs](https://calicost.readthedocs.io/en/latest/) for the 
 The simulated count matrices and parameter configuration file are available from [`examples/simulated_example.tar.gz`](https://github.com/raphael-group/CalicoST/blob/main/examples/simulated_example.tar.gz). CalicoST takes about 2h to finish on this example.
 
 2. [Inferring tumor purity, clones, allele-specific CNAs, and phylogeography on prostate cancer data](https://calicost.readthedocs.io/en/latest/notebooks/tutorials/prostate_tutorial.html)
-The transcript count, allele count matrices, and running configuration fies are available from [`examples/prostate_example.tar.gz`](https://github.com/raphael-group/CalicoST/blob/main/examples/prostate_example.tar.gz). This sample contains five slices and over 10000 spots, CalicoST takes about 9h to finish on this example.
+The transcript count, allele count matrices, and running configuration files are available from [`examples/prostate_example.tar.gz`](https://github.com/raphael-group/CalicoST/blob/main/examples/prostate_example.tar.gz). This sample contains five slices and over 10000 spots.  CalicoST takes about 9h to finish on this example.
 
-<!-- CalicoST requires a reference SNP panel and phasing panel, which can be downloaded from
-* [SNP panel](https://sourceforge.net/projects/cellsnp/files/SNPlist/genome1K.phase3.SNP_AF5e4.chr1toX.hg38.vcf.gz/download). You can also choose other SNP panels from [cellsnp-lite webpage](https://cellsnp-lite.readthedocs.io/en/latest/snp_list.html).
-* [Phasing panel](http://pklab.med.harvard.edu/teng/data/1000G_hg38.zip) -->
+See the instructions on obtaining the required SNP and phasing panels above.
 
 <!-- ### Run CalicoST
 Untar the downloaded example data. Replace the following paths in the `example_config.yaml`  of the downloaded example data with paths on your machine

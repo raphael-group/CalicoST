@@ -1,2 +1,2 @@
 - cmake command?
-- 
+- <CalicoST clone and CNA output directory>

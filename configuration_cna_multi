@@ -1,4 +1,3 @@
-
 input_filelist: <Replace with the table file for multiple SRT slices>
 snp_dir : <Replace with output directory of preprocessing>
 output_dir : <Replace with output directory, must be existing>
@@ -6,12 +5,12 @@ output_dir : <Replace with output directory, must be existing>
 # supporting files and preprocessing arguments
 geneticmap_file : <Replace with CalicoST directory>/GRCh38_resources/genetic_map_GRCh38_merged.tab.gz
 hgtable_file : <Replace with CalicoST directory>/GRCh38_resources/hgTables_hg38_gencode.txt
+filtergenelist_file : <Replace with CalicoST directory>/GRCh38_resources/ig_gene_list.txt
+filterregion_file : <Replace with CalicoST directory>/GRCh38_resources/HLA_regions.bed
 normalidx_file : None
 tumorprop_file : None
 alignment_files :
 supervision_clone_file : None
-filtergenelist_file : <Replace with CalicoST directory>/GRCh38_resources/ig_gene_list.txt
-filterregion_file : <Replace with CalicoST directory>/GRCh38_resources/HLA_regions.bed
 secondary_min_umi : 300
 bafonly : False
 
