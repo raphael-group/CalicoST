@@ -23,7 +23,6 @@ cd CalicoST
 conda env create -f environment.yml --name calicost_env
 ```
 
-
 Then, install CalicoST using pip by
 ```
 conda activate calicost_env

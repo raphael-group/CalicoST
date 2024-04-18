@@ -1,21 +1,26 @@
-# path to executables or their parent directories
-calicost_dir: <Replace with git cloned CalicoST directory>
+# paths to environment executables or their parent directories
+calicost_dir: <Replace with the path tpo git cloned CalicoST directory>
 eagledir: <Replace with downloaded Eagle2 directory>
 
-# running parameters
+# paths to required resource files
+region_vcf: <Replace with downloaded SNP panel path>
+phasing_panel: <Replace with downloaded phasing panel directory>
+
+# paths to CalicoST input data directory, output by Visium spaceranger
+spaceranger_dir: <Replace with Spaceranger directory>
+
+# path for output of CalicoST pre-processing
+output_snpinfo: <Replace with output directory of preprocessing>
+
+# runtime parameters
 # samtools sort (only used when joingly calling from multiple slices)
 samtools_sorting_mem: "4G"
+
 # cellsnp-lite
 UMItag: "Auto"
 cellTAG: "CB"
 nthreads_cellsnplite: 20
-region_vcf: <Replace with downloaded SNP panel path>
+
 # Eagle phasing
-phasing_panel: <Replace with downloaded phasing panel directory>
 chromosomes: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22]
 
-# input
-spaceranger_dir: <Replace with Spaceranger directory>
-
-# output
-output_snpinfo: <Replace with output directory of preprocessing>
