@@ -370,7 +370,7 @@ def update_transition_sitewise(log_xi, is_diag=False):
 
 
 def update_emission_params_nb_sitewise_uniqvalues(unique_values, mapping_matrices, log_gamma, base_nb_mean, alphas, \
-    start_log_mu=None, fix_NB_dispersion=False, shared_NB_dispersion=False, min_log_rdr=-2, max_log_rdr=2, min_estep_weight=0.1):
+    fun=fit_weighted_NegativeBinomial, start_log_mu=None, fix_NB_dispersion=False, shared_NB_dispersion=False, min_log_rdr=-2, max_log_rdr=2, min_estep_weight=0.1):
     """
     Attributes
     ----------
@@ -410,18 +410,20 @@ def update_emission_params_nb_sitewise_uniqvalues(unique_values, mapping_matrice
                 tmp = (scipy.sparse.csr_matrix(gamma) @ mapping_matrices[s]).A
                 idx_nonzero = np.where(unique_values[s][:,1] > 0)[0]
                 for i in range(n_states):
-                    model = Weighted_NegativeBinomial(unique_values[s][idx_nonzero,0], \
+                    res, n_llf = fun(unique_values[s][idx_nonzero,0], \
                                 np.ones(len(idx_nonzero)).reshape(-1,1), \
                                 weights=tmp[i,idx_nonzero]+tmp[i+n_states,idx_nonzero], \
-                                exposure=unique_values[s][idx_nonzero,1], \
-                                penalty=0)
-                    res = model.fit(disp=0, maxiter=1500, xtol=1e-4, ftol=1e-4)
-                    new_log_mu[i, s] = res.params[0]
-                    new_alphas[i, s] = res.params[-1]
+                                exposure=unique_values[s][idx_nonzero,1])
+                    new_log_mu[i, s] = res[0]
+                    new_alphas[i, s] = res[-1]
                     if not (start_log_mu is None):
-                        res2 = model.fit(disp=0, maxiter=1500, start_params=np.append([start_log_mu[i, s]], [alphas[i, s]]), xtol=1e-4, ftol=1e-4)
-                        new_log_mu[i, s] = res.params[0] if model.nloglikeobs(res.params) < model.nloglikeobs(res2.params) else res2.params[0]
-                        new_alphas[i, s] = res.params[-1] if model.nloglikeobs(res.params) < model.nloglikeobs(res2.params) else res2.params[-1]
+                        res2, n_llf2 = fun(unique_values[s][idx_nonzero,0], \
+                                        np.ones(len(idx_nonzero)).reshape(-1,1), \
+                                        weights=tmp[i,idx_nonzero]+tmp[i+n_states,idx_nonzero], \
+                                        exposure=unique_values[s][idx_nonzero,1], \
+                                        start_log_mu=start_log_mu[i:(i+1), s:(s+1)], start_alpha=alphas[i, s])
+                        new_log_mu[i, s] = res[0] if n_llf < n_llf2 else res2[0]
+                        new_alphas[i, s] = res[-1] if n_llf < n_llf2 else res2[-1]
         else:
             exposure = []
             y = []
@@ -449,30 +451,31 @@ def update_emission_params_nb_sitewise_uniqvalues(unique_values, mapping_matrice
             y = np.concatenate(y)
             weights = np.concatenate(weights)
             features = scipy.linalg.block_diag(*features)
-            model = Weighted_NegativeBinomial(y, features, weights=weights, exposure=exposure)
-            res = model.fit(disp=0, maxiter=1500, xtol=1e-4, ftol=1e-4)
+            res, n_llf = fun(y, features, weights=weights, exposure=exposure)
             for s,idx_state_posweight in enumerate(state_posweights):
                 l1 = int( np.sum([len(x) for x in state_posweights[:s]]) )
                 l2 = int( np.sum([len(x) for x in state_posweights[:(s+1)]]) )
-                new_log_mu[idx_state_posweight, s] = res.params[l1:l2]
-            if res.params[-1] > 0:
-                new_alphas[:,:] = res.params[-1]
+                new_log_mu[idx_state_posweight, s] = res[l1:l2]
+            if res[-1] > 0:
+                new_alphas[:,:] = res[-1]
             if not (start_log_mu is None):
-                res2 = model.fit(disp=0, maxiter=1500, start_params=np.concatenate([start_log_mu[idx_state_posweight,s] for s,idx_state_posweight in enumerate(state_posweights)] + [np.ones(1) * alphas[0,s]]), xtol=1e-4, ftol=1e-4)
-                if model.nloglikeobs(res2.params) < model.nloglikeobs(res.params):
+                res2, n_llf2 = fun(y, features, weights=weights, exposure=exposure, 
+                                                             start_log_mu=np.array([start_log_mu[idx_state_posweight,s] for s,idx_state_posweight in enumerate(state_posweights)]), 
+                                                             start_alpha=alphas[0,s])
+                if n_llf2 < n_llf:
                     for s,idx_state_posweight in enumerate(state_posweights):
                         l1 = int( np.sum([len(x) for x in state_posweights[:s]]) )
                         l2 = int( np.sum([len(x) for x in state_posweights[:(s+1)]]) )
-                        new_log_mu[idx_state_posweight, s] = res2.params[l1:l2]
-                    if res2.params[-1] > 0:
-                        new_alphas[:,:] = res2.params[-1]
+                        new_log_mu[idx_state_posweight, s] = res2[l1:l2]
+                    if res2[-1] > 0:
+                        new_alphas[:,:] = res2[-1]
     new_log_mu[new_log_mu > max_log_rdr] = max_log_rdr
     new_log_mu[new_log_mu < min_log_rdr] = min_log_rdr
     return new_log_mu, new_alphas
 
 
 def update_emission_params_nb_sitewise_uniqvalues_mix(unique_values, mapping_matrices, log_gamma, base_nb_mean, alphas, tumor_prop, \
-    start_log_mu=None, fix_NB_dispersion=False, shared_NB_dispersion=False, min_log_rdr=-2, max_log_rdr=2):
+    fun=fit_weighted_NegativeBinomial_mix, start_log_mu=None, fix_NB_dispersion=False, shared_NB_dispersion=False, min_log_rdr=-2, max_log_rdr=2):
     """
     Attributes
     ----------
@@ -513,18 +516,20 @@ def update_emission_params_nb_sitewise_uniqvalues_mix(unique_values, mapping_mat
                 idx_nonzero = np.where(unique_values[s][:,1] > 0)[0]
                 for i in range(n_states):
                     this_tp = (mapping_matrices[s].T @ tumor_prop[:,s])[idx_nonzero] / (mapping_matrices[s].T @ np.ones(tumor_prop.shape[0]))[idx_nonzero]
-                    model = Weighted_NegativeBinomial_mix(unique_values[s][idx_nonzero,0], \
+                    res, n_llf = fun(unique_values[s][idx_nonzero,0], \
                                 np.ones(len(idx_nonzero)).reshape(-1,1), \
                                 weights=tmp[i,idx_nonzero]+tmp[i+n_states,idx_nonzero], exposure=unique_values[s][idx_nonzero,1], \
                                 tumor_prop=this_tp)
-                                # tumor_prop=tumor_prop[s], penalty=0)
-                    res = model.fit(disp=0, maxiter=1500, xtol=1e-4, ftol=1e-4)
-                    new_log_mu[i, s] = res.params[0]
-                    new_alphas[i, s] = res.params[-1]
+                    new_log_mu[i, s] = res[0]
+                    new_alphas[i, s] = res[-1]
                     if not (start_log_mu is None):
-                        res2 = model.fit(disp=0, maxiter=1500, start_params=np.append([start_log_mu[i, s]], [alphas[i, s]]), xtol=1e-4, ftol=1e-4)
-                        new_log_mu[i, s] = res.params[0] if model.nloglikeobs(res.params) < model.nloglikeobs(res2.params) else res2.params[0]
-                        new_alphas[i, s] = res.params[-1] if model.nloglikeobs(res.params) < model.nloglikeobs(res2.params) else res2.params[-1]
+                        res2, n_llf2 = fun(unique_values[s][idx_nonzero,0], \
+                                        np.ones(len(idx_nonzero)).reshape(-1,1), \
+                                        weights=tmp[i,idx_nonzero]+tmp[i+n_states,idx_nonzero], exposure=unique_values[s][idx_nonzero,1], \
+                                        tumor_prop=this_tp, 
+                                        start_log_mu=start_log_mu[i:(i+1), s:(s+1)], start_alpha=alphas[i, s])
+                        new_log_mu[i, s] = res[0] if n_llf < n_llf2 else res2[0]
+                        new_alphas[i, s] = res[-1] if n_llf < n_llf2 else res2[-1]
         else:
             exposure = []
             y = []
@@ -558,30 +563,31 @@ def update_emission_params_nb_sitewise_uniqvalues_mix(unique_values, mapping_mat
             weights = np.concatenate(weights)
             features = scipy.linalg.block_diag(*features)
             tp = np.concatenate(tp)
-            model = Weighted_NegativeBinomial_mix(y, features, weights=weights, exposure=exposure, tumor_prop=tp, penalty=0)
-            res = model.fit(disp=0, maxiter=1500, xtol=1e-4, ftol=1e-4)
+            res, n_llf = fun(y, features, weights=weights, exposure=exposure, tumor_prop=tp)
             for s,idx_state_posweight in enumerate(state_posweights):
                 l1 = int( np.sum([len(x) for x in state_posweights[:s]]) )
                 l2 = int( np.sum([len(x) for x in state_posweights[:(s+1)]]) )
-                new_log_mu[idx_state_posweight, s] = res.params[l1:l2]
-            if res.params[-1] > 0:
-                new_alphas[:,:] = res.params[-1]
+                new_log_mu[idx_state_posweight, s] = res[l1:l2]
+            if res[-1] > 0:
+                new_alphas[:,:] = res[-1]
             if not (start_log_mu is None):
-                res2 = model.fit(disp=0, maxiter=1500, start_params=np.concatenate([start_log_mu[idx_state_posweight,s] for s,idx_state_posweight in enumerate(state_posweights)] + [np.ones(1) * alphas[0,s]]), xtol=1e-4, ftol=1e-4)
-                if model.nloglikeobs(res2.params) < model.nloglikeobs(res.params):
+                res2, n_llf2 = fun(y, features, weights=weights, exposure=exposure, tumor_prop=tp, 
+                                                                 start_log_mu=np.array([start_log_mu[idx_state_posweight,s] for s,idx_state_posweight in enumerate(state_posweights)]), 
+                                                                 start_alpha=alphas[0,s])
+                if n_llf2 < n_llf:
                     for s,idx_state_posweight in enumerate(state_posweights):
                         l1 = int( np.sum([len(x) for x in state_posweights[:s]]) )
                         l2 = int( np.sum([len(x) for x in state_posweights[:(s+1)]]) )
-                        new_log_mu[idx_state_posweight, s] = res2.params[l1:l2]
-                    if res2.params[-1] > 0:
-                        new_alphas[:,:] = res2.params[-1]
+                        new_log_mu[idx_state_posweight, s] = res2[l1:l2]
+                    if res2[-1] > 0:
+                        new_alphas[:,:] = res2[-1]
     new_log_mu[new_log_mu > max_log_rdr] = max_log_rdr
     new_log_mu[new_log_mu < min_log_rdr] = min_log_rdr
     return new_log_mu, new_alphas
 
 
 def update_emission_params_bb_sitewise_uniqvalues(unique_values, mapping_matrices, log_gamma, total_bb_RD, taus, \
-    start_p_binom=None, fix_BB_dispersion=False, shared_BB_dispersion=False, \
+    fun=fit_weighted_BetaBinomial, start_p_binom=None, fix_BB_dispersion=False, shared_BB_dispersion=False, \
     percent_threshold=0.99, min_binom_prob=0.01, max_binom_prob=0.99):
     """
     Attributes
@@ -626,17 +632,21 @@ def update_emission_params_bb_sitewise_uniqvalues(unique_values, mapping_matrice
                 for i in range(n_states):
                     # only optimize for BAF only when the posterior probability >= 0.1 (at least 1 SNP is under this state)
                     if np.sum(tmp[i,idx_nonzero]) + np.sum(tmp[i+n_states,idx_nonzero]) >= 0.1:
-                        model = Weighted_BetaBinom(np.append(unique_values[s][idx_nonzero,0], unique_values[s][idx_nonzero,1]-unique_values[s][idx_nonzero,0]), \
+                        res, n_llf = fun(np.append(unique_values[s][idx_nonzero,0], unique_values[s][idx_nonzero,1]-unique_values[s][idx_nonzero,0]), \
                             np.ones(2*len(idx_nonzero)).reshape(-1,1), \
                             weights=np.append(tmp[i,idx_nonzero], tmp[i+n_states,idx_nonzero]), \
                             exposure=np.append(unique_values[s][idx_nonzero,1], unique_values[s][idx_nonzero,1]) )
                         res = model.fit(disp=0, maxiter=1500, xtol=1e-4, ftol=1e-4)
-                        new_p_binom[i, s] = res.params[0]
-                        new_taus[i, s] = res.params[-1]
+                        new_p_binom[i, s] = res[0]
+                        new_taus[i, s] = res[-1]
                         if not (start_p_binom is None):
-                            res2 = model.fit(disp=0, maxiter=1500, start_params=np.append([start_p_binom[i, s]], [taus[i, s]]), xtol=1e-4, ftol=1e-4)
-                            new_p_binom[i, s] = res.params[0] if model.nloglikeobs(res.params) < model.nloglikeobs(res2.params) else res2.params[0]
-                            new_taus[i, s] = res.params[-1] if model.nloglikeobs(res.params) < model.nloglikeobs(res2.params) else res2.params[-1]
+                            res2, n_llf2 = fun(np.append(unique_values[s][idx_nonzero,0], unique_values[s][idx_nonzero,1]-unique_values[s][idx_nonzero,0]), \
+                                np.ones(2*len(idx_nonzero)).reshape(-1,1), \
+                                weights=np.append(tmp[i,idx_nonzero], tmp[i+n_states,idx_nonzero]), \
+                                exposure=np.append(unique_values[s][idx_nonzero,1], unique_values[s][idx_nonzero,1]), \
+                                start_p_binom=start_p_binom[i:(i+1), s:(s+1)], start_tau=taus[i, s])
+                            new_p_binom[i, s] = res[0] if n_llf < n_llf2 else res2[0]
+                            new_taus[i, s] = res[-1] if n_llf < n_llf2 else res2[-1]
         else:
             exposure = []
             y = []
@@ -664,30 +674,31 @@ def update_emission_params_bb_sitewise_uniqvalues(unique_values, mapping_matrice
             y = np.concatenate(y)
             weights = np.concatenate(weights)
             features = scipy.linalg.block_diag(*features)
-            model = Weighted_BetaBinom(y, features, weights=weights, exposure=exposure)
-            res = model.fit(disp=0, maxiter=1500, xtol=1e-4, ftol=1e-4)
+            res, n_llf = fun(y, features, weights=weights, exposure=exposure)
             for s,idx_state_posweight in enumerate(state_posweights):
                 l1 = int( np.sum([len(x) for x in state_posweights[:s]]) )
                 l2 = int( np.sum([len(x) for x in state_posweights[:(s+1)]]) )
-                new_p_binom[idx_state_posweight, s] = res.params[l1:l2]
-            if res.params[-1] > 0:
-                new_taus[:,:] = res.params[-1]
+                new_p_binom[idx_state_posweight, s] = res[l1:l2]
+            if res[-1] > 0:
+                new_taus[:,:] = res[-1]
             if not (start_p_binom is None):
-                res2 = model.fit(disp=0, maxiter=1500, start_params=np.concatenate([start_p_binom[idx_state_posweight,s] for s,idx_state_posweight in enumerate(state_posweights)] + [np.ones(1) * taus[0,s]]), xtol=1e-4, ftol=1e-4)
-                if model.nloglikeobs(res2.params) < model.nloglikeobs(res.params):
+                res2, n_llf2 = fun(y, features, weights=weights, exposure=exposure, 
+                                                         start_p_binom=np.array([start_p_binom[idx_state_posweight,s] for s,idx_state_posweight in enumerate(state_posweights)]),
+                                                         start_tau=taus[0,s])
+                if n_llf2 < n_llf:
                     for s,idx_state_posweight in enumerate(state_posweights):
                         l1 = int( np.sum([len(x) for x in state_posweights[:s]]) )
                         l2 = int( np.sum([len(x) for x in state_posweights[:(s+1)]]) )
-                        new_p_binom[idx_state_posweight, s] = res2.params[l1:l2]
-                    if res2.params[-1] > 0:
-                        new_taus[:,:] = res2.params[-1]
+                        new_p_binom[idx_state_posweight, s] = res2[l1:l2]
+                    if res2[-1] > 0:
+                        new_taus[:,:] = res2[-1]
     new_p_binom[new_p_binom < min_binom_prob] = min_binom_prob
     new_p_binom[new_p_binom > max_binom_prob] = max_binom_prob
     return new_p_binom, new_taus
 
 
 def update_emission_params_bb_sitewise_uniqvalues_mix(unique_values, mapping_matrices, log_gamma, total_bb_RD, taus, tumor_prop, \
-    start_p_binom=None, fix_BB_dispersion=False, shared_BB_dispersion=False, \
+    fun=fit_weighted_BetaBinomial_mix, start_p_binom=None, fix_BB_dispersion=False, shared_BB_dispersion=False, \
     percent_threshold=0.99, min_binom_prob=0.01, max_binom_prob=0.99):
     """
     Attributes
@@ -738,19 +749,22 @@ def update_emission_params_bb_sitewise_uniqvalues_mix(unique_values, mapping_mat
                     if np.sum(tmp[i,idx_nonzero]) + np.sum(tmp[i+n_states,idx_nonzero]) >= 0.1:
                         this_tp = (mapping_matrices[s].T @ tumor_prop[:,s])[idx_nonzero] / (mapping_matrices[s].T @ np.ones(tumor_prop.shape[0]))[idx_nonzero]
                         assert np.all(this_tp < 1+1e-4)
-                        model = Weighted_BetaBinom_mix(np.append(unique_values[s][idx_nonzero,0], unique_values[s][idx_nonzero,1]-unique_values[s][idx_nonzero,0]), \
+                        res, n_llf = fun(np.append(unique_values[s][idx_nonzero,0], unique_values[s][idx_nonzero,1]-unique_values[s][idx_nonzero,0]), \
                             np.ones(2*len(idx_nonzero)).reshape(-1,1), \
                             weights=np.append(tmp[i,idx_nonzero], tmp[i+n_states,idx_nonzero]), \
                             exposure=np.append(unique_values[s][idx_nonzero,1], unique_values[s][idx_nonzero,1]),\
                             tumor_prop=this_tp)
-                            # tumor_prop=tumor_prop )
-                        res = model.fit(disp=0, maxiter=1500, xtol=1e-4, ftol=1e-4)
-                        new_p_binom[i, s] = res.params[0]
-                        new_taus[i, s] = res.params[-1]
+                        new_p_binom[i, s] = res[0]
+                        new_taus[i, s] = res[-1]
                         if not (start_p_binom is None):
-                            res2 = model.fit(disp=0, maxiter=1500, start_params=np.append([start_p_binom[i, s]], [taus[i, s]]), xtol=1e-4, ftol=1e-4)
-                            new_p_binom[i, s] = res.params[0] if model.nloglikeobs(res.params) < model.nloglikeobs(res2.params) else res2.params[0]
-                            new_taus[i, s] = res.params[-1] if model.nloglikeobs(res.params) < model.nloglikeobs(res2.params) else res2.params[-1]
+                            res2, n_llf2 = fun(np.append(unique_values[s][idx_nonzero,0], unique_values[s][idx_nonzero,1]-unique_values[s][idx_nonzero,0]), \
+                                np.ones(2*len(idx_nonzero)).reshape(-1,1), \
+                                weights=np.append(tmp[i,idx_nonzero], tmp[i+n_states,idx_nonzero]), \
+                                exposure=np.append(unique_values[s][idx_nonzero,1], unique_values[s][idx_nonzero,1]),\
+                                tumor_prop=this_tp, 
+                                start_p_binom=start_p_binom[i:(i+1), s:(s+1)], start_tau=taus[i, s])
+                            new_p_binom[i, s] = res[0] if n_llf < n_llf2 else res2[0]
+                            new_taus[i, s] = res[-1] if n_llf < n_llf2 else res2[-1]
         else:
             exposure = []
             y = []
@@ -784,23 +798,24 @@ def update_emission_params_bb_sitewise_uniqvalues_mix(unique_values, mapping_mat
             weights = np.concatenate(weights)
             features = scipy.linalg.block_diag(*features)
             tp = np.concatenate(tp)
-            model = Weighted_BetaBinom_mix(y, features, weights=weights, exposure=exposure, tumor_prop=tp)
-            res = model.fit(disp=0, maxiter=1500, xtol=1e-4, ftol=1e-4)
+            res, n_llf = fun(y, features, weights=weights, exposure=exposure, tumor_prop=tp)
             for s,idx_state_posweight in enumerate(state_posweights):
                 l1 = int( np.sum([len(x) for x in state_posweights[:s]]) )
                 l2 = int( np.sum([len(x) for x in state_posweights[:(s+1)]]) )
-                new_p_binom[idx_state_posweight, s] = res.params[l1:l2]
-            if res.params[-1] > 0:
-                new_taus[:,:] = res.params[-1]
+                new_p_binom[idx_state_posweight, s] = res[l1:l2]
+            if res[-1] > 0:
+                new_taus[:,:] = res[-1]
             if not (start_p_binom is None):
-                res2 = model.fit(disp=0, maxiter=1500, start_params=np.concatenate([start_p_binom[idx_state_posweight,s] for s,idx_state_posweight in enumerate(state_posweights)] + [np.ones(1) * taus[0,s]]), xtol=1e-4, ftol=1e-4)
-                if model.nloglikeobs(res2.params) < model.nloglikeobs(res.params):
+                res2, n_llf2 = fun(y, features, weights=weights, exposure=exposure, tumor_prop=tp, 
+                                                             start_p_binom=np.array([start_p_binom[idx_state_posweight,s] for s,idx_state_posweight in enumerate(state_posweights)]),
+                                                             start_tau=taus[0,s])
+                if n_llf2 < n_llf:
                     for s,idx_state_posweight in enumerate(state_posweights):
                         l1 = int( np.sum([len(x) for x in state_posweights[:s]]) )
                         l2 = int( np.sum([len(x) for x in state_posweights[:(s+1)]]) )
-                        new_p_binom[idx_state_posweight, s] = res2.params[l1:l2]
-                    if res2.params[-1] > 0:
-                        new_taus[:,:] = res2.params[-1]
+                        new_p_binom[idx_state_posweight, s] = res2[l1:l2]
+                    if res2[-1] > 0:
+                        new_taus[:,:] = res2[-1]
     new_p_binom[new_p_binom < min_binom_prob] = min_binom_prob
     new_p_binom[new_p_binom > max_binom_prob] = max_binom_prob
     return new_p_binom, new_taus
@@ -867,7 +882,7 @@ def update_transition_nophasing(log_xi, is_diag=False):
 
 
 def update_emission_params_nb_nophasing_uniqvalues(unique_values, mapping_matrices, log_gamma, alphas, \
-    start_log_mu=None, fix_NB_dispersion=False, shared_NB_dispersion=False, min_log_rdr=-2, max_log_rdr=2):
+    fun=fit_weighted_NegativeBinomial, start_log_mu=None, fix_NB_dispersion=False, shared_NB_dispersion=False, min_log_rdr=-2, max_log_rdr=2):
     """
     Attributes
     ----------
@@ -907,18 +922,20 @@ def update_emission_params_nb_nophasing_uniqvalues(unique_values, mapping_matric
                 tmp = (scipy.sparse.csr_matrix(gamma) @ mapping_matrices[s]).A
                 idx_nonzero = np.where(unique_values[s][:,1] > 0)[0]
                 for i in range(n_states):
-                    model = Weighted_NegativeBinomial(unique_values[s][idx_nonzero,0], \
+                    res, n_llf = fun(unique_values[s][idx_nonzero,0], \
+                                np.ones(len(idx_nonzero)).reshape(-1,1), \
+                                weights=tmp[i,idx_nonzero], \
+                                exposure=unique_values[s][idx_nonzero,1])
+                    new_log_mu[i, s] = res[0]
+                    new_alphas[i, s] = res[-1]
+                    if not (start_log_mu is None):
+                        res2, n_llf2 = fun(unique_values[s][idx_nonzero,0], \
                                 np.ones(len(idx_nonzero)).reshape(-1,1), \
                                 weights=tmp[i,idx_nonzero], \
                                 exposure=unique_values[s][idx_nonzero,1], \
-                                penalty=0)
-                    res = model.fit(disp=0, maxiter=1500, xtol=1e-4, ftol=1e-4)
-                    new_log_mu[i, s] = res.params[0]
-                    new_alphas[i, s] = res.params[-1]
-                    if not (start_log_mu is None):
-                        res2 = model.fit(disp=0, maxiter=1500, start_params=np.append([start_log_mu[i, s]], [alphas[i, s]]), xtol=1e-4, ftol=1e-4)
-                        new_log_mu[i, s] = res.params[0] if model.nloglikeobs(res.params) < model.nloglikeobs(res2.params) else res2.params[0]
-                        new_alphas[i, s] = res.params[-1] if model.nloglikeobs(res.params) < model.nloglikeobs(res2.params) else res2.params[-1]
+                                start_log_mu=start_log_mu[i:(i+1), s:(s+1)], start_alpha=alphas[i, s])
+                        new_log_mu[i, s] = res[0] if n_llf < n_llf2 else res2[0]
+                        new_alphas[i, s] = res[-1] if n_llf < n_llf2 else res2[-1]
         else:
             exposure = []
             y = []
@@ -946,30 +963,31 @@ def update_emission_params_nb_nophasing_uniqvalues(unique_values, mapping_matric
             y = np.concatenate(y)
             weights = np.concatenate(weights)
             features = scipy.linalg.block_diag(*features)
-            model = Weighted_NegativeBinomial(y, features, weights=weights, exposure=exposure)
-            res = model.fit(disp=0, maxiter=1500, xtol=1e-4, ftol=1e-4)
+            res, n_llf = fun(y, features, weights=weights, exposure=exposure)
             for s,idx_state_posweight in enumerate(state_posweights):
                 l1 = int( np.sum([len(x) for x in state_posweights[:s]]) )
                 l2 = int( np.sum([len(x) for x in state_posweights[:(s+1)]]) )
-                new_log_mu[idx_state_posweight, s] = res.params[l1:l2]
-            if res.params[-1] > 0:
-                new_alphas[:,:] = res.params[-1]
+                new_log_mu[idx_state_posweight, s] = res[l1:l2]
+            if res[-1] > 0:
+                new_alphas[:,:] = res[-1]
             if not (start_log_mu is None):
-                res2 = model.fit(disp=0, maxiter=1500, start_params=np.concatenate([start_log_mu[idx_state_posweight,s] for s,idx_state_posweight in enumerate(state_posweights)] + [np.ones(1) * alphas[0,s]]), xtol=1e-4, ftol=1e-4)
-                if model.nloglikeobs(res2.params) < model.nloglikeobs(res.params):
+                res2, n_llf2 = fun(y, features, weights=weights, exposure=exposure, 
+                                                             start_log_mu=np.array([start_log_mu[idx_state_posweight,s] for s,idx_state_posweight in enumerate(state_posweights)]), 
+                                                             start_alpha=alphas[0,s])
+                if n_llf2 < n_llf:
                     for s,idx_state_posweight in enumerate(state_posweights):
                         l1 = int( np.sum([len(x) for x in state_posweights[:s]]) )
                         l2 = int( np.sum([len(x) for x in state_posweights[:(s+1)]]) )
-                        new_log_mu[idx_state_posweight, s] = res2.params[l1:l2]
-                    if res2.params[-1] > 0:
-                        new_alphas[:,:] = res2.params[-1]
+                        new_log_mu[idx_state_posweight, s] = res2[l1:l2]
+                    if res2[-1] > 0:
+                        new_alphas[:,:] = res2[-1]
     new_log_mu[new_log_mu > max_log_rdr] = max_log_rdr
     new_log_mu[new_log_mu < min_log_rdr] = min_log_rdr
     return new_log_mu, new_alphas
 
 
 def update_emission_params_nb_nophasing_uniqvalues_mix(unique_values, mapping_matrices, log_gamma, alphas, tumor_prop, \
-    start_log_mu=None, fix_NB_dispersion=False, shared_NB_dispersion=False, min_log_rdr=-2, max_log_rdr=2):
+    fun=fit_weighted_NegativeBinomial_mix, start_log_mu=None, fix_NB_dispersion=False, shared_NB_dispersion=False, min_log_rdr=-2, max_log_rdr=2):
     """
     Attributes
     ----------
@@ -1010,18 +1028,20 @@ def update_emission_params_nb_nophasing_uniqvalues_mix(unique_values, mapping_ma
                 idx_nonzero = np.where(unique_values[s][:,1] > 0)[0]
                 for i in range(n_states):
                     this_tp = (mapping_matrices[s].T @ tumor_prop[:,s])[idx_nonzero] / (mapping_matrices[s].T @ np.ones(tumor_prop.shape[0]))[idx_nonzero]
-                    model = Weighted_NegativeBinomial_mix(unique_values[s][idx_nonzero,0], \
+                    res, n_llf = fun(unique_values[s][idx_nonzero,0], \
                                 np.ones(len(idx_nonzero)).reshape(-1,1), \
                                 weights=tmp[i,idx_nonzero], exposure=unique_values[s][idx_nonzero,1], \
                                 tumor_prop=this_tp)
-                                # tumor_prop=tumor_prop[s], penalty=0)
-                    res = model.fit(disp=0, maxiter=1500, xtol=1e-4, ftol=1e-4)
-                    new_log_mu[i, s] = res.params[0]
-                    new_alphas[i, s] = res.params[-1]
+                    new_log_mu[i, s] = res[0]
+                    new_alphas[i, s] = res[-1]
                     if not (start_log_mu is None):
-                        res2 = model.fit(disp=0, maxiter=1500, start_params=np.append([start_log_mu[i, s]], [alphas[i, s]]), xtol=1e-4, ftol=1e-4)
-                        new_log_mu[i, s] = res.params[0] if model.nloglikeobs(res.params) < model.nloglikeobs(res2.params) else res2.params[0]
-                        new_alphas[i, s] = res.params[-1] if model.nloglikeobs(res.params) < model.nloglikeobs(res2.params) else res2.params[-1]
+                        res2, n_llf2 = fun(unique_values[s][idx_nonzero,0], \
+                                        np.ones(len(idx_nonzero)).reshape(-1,1), \
+                                        weights=tmp[i,idx_nonzero], exposure=unique_values[s][idx_nonzero,1], \
+                                        tumor_prop=this_tp, 
+                                        start_log_mu=start_log_mu[i:(i+1), s:(s+1)], start_alpha=alphas[i, s])
+                        new_log_mu[i, s] = res[0] if n_llf < n_llf2 else res2[0]
+                        new_alphas[i, s] = res[-1] if n_llf < n_llf2 else res2[-1]
         else:
             exposure = []
             y = []
@@ -1055,30 +1075,31 @@ def update_emission_params_nb_nophasing_uniqvalues_mix(unique_values, mapping_ma
             weights = np.concatenate(weights)
             features = scipy.linalg.block_diag(*features)
             tp = np.concatenate(tp)
-            model = Weighted_NegativeBinomial_mix(y, features, weights=weights, exposure=exposure, tumor_prop=tp, penalty=0)
-            res = model.fit(disp=0, maxiter=1500, xtol=1e-4, ftol=1e-4)
+            res, n_llf = fun(y, features, weights=weights, exposure=exposure, tumor_prop=tp)
             for s,idx_state_posweight in enumerate(state_posweights):
                 l1 = int( np.sum([len(x) for x in state_posweights[:s]]) )
                 l2 = int( np.sum([len(x) for x in state_posweights[:(s+1)]]) )
-                new_log_mu[idx_state_posweight, s] = res.params[l1:l2]
-            if res.params[-1] > 0:
-                new_alphas[:,:] = res.params[-1]
+                new_log_mu[idx_state_posweight, s] = res[l1:l2]
+            if res[-1] > 0:
+                new_alphas[:,:] = res[-1]
             if not (start_log_mu is None):
-                res2 = model.fit(disp=0, maxiter=1500, start_params=np.concatenate([start_log_mu[idx_state_posweight,s] for s,idx_state_posweight in enumerate(state_posweights)] + [np.ones(1) * alphas[0,s]]), xtol=1e-4, ftol=1e-4)
-                if model.nloglikeobs(res2.params) < model.nloglikeobs(res.params):
+                res2, n_llf2 = fun(y, features, weights=weights, exposure=exposure, tumor_prop=tp, 
+                                                                 start_log_mu=np.array([start_log_mu[idx_state_posweight,s] for s,idx_state_posweight in enumerate(state_posweights)]),
+                                                                 start_alpha=alphas[0,s])
+                if n_llf2 < n_llf:
                     for s,idx_state_posweight in enumerate(state_posweights):
                         l1 = int( np.sum([len(x) for x in state_posweights[:s]]) )
                         l2 = int( np.sum([len(x) for x in state_posweights[:(s+1)]]) )
-                        new_log_mu[idx_state_posweight, s] = res2.params[l1:l2]
-                    if res2.params[-1] > 0:
-                        new_alphas[:,:] = res2.params[-1]
+                        new_log_mu[idx_state_posweight, s] = res2[l1:l2]
+                    if res2[-1] > 0:
+                        new_alphas[:,:] = res2[-1]
     new_log_mu[new_log_mu > max_log_rdr] = max_log_rdr
     new_log_mu[new_log_mu < min_log_rdr] = min_log_rdr
     return new_log_mu, new_alphas
 
 
 def update_emission_params_bb_nophasing_uniqvalues(unique_values, mapping_matrices, log_gamma, taus, \
-    start_p_binom=None, fix_BB_dispersion=False, shared_BB_dispersion=False, \
+    fun=fit_weighted_BetaBinomial, start_p_binom=None, fix_BB_dispersion=False, shared_BB_dispersion=False, \
     percent_threshold=0.99, min_binom_prob=0.01, max_binom_prob=0.99):
     """
     Attributes
@@ -1123,17 +1144,20 @@ def update_emission_params_bb_nophasing_uniqvalues(unique_values, mapping_matric
                 for i in range(n_states):
                     # only optimize for BAF only when the posterior probability >= 0.1 (at least 1 SNP is under this state)
                     if np.sum(tmp[i,idx_nonzero]) >= 0.1:
-                        model = Weighted_BetaBinom(unique_values[s][idx_nonzero,0], \
+                        res, n_llf = fun(unique_values[s][idx_nonzero,0], \
                             np.ones(len(idx_nonzero)).reshape(-1,1), \
                             weights=tmp[i,idx_nonzero], \
                             exposure=unique_values[s][idx_nonzero,1] )
-                        res = model.fit(disp=0, maxiter=1500, xtol=1e-4, ftol=1e-4)
-                        new_p_binom[i, s] = res.params[0]
-                        new_taus[i, s] = res.params[-1]
+                        new_p_binom[i, s] = res[0]
+                        new_taus[i, s] = res[-1]
                         if not (start_p_binom is None):
-                            res2 = model.fit(disp=0, maxiter=1500, start_params=np.append([start_p_binom[i, s]], [taus[i, s]]), xtol=1e-4, ftol=1e-4)
-                            new_p_binom[i, s] = res.params[0] if model.nloglikeobs(res.params) < model.nloglikeobs(res2.params) else res2.params[0]
-                            new_taus[i, s] = res.params[-1] if model.nloglikeobs(res.params) < model.nloglikeobs(res2.params) else res2.params[-1]
+                            res2, n_llf2 = fun(unique_values[s][idx_nonzero,0], \
+                                np.ones(len(idx_nonzero)).reshape(-1,1), \
+                                weights=tmp[i,idx_nonzero], \
+                                exposure=unique_values[s][idx_nonzero,1], 
+                                start_p_binom=start_p_binom[i:(i+1), s:(s+1)], start_tau=taus[i, s])
+                            new_p_binom[i, s] = res[0] if n_llf < n_llf2 else res2[0]
+                            new_taus[i, s] = res[-1] if n_llf < n_llf2 else res2[-1]
         else:
             exposure = []
             y = []
@@ -1161,23 +1185,24 @@ def update_emission_params_bb_nophasing_uniqvalues(unique_values, mapping_matric
             y = np.concatenate(y)
             weights = np.concatenate(weights)
             features = scipy.linalg.block_diag(*features)
-            model = Weighted_BetaBinom(y, features, weights=weights, exposure=exposure)
-            res = model.fit(disp=0, maxiter=1500, xtol=1e-4, ftol=1e-4)
+            res, n_llf = fun(y, features, weights=weights, exposure=exposure)
             for s,idx_state_posweight in enumerate(state_posweights):
                 l1 = int( np.sum([len(x) for x in state_posweights[:s]]) )
                 l2 = int( np.sum([len(x) for x in state_posweights[:(s+1)]]) )
-                new_p_binom[idx_state_posweight, s] = res.params[l1:l2]
-            if res.params[-1] > 0:
-                new_taus[:,:] = res.params[-1]
+                new_p_binom[idx_state_posweight, s] = res[l1:l2]
+            if res[-1] > 0:
+                new_taus[:,:] = res[-1]
             if not (start_p_binom is None):
-                res2 = model.fit(disp=0, maxiter=1500, start_params=np.concatenate([start_p_binom[idx_state_posweight,s] for s,idx_state_posweight in enumerate(state_posweights)] + [np.ones(1) * taus[0,s]]), xtol=1e-4, ftol=1e-4)
-                if model.nloglikeobs(res2.params) < model.nloglikeobs(res.params):
+                res2, n_llf2 = fun(y, features, weights=weights, exposure=exposure, 
+                                                         start_p_binom=np.array([start_p_binom[idx_state_posweight,s] for s,idx_state_posweight in enumerate(state_posweights)]), 
+                                                         start_tau=taus[0,s])
+                if n_llf2 < n_llf:
                     for s,idx_state_posweight in enumerate(state_posweights):
                         l1 = int( np.sum([len(x) for x in state_posweights[:s]]) )
                         l2 = int( np.sum([len(x) for x in state_posweights[:(s+1)]]) )
-                        new_p_binom[idx_state_posweight, s] = res2.params[l1:l2]
-                    if res2.params[-1] > 0:
-                        new_taus[:,:] = res2.params[-1]
+                        new_p_binom[idx_state_posweight, s] = res2[l1:l2]
+                    if res2[-1] > 0:
+                        new_taus[:,:] = res2[-1]
 
     new_p_binom[new_p_binom < min_binom_prob] = min_binom_prob
     new_p_binom[new_p_binom > max_binom_prob] = max_binom_prob
@@ -1185,7 +1210,7 @@ def update_emission_params_bb_nophasing_uniqvalues(unique_values, mapping_matric
 
 
 def update_emission_params_bb_nophasing_uniqvalues_mix(unique_values, mapping_matrices, log_gamma, taus, tumor_prop, \
-    start_p_binom=None, fix_BB_dispersion=False, shared_BB_dispersion=False, \
+    fun=fit_weighted_BetaBinomial_mix, start_p_binom=None, fix_BB_dispersion=False, shared_BB_dispersion=False, \
     percent_threshold=0.99, min_binom_prob=0.01, max_binom_prob=0.99):
     """
     Attributes
@@ -1236,19 +1261,22 @@ def update_emission_params_bb_nophasing_uniqvalues_mix(unique_values, mapping_ma
                     if np.sum(tmp[i,idx_nonzero]) >= 0.1:
                         this_tp = (mapping_matrices[s].T @ tumor_prop[:,s])[idx_nonzero] / (mapping_matrices[s].T @ np.ones(tumor_prop.shape[0]))[idx_nonzero]
                         assert np.all(this_tp < 1 + 1e-4)
-                        model = Weighted_BetaBinom_mix(unique_values[s][idx_nonzero,0], \
+                        res, n_llf = fun(unique_values[s][idx_nonzero,0], \
                             np.ones(len(idx_nonzero)).reshape(-1,1), \
                             weights=tmp[i,idx_nonzero], \
                             exposure=unique_values[s][idx_nonzero,1], \
                             tumor_prop=this_tp)
-                            # tumor_prop=tumor_prop[s] )
-                        res = model.fit(disp=0, maxiter=1500, xtol=1e-4, ftol=1e-4)
-                        new_p_binom[i, s] = res.params[0]
-                        new_taus[i, s] = res.params[-1]
+                        new_p_binom[i, s] = res[0]
+                        new_taus[i, s] = res[-1]
                         if not (start_p_binom is None):
-                            res2 = model.fit(disp=0, maxiter=1500, start_params=np.append([start_p_binom[i, s]], [taus[i, s]]), xtol=1e-4, ftol=1e-4)
-                            new_p_binom[i, s] = res.params[0] if model.nloglikeobs(res.params) < model.nloglikeobs(res2.params) else res2.params[0]
-                            new_taus[i, s] = res.params[-1] if model.nloglikeobs(res.params) < model.nloglikeobs(res2.params) else res2.params[-1]
+                            res2, n_llf2 = fun(unique_values[s][idx_nonzero,0], \
+                                np.ones(len(idx_nonzero)).reshape(-1,1), \
+                                weights=tmp[i,idx_nonzero], \
+                                exposure=unique_values[s][idx_nonzero,1], \
+                                tumor_prop=this_tp, 
+                                start_p_binom=start_p_binom[i:(i+1), s:(s+1)], start_tau=taus[i, s])
+                            new_p_binom[i, s] = res[0] if n_llf < n_llf2 else res2[0]
+                            new_taus[i, s] = res[-1] if n_llf < n_llf2 else res2[-1]
         else:
             exposure = []
             y = []
@@ -1282,23 +1310,24 @@ def update_emission_params_bb_nophasing_uniqvalues_mix(unique_values, mapping_ma
             weights = np.concatenate(weights)
             features = scipy.linalg.block_diag(*features)
             tp = np.concatenate(tp)
-            model = Weighted_BetaBinom_mix(y, features, weights=weights, exposure=exposure, tumor_prop=tp)
-            res = model.fit(disp=0, maxiter=1500, xtol=1e-4, ftol=1e-4)
+            res, n_llf = fun(y, features, weights=weights, exposure=exposure, tumor_prop=tp)
             for s,idx_state_posweight in enumerate(state_posweights):
                 l1 = int( np.sum([len(x) for x in state_posweights[:s]]) )
                 l2 = int( np.sum([len(x) for x in state_posweights[:(s+1)]]) )
-                new_p_binom[idx_state_posweight, s] = res.params[l1:l2]
-            if res.params[-1] > 0:
-                new_taus[:,:] = res.params[-1]
+                new_p_binom[idx_state_posweight, s] = res[l1:l2]
+            if res[-1] > 0:
+                new_taus[:,:] = res[-1]
             if not (start_p_binom is None):
-                res2 = model.fit(disp=0, maxiter=1500, start_params=np.concatenate([start_p_binom[idx_state_posweight,s] for s,idx_state_posweight in enumerate(state_posweights)] + [np.ones(1) * taus[0,s]]), xtol=1e-4, ftol=1e-4)
-                if model.nloglikeobs(res2.params) < model.nloglikeobs(res.params):
+                res2, n_llf2 = fun(y, features, weights=weights, exposure=exposure, tumor_prop=tp, 
+                                                             start_p_binom=np.array([start_p_binom[idx_state_posweight,s] for s,idx_state_posweight in enumerate(state_posweights)]),
+                                                             start_tau=taus[0,s])
+                if n_llf2 < n_llf:
                     for s,idx_state_posweight in enumerate(state_posweights):
                         l1 = int( np.sum([len(x) for x in state_posweights[:s]]) )
                         l2 = int( np.sum([len(x) for x in state_posweights[:(s+1)]]) )
-                        new_p_binom[idx_state_posweight, s] = res2.params[l1:l2]
-                    if res2.params[-1] > 0:
-                        new_taus[:,:] = res2.params[-1]
+                        new_p_binom[idx_state_posweight, s] = res2[l1:l2]
+                    if res2[-1] > 0:
+                        new_taus[:,:] = res2[-1]
     new_p_binom[new_p_binom < min_binom_prob] = min_binom_prob
     new_p_binom[new_p_binom > max_binom_prob] = max_binom_prob
     return new_p_binom, new_taus
