@@ -636,7 +636,6 @@ def update_emission_params_bb_sitewise_uniqvalues(unique_values, mapping_matrice
                             np.ones(2*len(idx_nonzero)).reshape(-1,1), \
                             weights=np.append(tmp[i,idx_nonzero], tmp[i+n_states,idx_nonzero]), \
                             exposure=np.append(unique_values[s][idx_nonzero,1], unique_values[s][idx_nonzero,1]) )
-                        res = model.fit(disp=0, maxiter=1500, xtol=1e-4, ftol=1e-4)
                         new_p_binom[i, s] = res[0]
                         new_taus[i, s] = res[-1]
                         if not (start_p_binom is None):
