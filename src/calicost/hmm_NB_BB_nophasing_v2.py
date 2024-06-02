@@ -14,6 +14,14 @@ from calicost.utils_distribution_fitting import *
 from calicost.utils_hmm import *
 import networkx as nx
 
+try:
+    import torch
+    device = 'cuda' if torch.cuda.is_available() else 'cpu'
+    from calicost.utils_distribution_fitting_gpu import *
+except ImportError:
+    device = 'cpu'
+
+
 """
 Joint NB-BB HMM that accounts for tumor/normal genome proportions. Tumor genome proportion is weighted by mu in BB distribution.
 """
@@ -294,8 +302,13 @@ class hmm_nophasing_v2(object):
                 new_log_transmat = log_transmat
             if "m" in self.params:
                 if tumor_prop is None:
-                    new_log_mu, new_alphas = update_emission_params_nb_nophasing_uniqvalues(unique_values_nb, mapping_matrices_nb, log_gamma, alphas, start_log_mu=log_mu, \
-                        fix_NB_dispersion=fix_NB_dispersion, shared_NB_dispersion=shared_NB_dispersion)
+                    if device == 'cpu':
+                        new_log_mu, new_alphas = update_emission_params_nb_nophasing_uniqvalues(unique_values_nb, mapping_matrices_nb, log_gamma, alphas, start_log_mu=log_mu, \
+                            fix_NB_dispersion=fix_NB_dispersion, shared_NB_dispersion=shared_NB_dispersion)
+                    else:
+                        new_log_mu, new_alphas = update_emission_params_nb_nophasing_uniqvalues(unique_values_nb, mapping_matrices_nb, log_gamma, alphas, 
+                            fun=fit_weighted_NegativeBinomial_gpu, start_log_mu=log_mu, \
+                            fix_NB_dispersion=fix_NB_dispersion, shared_NB_dispersion=shared_NB_dispersion)
                 else:
                     new_log_mu, new_alphas = update_emission_params_nb_nophasing_uniqvalues_mix(unique_values_nb, mapping_matrices_nb, log_gamma, alphas, tumor_prop, start_log_mu=log_mu, \
                         fix_NB_dispersion=fix_NB_dispersion, shared_NB_dispersion=shared_NB_dispersion)
@@ -304,8 +317,13 @@ class hmm_nophasing_v2(object):
                 new_alphas = alphas
             if "p" in self.params:
                 if tumor_prop is None:
-                    new_p_binom, new_taus = update_emission_params_bb_nophasing_uniqvalues(unique_values_bb, mapping_matrices_bb, log_gamma, taus, start_p_binom=p_binom, \
-                        fix_BB_dispersion=fix_BB_dispersion, shared_BB_dispersion=shared_BB_dispersion)
+                    if device == 'cpu':
+                        new_p_binom, new_taus = update_emission_params_bb_nophasing_uniqvalues(unique_values_bb, mapping_matrices_bb, log_gamma, taus, start_p_binom=p_binom, \
+                            fix_BB_dispersion=fix_BB_dispersion, shared_BB_dispersion=shared_BB_dispersion)
+                    else:
+                        new_p_binom, new_taus = update_emission_params_bb_nophasing_uniqvalues(unique_values_bb, mapping_matrices_bb, log_gamma, taus, 
+                            fun=fit_weighted_BetaBinomial_gpu, start_p_binom=p_binom,
+                            fix_BB_dispersion=fix_BB_dispersion, shared_BB_dispersion=shared_BB_dispersion)
                 else:
                     # compute mu as adjusted RDR
                     if ("m" in self.params):
