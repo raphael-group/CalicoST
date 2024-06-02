@@ -1,11 +1,16 @@
 import numpy as np
 import scipy
-import torch
-import torch.nn as nn
-import torch.nn.functional as F
+
+try:
+    import torch
+    import torch.nn as nn
+    import torch.nn.functional as F
+    device = 'cuda' if torch.cuda.is_available() else 'cpu'
+except ImportError:
+    device = 'cpu'
 
 
-def fit_weighted_NegativeBinomial_gpu(y, features, weights, exposure, start_log_mu=None, start_alpha=None, n_epochs=1000, device='cuda'):
+def fit_weighted_NegativeBinomial_gpu(y, features, weights, exposure, start_log_mu=None, start_alpha=None, n_epochs=1000):
     # convert to torch
     y = torch.from_numpy(y).to(torch.float32).to(device)
     features = torch.from_numpy(features).to(torch.float32).to(device)
@@ -46,7 +51,7 @@ def fit_weighted_NegativeBinomial_gpu(y, features, weights, exposure, start_log_
 
 
 def fit_weighted_BetaBinomial_gpu(y, features, weights, exposure, start_p_binom=None, start_tau=None, min_binom_prob=0.01, max_binom_prob=0.99, 
-                      n_epochs=1000, device='cuda', MIN_TAUS = np.log(5), MAX_TAUS = np.log(1000)):
+                      n_epochs=1000, MIN_TAUS = np.log(5), MAX_TAUS = np.log(1000)):
     y = torch.from_numpy(y).to(torch.float32).to(device)
     features = torch.from_numpy(features).to(torch.float32).to(device)
     weights = torch.from_numpy(weights).to(torch.float32).to(device)
