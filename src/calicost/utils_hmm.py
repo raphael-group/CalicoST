@@ -413,17 +413,18 @@ def update_emission_params_nb_sitewise_uniqvalues(unique_values, mapping_matrice
                     res, n_llf = fun(unique_values[s][idx_nonzero,0], \
                                 np.ones(len(idx_nonzero)).reshape(-1,1), \
                                 weights=tmp[i,idx_nonzero]+tmp[i+n_states,idx_nonzero], \
-                                exposure=unique_values[s][idx_nonzero,1])
+                                exposure=unique_values[s][idx_nonzero,1],
+                                start_log_mu=start_log_mu[i:(i+1), s:(s+1)], start_alpha=alphas[i, s])
                     new_log_mu[i, s] = res[0]
                     new_alphas[i, s] = res[-1]
-                    if not (start_log_mu is None):
-                        res2, n_llf2 = fun(unique_values[s][idx_nonzero,0], \
-                                        np.ones(len(idx_nonzero)).reshape(-1,1), \
-                                        weights=tmp[i,idx_nonzero]+tmp[i+n_states,idx_nonzero], \
-                                        exposure=unique_values[s][idx_nonzero,1], \
-                                        start_log_mu=start_log_mu[i:(i+1), s:(s+1)], start_alpha=alphas[i, s])
-                        new_log_mu[i, s] = res[0] if n_llf < n_llf2 else res2[0]
-                        new_alphas[i, s] = res[-1] if n_llf < n_llf2 else res2[-1]
+                    # if not (start_log_mu is None):
+                    #     res2, n_llf2 = fun(unique_values[s][idx_nonzero,0], \
+                    #                     np.ones(len(idx_nonzero)).reshape(-1,1), \
+                    #                     weights=tmp[i,idx_nonzero]+tmp[i+n_states,idx_nonzero], \
+                    #                     exposure=unique_values[s][idx_nonzero,1], \
+                    #                     start_log_mu=start_log_mu[i:(i+1), s:(s+1)], start_alpha=alphas[i, s])
+                    #     new_log_mu[i, s] = res[0] if n_llf < n_llf2 else res2[0]
+                    #     new_alphas[i, s] = res[-1] if n_llf < n_llf2 else res2[-1]
         else:
             exposure = []
             y = []
@@ -451,24 +452,26 @@ def update_emission_params_nb_sitewise_uniqvalues(unique_values, mapping_matrice
             y = np.concatenate(y)
             weights = np.concatenate(weights)
             features = scipy.linalg.block_diag(*features)
-            res, n_llf = fun(y, features, weights=weights, exposure=exposure)
+            res, n_llf = fun(y, features, weights=weights, exposure=exposure,
+                             start_log_mu=np.array([start_log_mu[idx_state_posweight,s] for s,idx_state_posweight in enumerate(state_posweights)]), 
+                             start_alpha=alphas[0,s])
             for s,idx_state_posweight in enumerate(state_posweights):
                 l1 = int( np.sum([len(x) for x in state_posweights[:s]]) )
                 l2 = int( np.sum([len(x) for x in state_posweights[:(s+1)]]) )
                 new_log_mu[idx_state_posweight, s] = res[l1:l2]
             if res[-1] > 0:
                 new_alphas[:,:] = res[-1]
-            if not (start_log_mu is None):
-                res2, n_llf2 = fun(y, features, weights=weights, exposure=exposure, 
-                                                             start_log_mu=np.array([start_log_mu[idx_state_posweight,s] for s,idx_state_posweight in enumerate(state_posweights)]), 
-                                                             start_alpha=alphas[0,s])
-                if n_llf2 < n_llf:
-                    for s,idx_state_posweight in enumerate(state_posweights):
-                        l1 = int( np.sum([len(x) for x in state_posweights[:s]]) )
-                        l2 = int( np.sum([len(x) for x in state_posweights[:(s+1)]]) )
-                        new_log_mu[idx_state_posweight, s] = res2[l1:l2]
-                    if res2[-1] > 0:
-                        new_alphas[:,:] = res2[-1]
+            # if not (start_log_mu is None):
+            #     res2, n_llf2 = fun(y, features, weights=weights, exposure=exposure, 
+            #                                                  start_log_mu=np.array([start_log_mu[idx_state_posweight,s] for s,idx_state_posweight in enumerate(state_posweights)]), 
+            #                                                  start_alpha=alphas[0,s])
+            #     if n_llf2 < n_llf:
+            #         for s,idx_state_posweight in enumerate(state_posweights):
+            #             l1 = int( np.sum([len(x) for x in state_posweights[:s]]) )
+            #             l2 = int( np.sum([len(x) for x in state_posweights[:(s+1)]]) )
+            #             new_log_mu[idx_state_posweight, s] = res2[l1:l2]
+            #         if res2[-1] > 0:
+            #             new_alphas[:,:] = res2[-1]
     new_log_mu[new_log_mu > max_log_rdr] = max_log_rdr
     new_log_mu[new_log_mu < min_log_rdr] = min_log_rdr
     return new_log_mu, new_alphas
@@ -519,17 +522,17 @@ def update_emission_params_nb_sitewise_uniqvalues_mix(unique_values, mapping_mat
                     res, n_llf = fun(unique_values[s][idx_nonzero,0], \
                                 np.ones(len(idx_nonzero)).reshape(-1,1), \
                                 weights=tmp[i,idx_nonzero]+tmp[i+n_states,idx_nonzero], exposure=unique_values[s][idx_nonzero,1], \
-                                tumor_prop=this_tp)
+                                tumor_prop=this_tp, start_log_mu=start_log_mu[i:(i+1), s:(s+1)], start_alpha=alphas[i, s])
                     new_log_mu[i, s] = res[0]
                     new_alphas[i, s] = res[-1]
-                    if not (start_log_mu is None):
-                        res2, n_llf2 = fun(unique_values[s][idx_nonzero,0], \
-                                        np.ones(len(idx_nonzero)).reshape(-1,1), \
-                                        weights=tmp[i,idx_nonzero]+tmp[i+n_states,idx_nonzero], exposure=unique_values[s][idx_nonzero,1], \
-                                        tumor_prop=this_tp, 
-                                        start_log_mu=start_log_mu[i:(i+1), s:(s+1)], start_alpha=alphas[i, s])
-                        new_log_mu[i, s] = res[0] if n_llf < n_llf2 else res2[0]
-                        new_alphas[i, s] = res[-1] if n_llf < n_llf2 else res2[-1]
+                    # if not (start_log_mu is None):
+                    #     res2, n_llf2 = fun(unique_values[s][idx_nonzero,0], \
+                    #                     np.ones(len(idx_nonzero)).reshape(-1,1), \
+                    #                     weights=tmp[i,idx_nonzero]+tmp[i+n_states,idx_nonzero], exposure=unique_values[s][idx_nonzero,1], \
+                    #                     tumor_prop=this_tp, 
+                    #                     start_log_mu=start_log_mu[i:(i+1), s:(s+1)], start_alpha=alphas[i, s])
+                    #     new_log_mu[i, s] = res[0] if n_llf < n_llf2 else res2[0]
+                    #     new_alphas[i, s] = res[-1] if n_llf < n_llf2 else res2[-1]
         else:
             exposure = []
             y = []
@@ -563,24 +566,26 @@ def update_emission_params_nb_sitewise_uniqvalues_mix(unique_values, mapping_mat
             weights = np.concatenate(weights)
             features = scipy.linalg.block_diag(*features)
             tp = np.concatenate(tp)
-            res, n_llf = fun(y, features, weights=weights, exposure=exposure, tumor_prop=tp)
+            res, n_llf = fun(y, features, weights=weights, exposure=exposure, tumor_prop=tp,
+                             start_log_mu=np.array([start_log_mu[idx_state_posweight,s] for s,idx_state_posweight in enumerate(state_posweights)]), 
+                             start_alpha=alphas[0,s])
             for s,idx_state_posweight in enumerate(state_posweights):
                 l1 = int( np.sum([len(x) for x in state_posweights[:s]]) )
                 l2 = int( np.sum([len(x) for x in state_posweights[:(s+1)]]) )
                 new_log_mu[idx_state_posweight, s] = res[l1:l2]
             if res[-1] > 0:
                 new_alphas[:,:] = res[-1]
-            if not (start_log_mu is None):
-                res2, n_llf2 = fun(y, features, weights=weights, exposure=exposure, tumor_prop=tp, 
-                                                                 start_log_mu=np.array([start_log_mu[idx_state_posweight,s] for s,idx_state_posweight in enumerate(state_posweights)]), 
-                                                                 start_alpha=alphas[0,s])
-                if n_llf2 < n_llf:
-                    for s,idx_state_posweight in enumerate(state_posweights):
-                        l1 = int( np.sum([len(x) for x in state_posweights[:s]]) )
-                        l2 = int( np.sum([len(x) for x in state_posweights[:(s+1)]]) )
-                        new_log_mu[idx_state_posweight, s] = res2[l1:l2]
-                    if res2[-1] > 0:
-                        new_alphas[:,:] = res2[-1]
+            # if not (start_log_mu is None):
+            #     res2, n_llf2 = fun(y, features, weights=weights, exposure=exposure, tumor_prop=tp, 
+            #                                                      start_log_mu=np.array([start_log_mu[idx_state_posweight,s] for s,idx_state_posweight in enumerate(state_posweights)]), 
+            #                                                      start_alpha=alphas[0,s])
+            #     if n_llf2 < n_llf:
+            #         for s,idx_state_posweight in enumerate(state_posweights):
+            #             l1 = int( np.sum([len(x) for x in state_posweights[:s]]) )
+            #             l2 = int( np.sum([len(x) for x in state_posweights[:(s+1)]]) )
+            #             new_log_mu[idx_state_posweight, s] = res2[l1:l2]
+            #         if res2[-1] > 0:
+            #             new_alphas[:,:] = res2[-1]
     new_log_mu[new_log_mu > max_log_rdr] = max_log_rdr
     new_log_mu[new_log_mu < min_log_rdr] = min_log_rdr
     return new_log_mu, new_alphas
@@ -635,17 +640,18 @@ def update_emission_params_bb_sitewise_uniqvalues(unique_values, mapping_matrice
                         res, n_llf = fun(np.append(unique_values[s][idx_nonzero,0], unique_values[s][idx_nonzero,1]-unique_values[s][idx_nonzero,0]), \
                             np.ones(2*len(idx_nonzero)).reshape(-1,1), \
                             weights=np.append(tmp[i,idx_nonzero], tmp[i+n_states,idx_nonzero]), \
-                            exposure=np.append(unique_values[s][idx_nonzero,1], unique_values[s][idx_nonzero,1]) )
+                            exposure=np.append(unique_values[s][idx_nonzero,1], unique_values[s][idx_nonzero,1]),
+                            start_p_binom=start_p_binom[i:(i+1), s:(s+1)], start_tau=taus[i, s] )
                         new_p_binom[i, s] = res[0]
                         new_taus[i, s] = res[-1]
-                        if not (start_p_binom is None):
-                            res2, n_llf2 = fun(np.append(unique_values[s][idx_nonzero,0], unique_values[s][idx_nonzero,1]-unique_values[s][idx_nonzero,0]), \
-                                np.ones(2*len(idx_nonzero)).reshape(-1,1), \
-                                weights=np.append(tmp[i,idx_nonzero], tmp[i+n_states,idx_nonzero]), \
-                                exposure=np.append(unique_values[s][idx_nonzero,1], unique_values[s][idx_nonzero,1]), \
-                                start_p_binom=start_p_binom[i:(i+1), s:(s+1)], start_tau=taus[i, s])
-                            new_p_binom[i, s] = res[0] if n_llf < n_llf2 else res2[0]
-                            new_taus[i, s] = res[-1] if n_llf < n_llf2 else res2[-1]
+                        # if not (start_p_binom is None):
+                        #     res2, n_llf2 = fun(np.append(unique_values[s][idx_nonzero,0], unique_values[s][idx_nonzero,1]-unique_values[s][idx_nonzero,0]), \
+                        #         np.ones(2*len(idx_nonzero)).reshape(-1,1), \
+                        #         weights=np.append(tmp[i,idx_nonzero], tmp[i+n_states,idx_nonzero]), \
+                        #         exposure=np.append(unique_values[s][idx_nonzero,1], unique_values[s][idx_nonzero,1]), \
+                        #         start_p_binom=start_p_binom[i:(i+1), s:(s+1)], start_tau=taus[i, s])
+                        #     new_p_binom[i, s] = res[0] if n_llf < n_llf2 else res2[0]
+                        #     new_taus[i, s] = res[-1] if n_llf < n_llf2 else res2[-1]
         else:
             exposure = []
             y = []
@@ -673,24 +679,26 @@ def update_emission_params_bb_sitewise_uniqvalues(unique_values, mapping_matrice
             y = np.concatenate(y)
             weights = np.concatenate(weights)
             features = scipy.linalg.block_diag(*features)
-            res, n_llf = fun(y, features, weights=weights, exposure=exposure)
+            res, n_llf = fun(y, features, weights=weights, exposure=exposure,
+                             start_p_binom=np.array([start_p_binom[idx_state_posweight,s] for s,idx_state_posweight in enumerate(state_posweights)]),
+                             start_tau=taus[0,s])
             for s,idx_state_posweight in enumerate(state_posweights):
                 l1 = int( np.sum([len(x) for x in state_posweights[:s]]) )
                 l2 = int( np.sum([len(x) for x in state_posweights[:(s+1)]]) )
                 new_p_binom[idx_state_posweight, s] = res[l1:l2]
             if res[-1] > 0:
                 new_taus[:,:] = res[-1]
-            if not (start_p_binom is None):
-                res2, n_llf2 = fun(y, features, weights=weights, exposure=exposure, 
-                                                         start_p_binom=np.array([start_p_binom[idx_state_posweight,s] for s,idx_state_posweight in enumerate(state_posweights)]),
-                                                         start_tau=taus[0,s])
-                if n_llf2 < n_llf:
-                    for s,idx_state_posweight in enumerate(state_posweights):
-                        l1 = int( np.sum([len(x) for x in state_posweights[:s]]) )
-                        l2 = int( np.sum([len(x) for x in state_posweights[:(s+1)]]) )
-                        new_p_binom[idx_state_posweight, s] = res2[l1:l2]
-                    if res2[-1] > 0:
-                        new_taus[:,:] = res2[-1]
+            # if not (start_p_binom is None):
+            #     res2, n_llf2 = fun(y, features, weights=weights, exposure=exposure, 
+            #                                              start_p_binom=np.array([start_p_binom[idx_state_posweight,s] for s,idx_state_posweight in enumerate(state_posweights)]),
+            #                                              start_tau=taus[0,s])
+            #     if n_llf2 < n_llf:
+            #         for s,idx_state_posweight in enumerate(state_posweights):
+            #             l1 = int( np.sum([len(x) for x in state_posweights[:s]]) )
+            #             l2 = int( np.sum([len(x) for x in state_posweights[:(s+1)]]) )
+            #             new_p_binom[idx_state_posweight, s] = res2[l1:l2]
+            #         if res2[-1] > 0:
+            #             new_taus[:,:] = res2[-1]
     new_p_binom[new_p_binom < min_binom_prob] = min_binom_prob
     new_p_binom[new_p_binom > max_binom_prob] = max_binom_prob
     return new_p_binom, new_taus
@@ -752,18 +760,18 @@ def update_emission_params_bb_sitewise_uniqvalues_mix(unique_values, mapping_mat
                             np.ones(2*len(idx_nonzero)).reshape(-1,1), \
                             weights=np.append(tmp[i,idx_nonzero], tmp[i+n_states,idx_nonzero]), \
                             exposure=np.append(unique_values[s][idx_nonzero,1], unique_values[s][idx_nonzero,1]),\
-                            tumor_prop=this_tp)
+                            tumor_prop=this_tp, start_p_binom=start_p_binom[i:(i+1), s:(s+1)], start_tau=taus[i, s])
                         new_p_binom[i, s] = res[0]
                         new_taus[i, s] = res[-1]
-                        if not (start_p_binom is None):
-                            res2, n_llf2 = fun(np.append(unique_values[s][idx_nonzero,0], unique_values[s][idx_nonzero,1]-unique_values[s][idx_nonzero,0]), \
-                                np.ones(2*len(idx_nonzero)).reshape(-1,1), \
-                                weights=np.append(tmp[i,idx_nonzero], tmp[i+n_states,idx_nonzero]), \
-                                exposure=np.append(unique_values[s][idx_nonzero,1], unique_values[s][idx_nonzero,1]),\
-                                tumor_prop=this_tp, 
-                                start_p_binom=start_p_binom[i:(i+1), s:(s+1)], start_tau=taus[i, s])
-                            new_p_binom[i, s] = res[0] if n_llf < n_llf2 else res2[0]
-                            new_taus[i, s] = res[-1] if n_llf < n_llf2 else res2[-1]
+                        # if not (start_p_binom is None):
+                        #     res2, n_llf2 = fun(np.append(unique_values[s][idx_nonzero,0], unique_values[s][idx_nonzero,1]-unique_values[s][idx_nonzero,0]), \
+                        #         np.ones(2*len(idx_nonzero)).reshape(-1,1), \
+                        #         weights=np.append(tmp[i,idx_nonzero], tmp[i+n_states,idx_nonzero]), \
+                        #         exposure=np.append(unique_values[s][idx_nonzero,1], unique_values[s][idx_nonzero,1]),\
+                        #         tumor_prop=this_tp, 
+                        #         start_p_binom=start_p_binom[i:(i+1), s:(s+1)], start_tau=taus[i, s])
+                        #     new_p_binom[i, s] = res[0] if n_llf < n_llf2 else res2[0]
+                        #     new_taus[i, s] = res[-1] if n_llf < n_llf2 else res2[-1]
         else:
             exposure = []
             y = []
@@ -797,24 +805,26 @@ def update_emission_params_bb_sitewise_uniqvalues_mix(unique_values, mapping_mat
             weights = np.concatenate(weights)
             features = scipy.linalg.block_diag(*features)
             tp = np.concatenate(tp)
-            res, n_llf = fun(y, features, weights=weights, exposure=exposure, tumor_prop=tp)
+            res, n_llf = fun(y, features, weights=weights, exposure=exposure, tumor_prop=tp,
+                             start_p_binom=np.array([start_p_binom[idx_state_posweight,s] for s,idx_state_posweight in enumerate(state_posweights)]),
+                             start_tau=taus[0,s])
             for s,idx_state_posweight in enumerate(state_posweights):
                 l1 = int( np.sum([len(x) for x in state_posweights[:s]]) )
                 l2 = int( np.sum([len(x) for x in state_posweights[:(s+1)]]) )
                 new_p_binom[idx_state_posweight, s] = res[l1:l2]
             if res[-1] > 0:
                 new_taus[:,:] = res[-1]
-            if not (start_p_binom is None):
-                res2, n_llf2 = fun(y, features, weights=weights, exposure=exposure, tumor_prop=tp, 
-                                                             start_p_binom=np.array([start_p_binom[idx_state_posweight,s] for s,idx_state_posweight in enumerate(state_posweights)]),
-                                                             start_tau=taus[0,s])
-                if n_llf2 < n_llf:
-                    for s,idx_state_posweight in enumerate(state_posweights):
-                        l1 = int( np.sum([len(x) for x in state_posweights[:s]]) )
-                        l2 = int( np.sum([len(x) for x in state_posweights[:(s+1)]]) )
-                        new_p_binom[idx_state_posweight, s] = res2[l1:l2]
-                    if res2[-1] > 0:
-                        new_taus[:,:] = res2[-1]
+            # if not (start_p_binom is None):
+            #     res2, n_llf2 = fun(y, features, weights=weights, exposure=exposure, tumor_prop=tp, 
+            #                                                  start_p_binom=np.array([start_p_binom[idx_state_posweight,s] for s,idx_state_posweight in enumerate(state_posweights)]),
+            #                                                  start_tau=taus[0,s])
+            #     if n_llf2 < n_llf:
+            #         for s,idx_state_posweight in enumerate(state_posweights):
+            #             l1 = int( np.sum([len(x) for x in state_posweights[:s]]) )
+            #             l2 = int( np.sum([len(x) for x in state_posweights[:(s+1)]]) )
+            #             new_p_binom[idx_state_posweight, s] = res2[l1:l2]
+            #         if res2[-1] > 0:
+            #             new_taus[:,:] = res2[-1]
     new_p_binom[new_p_binom < min_binom_prob] = min_binom_prob
     new_p_binom[new_p_binom > max_binom_prob] = max_binom_prob
     return new_p_binom, new_taus
@@ -924,17 +934,18 @@ def update_emission_params_nb_nophasing_uniqvalues(unique_values, mapping_matric
                     res, n_llf = fun(unique_values[s][idx_nonzero,0], \
                                 np.ones(len(idx_nonzero)).reshape(-1,1), \
                                 weights=tmp[i,idx_nonzero], \
-                                exposure=unique_values[s][idx_nonzero,1])
+                                exposure=unique_values[s][idx_nonzero,1],
+                                start_log_mu=start_log_mu[i:(i+1), s:(s+1)], start_alpha=alphas[i, s])
                     new_log_mu[i, s] = res[0]
                     new_alphas[i, s] = res[-1]
-                    if not (start_log_mu is None):
-                        res2, n_llf2 = fun(unique_values[s][idx_nonzero,0], \
-                                np.ones(len(idx_nonzero)).reshape(-1,1), \
-                                weights=tmp[i,idx_nonzero], \
-                                exposure=unique_values[s][idx_nonzero,1], \
-                                start_log_mu=start_log_mu[i:(i+1), s:(s+1)], start_alpha=alphas[i, s])
-                        new_log_mu[i, s] = res[0] if n_llf < n_llf2 else res2[0]
-                        new_alphas[i, s] = res[-1] if n_llf < n_llf2 else res2[-1]
+                    # if not (start_log_mu is None):
+                    #     res2, n_llf2 = fun(unique_values[s][idx_nonzero,0], \
+                    #             np.ones(len(idx_nonzero)).reshape(-1,1), \
+                    #             weights=tmp[i,idx_nonzero], \
+                    #             exposure=unique_values[s][idx_nonzero,1], \
+                    #             start_log_mu=start_log_mu[i:(i+1), s:(s+1)], start_alpha=alphas[i, s])
+                    #     new_log_mu[i, s] = res[0] if n_llf < n_llf2 else res2[0]
+                    #     new_alphas[i, s] = res[-1] if n_llf < n_llf2 else res2[-1]
         else:
             exposure = []
             y = []
@@ -962,24 +973,26 @@ def update_emission_params_nb_nophasing_uniqvalues(unique_values, mapping_matric
             y = np.concatenate(y)
             weights = np.concatenate(weights)
             features = scipy.linalg.block_diag(*features)
-            res, n_llf = fun(y, features, weights=weights, exposure=exposure)
+            res, n_llf = fun(y, features, weights=weights, exposure=exposure,
+                             start_log_mu=np.array([start_log_mu[idx_state_posweight,s] for s,idx_state_posweight in enumerate(state_posweights)]), 
+                             start_alpha=alphas[0,s])
             for s,idx_state_posweight in enumerate(state_posweights):
                 l1 = int( np.sum([len(x) for x in state_posweights[:s]]) )
                 l2 = int( np.sum([len(x) for x in state_posweights[:(s+1)]]) )
                 new_log_mu[idx_state_posweight, s] = res[l1:l2]
             if res[-1] > 0:
                 new_alphas[:,:] = res[-1]
-            if not (start_log_mu is None):
-                res2, n_llf2 = fun(y, features, weights=weights, exposure=exposure, 
-                                                             start_log_mu=np.array([start_log_mu[idx_state_posweight,s] for s,idx_state_posweight in enumerate(state_posweights)]), 
-                                                             start_alpha=alphas[0,s])
-                if n_llf2 < n_llf:
-                    for s,idx_state_posweight in enumerate(state_posweights):
-                        l1 = int( np.sum([len(x) for x in state_posweights[:s]]) )
-                        l2 = int( np.sum([len(x) for x in state_posweights[:(s+1)]]) )
-                        new_log_mu[idx_state_posweight, s] = res2[l1:l2]
-                    if res2[-1] > 0:
-                        new_alphas[:,:] = res2[-1]
+            # if not (start_log_mu is None):
+            #     res2, n_llf2 = fun(y, features, weights=weights, exposure=exposure, 
+            #                                                  start_log_mu=np.array([start_log_mu[idx_state_posweight,s] for s,idx_state_posweight in enumerate(state_posweights)]), 
+            #                                                  start_alpha=alphas[0,s])
+            #     if n_llf2 < n_llf:
+            #         for s,idx_state_posweight in enumerate(state_posweights):
+            #             l1 = int( np.sum([len(x) for x in state_posweights[:s]]) )
+            #             l2 = int( np.sum([len(x) for x in state_posweights[:(s+1)]]) )
+            #             new_log_mu[idx_state_posweight, s] = res2[l1:l2]
+            #         if res2[-1] > 0:
+            #             new_alphas[:,:] = res2[-1]
     new_log_mu[new_log_mu > max_log_rdr] = max_log_rdr
     new_log_mu[new_log_mu < min_log_rdr] = min_log_rdr
     return new_log_mu, new_alphas
@@ -1030,17 +1043,17 @@ def update_emission_params_nb_nophasing_uniqvalues_mix(unique_values, mapping_ma
                     res, n_llf = fun(unique_values[s][idx_nonzero,0], \
                                 np.ones(len(idx_nonzero)).reshape(-1,1), \
                                 weights=tmp[i,idx_nonzero], exposure=unique_values[s][idx_nonzero,1], \
-                                tumor_prop=this_tp)
+                                tumor_prop=this_tp, start_log_mu=start_log_mu[i:(i+1), s:(s+1)], start_alpha=alphas[i, s])
                     new_log_mu[i, s] = res[0]
                     new_alphas[i, s] = res[-1]
-                    if not (start_log_mu is None):
-                        res2, n_llf2 = fun(unique_values[s][idx_nonzero,0], \
-                                        np.ones(len(idx_nonzero)).reshape(-1,1), \
-                                        weights=tmp[i,idx_nonzero], exposure=unique_values[s][idx_nonzero,1], \
-                                        tumor_prop=this_tp, 
-                                        start_log_mu=start_log_mu[i:(i+1), s:(s+1)], start_alpha=alphas[i, s])
-                        new_log_mu[i, s] = res[0] if n_llf < n_llf2 else res2[0]
-                        new_alphas[i, s] = res[-1] if n_llf < n_llf2 else res2[-1]
+                    # if not (start_log_mu is None):
+                    #     res2, n_llf2 = fun(unique_values[s][idx_nonzero,0], \
+                    #                     np.ones(len(idx_nonzero)).reshape(-1,1), \
+                    #                     weights=tmp[i,idx_nonzero], exposure=unique_values[s][idx_nonzero,1], \
+                    #                     tumor_prop=this_tp, 
+                    #                     start_log_mu=start_log_mu[i:(i+1), s:(s+1)], start_alpha=alphas[i, s])
+                    #     new_log_mu[i, s] = res[0] if n_llf < n_llf2 else res2[0]
+                    #     new_alphas[i, s] = res[-1] if n_llf < n_llf2 else res2[-1]
         else:
             exposure = []
             y = []
@@ -1074,24 +1087,26 @@ def update_emission_params_nb_nophasing_uniqvalues_mix(unique_values, mapping_ma
             weights = np.concatenate(weights)
             features = scipy.linalg.block_diag(*features)
             tp = np.concatenate(tp)
-            res, n_llf = fun(y, features, weights=weights, exposure=exposure, tumor_prop=tp)
+            res, n_llf = fun(y, features, weights=weights, exposure=exposure, tumor_prop=tp,
+                             start_log_mu=np.array([start_log_mu[idx_state_posweight,s] for s,idx_state_posweight in enumerate(state_posweights)]),
+                             start_alpha=alphas[0,s])
             for s,idx_state_posweight in enumerate(state_posweights):
                 l1 = int( np.sum([len(x) for x in state_posweights[:s]]) )
                 l2 = int( np.sum([len(x) for x in state_posweights[:(s+1)]]) )
                 new_log_mu[idx_state_posweight, s] = res[l1:l2]
             if res[-1] > 0:
                 new_alphas[:,:] = res[-1]
-            if not (start_log_mu is None):
-                res2, n_llf2 = fun(y, features, weights=weights, exposure=exposure, tumor_prop=tp, 
-                                                                 start_log_mu=np.array([start_log_mu[idx_state_posweight,s] for s,idx_state_posweight in enumerate(state_posweights)]),
-                                                                 start_alpha=alphas[0,s])
-                if n_llf2 < n_llf:
-                    for s,idx_state_posweight in enumerate(state_posweights):
-                        l1 = int( np.sum([len(x) for x in state_posweights[:s]]) )
-                        l2 = int( np.sum([len(x) for x in state_posweights[:(s+1)]]) )
-                        new_log_mu[idx_state_posweight, s] = res2[l1:l2]
-                    if res2[-1] > 0:
-                        new_alphas[:,:] = res2[-1]
+            # if not (start_log_mu is None):
+            #     res2, n_llf2 = fun(y, features, weights=weights, exposure=exposure, tumor_prop=tp, 
+            #                                                      start_log_mu=np.array([start_log_mu[idx_state_posweight,s] for s,idx_state_posweight in enumerate(state_posweights)]),
+            #                                                      start_alpha=alphas[0,s])
+            #     if n_llf2 < n_llf:
+            #         for s,idx_state_posweight in enumerate(state_posweights):
+            #             l1 = int( np.sum([len(x) for x in state_posweights[:s]]) )
+            #             l2 = int( np.sum([len(x) for x in state_posweights[:(s+1)]]) )
+            #             new_log_mu[idx_state_posweight, s] = res2[l1:l2]
+            #         if res2[-1] > 0:
+            #             new_alphas[:,:] = res2[-1]
     new_log_mu[new_log_mu > max_log_rdr] = max_log_rdr
     new_log_mu[new_log_mu < min_log_rdr] = min_log_rdr
     return new_log_mu, new_alphas
@@ -1146,17 +1161,18 @@ def update_emission_params_bb_nophasing_uniqvalues(unique_values, mapping_matric
                         res, n_llf = fun(unique_values[s][idx_nonzero,0], \
                             np.ones(len(idx_nonzero)).reshape(-1,1), \
                             weights=tmp[i,idx_nonzero], \
-                            exposure=unique_values[s][idx_nonzero,1] )
+                            exposure=unique_values[s][idx_nonzero,1],
+                            start_p_binom=start_p_binom[i:(i+1), s:(s+1)], start_tau=taus[i, s] )
                         new_p_binom[i, s] = res[0]
                         new_taus[i, s] = res[-1]
-                        if not (start_p_binom is None):
-                            res2, n_llf2 = fun(unique_values[s][idx_nonzero,0], \
-                                np.ones(len(idx_nonzero)).reshape(-1,1), \
-                                weights=tmp[i,idx_nonzero], \
-                                exposure=unique_values[s][idx_nonzero,1], 
-                                start_p_binom=start_p_binom[i:(i+1), s:(s+1)], start_tau=taus[i, s])
-                            new_p_binom[i, s] = res[0] if n_llf < n_llf2 else res2[0]
-                            new_taus[i, s] = res[-1] if n_llf < n_llf2 else res2[-1]
+                        # if not (start_p_binom is None):
+                        #     res2, n_llf2 = fun(unique_values[s][idx_nonzero,0], \
+                        #         np.ones(len(idx_nonzero)).reshape(-1,1), \
+                        #         weights=tmp[i,idx_nonzero], \
+                        #         exposure=unique_values[s][idx_nonzero,1], 
+                        #         start_p_binom=start_p_binom[i:(i+1), s:(s+1)], start_tau=taus[i, s])
+                        #     new_p_binom[i, s] = res[0] if n_llf < n_llf2 else res2[0]
+                        #     new_taus[i, s] = res[-1] if n_llf < n_llf2 else res2[-1]
         else:
             exposure = []
             y = []
@@ -1184,24 +1200,26 @@ def update_emission_params_bb_nophasing_uniqvalues(unique_values, mapping_matric
             y = np.concatenate(y)
             weights = np.concatenate(weights)
             features = scipy.linalg.block_diag(*features)
-            res, n_llf = fun(y, features, weights=weights, exposure=exposure)
+            res, n_llf = fun(y, features, weights=weights, exposure=exposure,
+                             start_p_binom=np.array([start_p_binom[idx_state_posweight,s] for s,idx_state_posweight in enumerate(state_posweights)]), 
+                             start_tau=taus[0,s])
             for s,idx_state_posweight in enumerate(state_posweights):
                 l1 = int( np.sum([len(x) for x in state_posweights[:s]]) )
                 l2 = int( np.sum([len(x) for x in state_posweights[:(s+1)]]) )
                 new_p_binom[idx_state_posweight, s] = res[l1:l2]
             if res[-1] > 0:
                 new_taus[:,:] = res[-1]
-            if not (start_p_binom is None):
-                res2, n_llf2 = fun(y, features, weights=weights, exposure=exposure, 
-                                                         start_p_binom=np.array([start_p_binom[idx_state_posweight,s] for s,idx_state_posweight in enumerate(state_posweights)]), 
-                                                         start_tau=taus[0,s])
-                if n_llf2 < n_llf:
-                    for s,idx_state_posweight in enumerate(state_posweights):
-                        l1 = int( np.sum([len(x) for x in state_posweights[:s]]) )
-                        l2 = int( np.sum([len(x) for x in state_posweights[:(s+1)]]) )
-                        new_p_binom[idx_state_posweight, s] = res2[l1:l2]
-                    if res2[-1] > 0:
-                        new_taus[:,:] = res2[-1]
+            # if not (start_p_binom is None):
+            #     res2, n_llf2 = fun(y, features, weights=weights, exposure=exposure, 
+            #                                              start_p_binom=np.array([start_p_binom[idx_state_posweight,s] for s,idx_state_posweight in enumerate(state_posweights)]), 
+            #                                              start_tau=taus[0,s])
+            #     if n_llf2 < n_llf:
+            #         for s,idx_state_posweight in enumerate(state_posweights):
+            #             l1 = int( np.sum([len(x) for x in state_posweights[:s]]) )
+            #             l2 = int( np.sum([len(x) for x in state_posweights[:(s+1)]]) )
+            #             new_p_binom[idx_state_posweight, s] = res2[l1:l2]
+            #         if res2[-1] > 0:
+            #             new_taus[:,:] = res2[-1]
 
     new_p_binom[new_p_binom < min_binom_prob] = min_binom_prob
     new_p_binom[new_p_binom > max_binom_prob] = max_binom_prob
@@ -1264,18 +1282,18 @@ def update_emission_params_bb_nophasing_uniqvalues_mix(unique_values, mapping_ma
                             np.ones(len(idx_nonzero)).reshape(-1,1), \
                             weights=tmp[i,idx_nonzero], \
                             exposure=unique_values[s][idx_nonzero,1], \
-                            tumor_prop=this_tp)
+                            tumor_prop=this_tp, start_p_binom=start_p_binom[i:(i+1), s:(s+1)], start_tau=taus[i, s])
                         new_p_binom[i, s] = res[0]
                         new_taus[i, s] = res[-1]
-                        if not (start_p_binom is None):
-                            res2, n_llf2 = fun(unique_values[s][idx_nonzero,0], \
-                                np.ones(len(idx_nonzero)).reshape(-1,1), \
-                                weights=tmp[i,idx_nonzero], \
-                                exposure=unique_values[s][idx_nonzero,1], \
-                                tumor_prop=this_tp, 
-                                start_p_binom=start_p_binom[i:(i+1), s:(s+1)], start_tau=taus[i, s])
-                            new_p_binom[i, s] = res[0] if n_llf < n_llf2 else res2[0]
-                            new_taus[i, s] = res[-1] if n_llf < n_llf2 else res2[-1]
+                        # if not (start_p_binom is None):
+                        #     res2, n_llf2 = fun(unique_values[s][idx_nonzero,0], \
+                        #         np.ones(len(idx_nonzero)).reshape(-1,1), \
+                        #         weights=tmp[i,idx_nonzero], \
+                        #         exposure=unique_values[s][idx_nonzero,1], \
+                        #         tumor_prop=this_tp, 
+                        #         start_p_binom=start_p_binom[i:(i+1), s:(s+1)], start_tau=taus[i, s])
+                        #     new_p_binom[i, s] = res[0] if n_llf < n_llf2 else res2[0]
+                        #     new_taus[i, s] = res[-1] if n_llf < n_llf2 else res2[-1]
         else:
             exposure = []
             y = []
@@ -1309,24 +1327,26 @@ def update_emission_params_bb_nophasing_uniqvalues_mix(unique_values, mapping_ma
             weights = np.concatenate(weights)
             features = scipy.linalg.block_diag(*features)
             tp = np.concatenate(tp)
-            res, n_llf = fun(y, features, weights=weights, exposure=exposure, tumor_prop=tp)
+            res, n_llf = fun(y, features, weights=weights, exposure=exposure, tumor_prop=tp,
+                             start_p_binom=np.array([start_p_binom[idx_state_posweight,s] for s,idx_state_posweight in enumerate(state_posweights)]),
+                             start_tau=taus[0,s])
             for s,idx_state_posweight in enumerate(state_posweights):
                 l1 = int( np.sum([len(x) for x in state_posweights[:s]]) )
                 l2 = int( np.sum([len(x) for x in state_posweights[:(s+1)]]) )
                 new_p_binom[idx_state_posweight, s] = res[l1:l2]
             if res[-1] > 0:
                 new_taus[:,:] = res[-1]
-            if not (start_p_binom is None):
-                res2, n_llf2 = fun(y, features, weights=weights, exposure=exposure, tumor_prop=tp, 
-                                                             start_p_binom=np.array([start_p_binom[idx_state_posweight,s] for s,idx_state_posweight in enumerate(state_posweights)]),
-                                                             start_tau=taus[0,s])
-                if n_llf2 < n_llf:
-                    for s,idx_state_posweight in enumerate(state_posweights):
-                        l1 = int( np.sum([len(x) for x in state_posweights[:s]]) )
-                        l2 = int( np.sum([len(x) for x in state_posweights[:(s+1)]]) )
-                        new_p_binom[idx_state_posweight, s] = res2[l1:l2]
-                    if res2[-1] > 0:
-                        new_taus[:,:] = res2[-1]
+            # if not (start_p_binom is None):
+            #     res2, n_llf2 = fun(y, features, weights=weights, exposure=exposure, tumor_prop=tp, 
+            #                                                  start_p_binom=np.array([start_p_binom[idx_state_posweight,s] for s,idx_state_posweight in enumerate(state_posweights)]),
+            #                                                  start_tau=taus[0,s])
+            #     if n_llf2 < n_llf:
+            #         for s,idx_state_posweight in enumerate(state_posweights):
+            #             l1 = int( np.sum([len(x) for x in state_posweights[:s]]) )
+            #             l2 = int( np.sum([len(x) for x in state_posweights[:(s+1)]]) )
+            #             new_p_binom[idx_state_posweight, s] = res2[l1:l2]
+            #         if res2[-1] > 0:
+            #             new_taus[:,:] = res2[-1]
     new_p_binom[new_p_binom < min_binom_prob] = min_binom_prob
     new_p_binom[new_p_binom > max_binom_prob] = max_binom_prob
     return new_p_binom, new_taus
