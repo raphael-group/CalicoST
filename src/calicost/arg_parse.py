@@ -155,7 +155,9 @@ def read_configuration_file(filename):
                 # warning that the argument is not a valid configuration parameter and continue
                 logger.warning(f"{strs[0]} is not a valid configuration parameter! Configuration parameters are: {list(config.keys())}")
                 continue
-            if strs[1].upper() == "NONE":
+            if len(strs) == 1:
+                config[strs[0]] = []
+            elif strs[1].upper() == "NONE":
                 config[strs[0]] = None
             elif argument_type[strs[0]] == "str":
                 config[strs[0]] = strs[1]

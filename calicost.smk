@@ -8,7 +8,6 @@ import calicost.parse_input
 rule all:
     input:
         f"{config['output_snpinfo']}/cell_snp_Aallele.npz",
-        # expand(f"{config['outputdir_calicost']}/summary{{r}}", r=config['random_state'])
 
 
 rule link_or_merge_bam:
@@ -26,8 +25,8 @@ rule link_or_merge_bam:
         if "bamlist" in config:
             # merged BAM file
             shell(f"python {config['calicost_dir']}/utils/merge_bamfile.py -b {config['bamlist']} -o {params.outputdir}/ >> {log} 2>&1")
-            shell(f"{config['samtools']} sort -m {params.samtools_sorting_mem} -o {output.bam} {params.outputdir}/unsorted_possorted_genome_bam.bam >> {log} 2>&1")
-            shell(f"{config['samtools']} index {output.bam}")
+            shell(f"samtools sort -m {params.samtools_sorting_mem} -o {output.bam} {params.outputdir}/unsorted_possorted_genome_bam.bam >> {log} 2>&1")
+            shell(f"samtools index {output.bam}")
             shell(f"rm -fr {params.outputdir}/unsorted_possorted_genome_bam.bam")
             
             # merged barcodes
@@ -65,7 +64,7 @@ rule genotype:
         "{outputdir}/logs/genotyping.log"
     run:
         shell(f"mkdir -p {params.outputdir}/genotyping")
-        command = f"{config['cellsnplite']} -s {input.bam} " + \
+        command = f"cellsnp-lite -s {input.bam} " + \
              f"-b {input.barcodefile} " + \
              f"-O {params.outputdir}/genotyping/ " + \
              f"-R {params.region_vcf} " + \
@@ -89,8 +88,8 @@ rule pre_phasing:
         print(f"python {config['calicost_dir']}/utils/filter_snps_forphasing.py -c {params.outputdir}/genotyping -o {params.outputdir}/phasing")
         shell(f"python {config['calicost_dir']}/utils/filter_snps_forphasing.py -c {params.outputdir}/genotyping -o {params.outputdir}/phasing")
         for chrname in config["chromosomes"]:
-            shell(f"{config['bgzip']} -f {params.outputdir}/phasing/chr{chrname}.vcf")
-            shell(f"{config['tabix']} -f {params.outputdir}/phasing/chr{chrname}.vcf.gz")
+            shell(f"bgzip -f {params.outputdir}/phasing/chr{chrname}.vcf")
+            shell(f"tabix -f {params.outputdir}/phasing/chr{chrname}.vcf.gz")
 
 
 rule phasing:
@@ -131,84 +130,3 @@ rule parse_final_snp:
             f"-c {params.outputdir}/genotyping -e {params.outputdir}/phasing -b {params.outputdir}/barcodes.txt -o {params.outputdir}/ >> {log} 2>&1"
         shell( command )
 
-
-rule write_calicost_configfile:
-    input:
-        f"{config['output_snpinfo']}/cell_snp_Aallele.npz",
-        f"{config['output_snpinfo']}/cell_snp_Ballele.npz",
-        f"{config['output_snpinfo']}/unique_snp_ids.npy",
-    output:
-        expand("{{outputdir}}" + "/configfile{r}", r=config['random_state'])
-    params:
-        outputdir="{outputdir}",
-    threads: 1
-    run:
-        if "bamlist" in config:
-            calicost_config = calicost.arg_parse.get_default_config_joint()
-        else:
-            calicost_config = calicost.arg_parse.get_default_config_single()
-        
-        # update input
-        calicost_config['snp_dir'] = "/".join( input[0].split("/")[:-1] )
-        calicost_config['output_dir'] = f"{params.outputdir}"
-        if 'spaceranger_dir' in calicost_config:
-            assert 'spaceranger_dir' in config
-            calicost_config['spaceranger_dir'] = config['spaceranger_dir']
-        if 'input_filelist' in calicost_config:
-            assert 'bamlist' in config
-            calicost_config['input_filelist'] = config['bamlist']
-            if Path(f"{config['output_snpinfo']}/merged_deconvolution.tsv").exists():
-                calicost_config['tumorprop_file'] = f"{config['output_snpinfo']}/merged_deconvolution.tsv"
-
-        for k in calicost_config.keys():
-            if k in config:
-                calicost_config[k] = config[k]
-
-        for r in config['random_state']:
-            calicost_config["num_hmrf_initialization_start"] = r
-            calicost_config["num_hmrf_initialization_end"] = r+1
-            calicost.arg_parse.write_config_file(f"{params.outputdir}/configfile{r}", calicost_config)
-
-
-rule prepare_calicost_data:
-    input:
-        expand("{{outputdir}}" + "/configfile{r}", r=config['random_state']),
-    output:
-        f"{{outputdir}}/parsed_inputs/table_bininfo.csv.gz",
-        f"{{outputdir}}/parsed_inputs/table_rdrbaf.csv.gz",
-        f"{{outputdir}}/parsed_inputs/table_meta.csv.gz",
-        f"{{outputdir}}/parsed_inputs/exp_counts.pkl",
-        f"{{outputdir}}/parsed_inputs/adjacency_mat.npz",
-        f"{{outputdir}}/parsed_inputs/smooth_mat.npz",
-        f"{{outputdir}}/initial_phase.npz"
-    params:
-        outputdir="{outputdir}",
-    threads: 1
-    log:
-        "{outputdir}/logs/prepare_calicost_data.log"
-    run:
-        command = f"OMP_NUM_THREADS=1 python {config['calicost_dir']}/src/calicost/parse_input.py -c {input[0]} >> {log} 2>&1"
-        shell(command)
-
-
-rule run_calicost:
-    input:
-        f"{{outputdir}}/configfile{{r}}",
-        f"{{outputdir}}/parsed_inputs/table_bininfo.csv.gz",
-        f"{{outputdir}}/parsed_inputs/table_rdrbaf.csv.gz",
-        f"{{outputdir}}/parsed_inputs/table_meta.csv.gz",
-        f"{{outputdir}}/parsed_inputs/exp_counts.pkl",
-        f"{{outputdir}}/parsed_inputs/adjacency_mat.npz",
-        f"{{outputdir}}/parsed_inputs/smooth_mat.npz"
-    output:
-        f"{{outputdir}}/summary{{r}}",
-    params:
-        outputdir="{outputdir}",
-        r="{r}"
-    threads: 1
-    log:
-        "{outputdir}/logs/calicost_run_{r}.log"
-    run:
-        command = f"OMP_NUM_THREADS=1 python {config['calicost_dir']}/src/calicost/calicost_main.py -c {input[0]} >> {log} 2>&1"
-        shell(command)
-        shell(f"echo {command} > {output}")
