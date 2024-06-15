@@ -38,8 +38,8 @@ def fit_weighted_NegativeBinomial_gpu(y, features, weights, exposure, start_log_
             nb_mean = torch.exp(features @ log_mu) * exposure
             nb_var = nb_mean + nb_mean**2 * torch.exp(log_disp)
             # convert parameters
-            p = nb_mean/nb_var
-            n = nb_mean * nb_mean /(nb_var - nb_mean)
+            p = 1.0 / (1.0 + nb_mean * torch.exp(log_disp))
+            n = 1.0 / torch.exp(log_disp)
             llf = torch.distributions.negative_binomial.NegativeBinomial(n, 1-p).log_prob(y)
             loss = -torch.matmul(llf, weights)
             small_loss.append( loss.item() )
