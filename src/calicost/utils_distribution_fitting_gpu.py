@@ -102,3 +102,56 @@ def fit_weighted_BetaBinomial_gpu(y, features, weights, exposure, start_p_binom=
     res = F.sigmoid(logistic_p).detach().cpu().numpy().reshape(-1,1)
     res = np.append(res, torch.exp(log_taus).detach().cpu().numpy()[0])
     return res, loss_list[-1]
+
+
+def fit_weighted_BetaBinomial_mix_gpu(y, features, weights, exposure, tumor_prop, start_p_binom=None, start_tau=None, min_binom_prob=0.01, max_binom_prob=0.99, 
+                      n_epochs=1000, MIN_TAUS = np.log(5), MAX_TAUS = np.log(1000)):
+    y = torch.from_numpy(y).to(torch.float32).to(device)
+    features = torch.from_numpy(features).to(torch.float32).to(device)
+    weights = torch.from_numpy(weights).to(torch.float32).to(device)
+    exposure = torch.from_numpy(exposure).to(torch.float32).to(device)
+    tumor_prop = torch.from_numpy(tumor_prop).to(torch.float32).to(device)
+
+    # initialize training parameters
+    if start_p_binom is None:
+        logistic_p = nn.Parameter(torch.logit(0.3 * torch.ones(features.shape[1], device=device)), requires_grad=True)
+    else:
+        logistic_p = nn.Parameter(torch.logit(torch.from_numpy(start_p_binom.flatten()).to(torch.float32).to(device)), requires_grad=True)
+    if start_tau is None:
+        log_taus = nn.Parameter(torch.log(20 * torch.ones(1, device=device)), requires_grad=True)
+    else:
+        log_taus = nn.Parameter(torch.log(start_tau * torch.ones(1, device=device)), requires_grad=True)
+
+    MIN_LOGISTIC_P = scipy.special.logit(min_binom_prob)
+    MAX_LOGISTIC_P = scipy.special.logit(max_binom_prob)
+    loss_list = []
+    optimizer = torch.optim.AdamW( [logistic_p, log_taus], lr=5e-2)
+    scheduler = torch.optim.lr_scheduler.MultiStepLR(optimizer, milestones=[350,700], gamma=0.1)
+    for epoch in range(int(n_epochs / 20)):
+        small_loss = []
+        for small_epoch in range(20):
+            optimizer.zero_grad()
+            # beta binomial llf
+            # pure-tumor BAF
+            p_tmp = F.sigmoid(logistic_p)
+            # shift BAF to 0.5 by weighted-tumor proportion for each genomic segment (weighted by total copy)
+            p = ((features @ p_tmp) * tumor_prop + 0.5 * (1 - tumor_prop)) # a vector of length num_genomic_segments
+            d_choose_y = (exposure + 1).lgamma() - (y + 1).lgamma() - ((exposure - y) + 1).lgamma()
+            logbeta_numer = (y + p * torch.exp(log_taus)).lgamma() + (exposure - y + (1 - p) * torch.exp(log_taus)).lgamma() - (exposure + torch.exp(log_taus)).lgamma() 
+            logbeta_denom = (p * torch.exp(log_taus)).lgamma() + ((1 - p) * torch.exp(log_taus)).lgamma() - torch.exp(log_taus).lgamma() 
+            llf = d_choose_y + logbeta_numer - logbeta_denom
+            # weight by weights, and compute gradient
+            loss = -torch.matmul(llf, weights)
+            small_loss.append( loss.item() )
+            loss.backward()
+            log_taus.data = torch.clamp(log_taus.data, min=MIN_TAUS, max=MAX_TAUS)
+            logistic_p.data = torch.clamp(logistic_p.data, min=MIN_LOGISTIC_P, max=MAX_LOGISTIC_P)
+            optimizer.step()
+            scheduler.step()
+        loss_list.append( np.mean(small_loss) )
+        if len(loss_list) > 2 and np.abs(loss_list[-1] - np.min(loss_list[:-1])) < 1e-6 * len(y):
+            break
+
+    res = F.sigmoid(logistic_p).detach().cpu().numpy().reshape(-1,1)
+    res = np.append(res, torch.exp(log_taus).detach().cpu().numpy()[0])
+    return res, loss_list[-1]

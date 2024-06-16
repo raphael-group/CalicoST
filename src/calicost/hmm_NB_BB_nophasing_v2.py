@@ -335,8 +335,12 @@ class hmm_nophasing_v2(object):
                         weighted_tp = (tumor_prop * mu) / (tumor_prop * mu + 1 - tumor_prop)
                     else:
                         weighted_tp = tumor_prop
-                    new_p_binom, new_taus = update_emission_params_bb_nophasing_uniqvalues_mix(unique_values_bb, mapping_matrices_bb, log_gamma, taus, weighted_tp, start_p_binom=p_binom, \
-                        fix_BB_dispersion=fix_BB_dispersion, shared_BB_dispersion=shared_BB_dispersion)
+                    if device == 'cpu':
+                        new_p_binom, new_taus = update_emission_params_bb_nophasing_uniqvalues_mix(unique_values_bb, mapping_matrices_bb, log_gamma, taus, weighted_tp, start_p_binom=p_binom, \
+                            fix_BB_dispersion=fix_BB_dispersion, shared_BB_dispersion=shared_BB_dispersion)
+                    else:
+                        new_p_binom, new_taus = update_emission_params_bb_nophasing_uniqvalues_mix(unique_values_bb, mapping_matrices_bb, log_gamma, taus, weighted_tp, start_p_binom=p_binom, \
+                            fun=fit_weighted_BetaBinomial_mix_gpu, fix_BB_dispersion=fix_BB_dispersion, shared_BB_dispersion=shared_BB_dispersion)
             else:
                 new_p_binom = p_binom
                 new_taus = taus

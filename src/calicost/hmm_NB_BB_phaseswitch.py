@@ -317,8 +317,12 @@ class hmm_sitewise(object):
                             fun=fit_weighted_BetaBinomial_gpu, start_p_binom=p_binom,
                             fix_BB_dispersion=fix_BB_dispersion, shared_BB_dispersion=shared_BB_dispersion)
                 else:
-                    new_p_binom, new_taus = update_emission_params_bb_sitewise_uniqvalues_mix(unique_values_bb, mapping_matrices_bb, log_gamma, total_bb_RD, taus, tumor_prop, start_p_binom=p_binom, \
-                        fix_BB_dispersion=fix_BB_dispersion, shared_BB_dispersion=shared_BB_dispersion)
+                    if device == 'cpu':
+                        new_p_binom, new_taus = update_emission_params_bb_sitewise_uniqvalues_mix(unique_values_bb, mapping_matrices_bb, log_gamma, total_bb_RD, taus, tumor_prop, start_p_binom=p_binom, \
+                            fix_BB_dispersion=fix_BB_dispersion, shared_BB_dispersion=shared_BB_dispersion)
+                    else:
+                        new_p_binom, new_taus = update_emission_params_bb_sitewise_uniqvalues_mix(unique_values_bb, mapping_matrices_bb, log_gamma, total_bb_RD, taus, tumor_prop, start_p_binom=p_binom, \
+                            fun=fit_weighted_BetaBinomial_mix_gpu, fix_BB_dispersion=fix_BB_dispersion, shared_BB_dispersion=shared_BB_dispersion)
             else:
                 new_p_binom = p_binom
                 new_taus = taus
