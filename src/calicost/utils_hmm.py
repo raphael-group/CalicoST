@@ -7,6 +7,124 @@ from sklearn.mixture import GaussianMixture
 from calicost.utils_distribution_fitting import *
 
 
+#############################################################
+# Sampling hidden state sequences from posterior distribution
+#############################################################
+
+def multinoulli_sampler(log_probs):
+    # assume log_probs is already normalized to have logsumexp = 0
+    cdf = np.cumsum(np.exp(log_probs))
+    cdf[-1] = 1.1 # to avoid numerical issue
+    u = np.random.uniform()
+    return np.argmax(cdf > u)
+
+
+def FFBS(num_sequences, log_alpha, log_gamma, log_transmat, lengths):
+    """
+    Attributes
+    ----------
+    num_sequences: number of hidden sequences to draw.
+    log_alpha: n_states * n_observations per chromosome. Log of forward DP table. alpha[i,t] = P(o_1, ..., o_t, q_t=i | lambda).
+    log_gamma: n_states * n_observations per chromosome. Log of posterior probability. gamma[i,t] = P(q_t=i | o_1, ..., o_T, lambda
+    log_transmat: n_states * n_states. Transition probability after log transformation.
+    log_startprob: n_states. Start probability after log transformation.
+    lengths: sum of lengths = n_observations. Each length defines a independent HMM sequence
+    
+    Returns
+    -------
+    list_h: list of hidden state sequences. The length of list is num_sequences.
+    """
+    def pre_compute_S(log_alpha, log_transmat, lengths):
+        n_states = log_alpha.shape[0]
+        n_obs = log_alpha.shape[1]
+        log_S = np.zeros((n_obs, n_states, n_states))
+        cumlen = 0
+        for le in lengths:
+            for t in np.arange(le):
+                for i in np.arange(n_states):
+                    for j in np.arange(n_states):
+                        if t == le - 1:
+                            log_S[cumlen+t,i,j] = log_gamma[i,cumlen+t]
+                        else:
+                            log_S[cumlen+t,i,j] = log_alpha[i,cumlen+t] + log_transmat[i,j]
+            cumlen += le
+        # normalize
+        log_S = log_S - scipy.special.logsumexp(log_S, axis=1, keepdims=True)
+        return log_S
+    #
+    log_S = pre_compute_S(log_alpha, log_transmat, lengths)
+    # sample hidden state sequences
+    list_h = []
+    for i in trange(num_sequences):
+        this_h = []
+        for t in np.arange(np.sum(lengths)-1, -1, -1):
+            if t == np.sum(lengths)-1:
+                this_h.append( multinoulli_sampler(log_S[t, :, 0]) )
+            else:
+                this_h.append( multinoulli_sampler(log_S[t, :, this_h[-1] ]) )
+        list_h.append( np.array(this_h[::-1]) )
+    return list_h
+
+
+def multinoulli_sampler_high_dimensional(log_probs):
+    """
+    log_probs: n_obs * n_states. Log probability. Assume log_probs[i,:] is normalized to have logsumexp = 0
+    """
+    cdf = np.cumsum(np.exp(log_probs), axis=1)
+    cdf[:, -1] = 1.1 # to avoid numerical issue
+    u = np.random.uniform(size=log_probs.shape[0])
+    return np.sum(cdf <= u.reshape(-1,1), axis=1)
+
+
+def FFBS_faster(num_sequences, log_alpha, log_gamma, log_transmat, lengths):
+    """
+    Attributes
+    ----------
+    num_sequences: number of hidden sequences to draw.
+    log_alpha: n_states * n_observations per chromosome. Log of forward DP table. alpha[i,t] = P(o_1, ..., o_t, q_t=i | lambda).
+    log_gamma: n_states * n_observations per chromosome. Log of posterior probability. gamma[i,t] = P(q_t=i | o_1, ..., o_T, lambda
+    log_transmat: n_states * n_states. Transition probability after log transformation.
+    log_startprob: n_states. Start probability after log transformation.
+    lengths: sum of lengths = n_observations. Each length defines a independent HMM sequence
+    
+    Returns
+    -------
+    list_h: list of hidden state sequences. The length of list is num_sequences.
+    """
+    def pre_compute_S(log_alpha, log_transmat, lengths):
+        n_states = log_alpha.shape[0]
+        n_obs = log_alpha.shape[1]
+        log_S = np.zeros((n_obs, n_states, n_states))
+        cumlen = 0
+        for le in lengths:
+            for t in np.arange(le):
+                for i in np.arange(n_states):
+                    for j in np.arange(n_states):
+                        if t == le - 1:
+                            log_S[cumlen+t,i,j] = log_gamma[i,cumlen+t]
+                        else:
+                            log_S[cumlen+t,i,j] = log_alpha[i,cumlen+t] + log_transmat[i,j]
+            cumlen += le
+        # normalize
+        log_S = log_S - scipy.special.logsumexp(log_S, axis=1, keepdims=True)
+        return log_S
+    #
+    log_S = pre_compute_S(log_alpha, log_transmat, lengths)
+    # sample hidden state sequences
+    list_h = []
+    for t in np.arange(np.sum(lengths)-1, -1, -1):
+        if t == np.sum(lengths)-1:
+            list_h.append( multinoulli_sampler_high_dimensional(log_S[t, :, np.zeros(num_sequences,dtype=int)]) )
+        else:
+            list_h.append( multinoulli_sampler_high_dimensional(log_S[t, :, list_h[-1] ]) )
+    list_h = np.array(list_h).T
+    # reverse along the second dimension
+    list_h = list_h[:,::-1]
+    return list_h
+
+
+
+
 @njit
 def np_max_ax_squeeze(arr, axis=0):
     assert arr.ndim == 2
