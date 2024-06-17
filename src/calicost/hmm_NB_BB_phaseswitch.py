@@ -570,10 +570,12 @@ def pipeline_baum_welch(output_prefix, X, lengths, n_states, base_nb_mean, total
         tmp = np.log10(1 - t)
         np.savez(f"{output_prefix}_nstates{n_states}_{params}_{tmp:.0f}_seed{random_state}.npz", \
                 new_log_mu=new_log_mu, new_alphas=new_alphas, new_p_binom=new_p_binom, new_taus=new_taus, \
-                new_log_startprob=new_log_startprob, new_log_transmat=new_log_transmat, log_gamma=log_gamma, pred_cnv=pred_cnv, llf=llf)
+                new_log_startprob=new_log_startprob, new_log_transmat=new_log_transmat, log_gamma=log_gamma, pred_cnv=pred_cnv, llf=llf,
+                log_emission=log_emission, log_alpha=log_alpha, log_beta=log_beta)
     else:
         res = {"new_log_mu":new_log_mu, "new_alphas":new_alphas, "new_p_binom":new_p_binom, "new_taus":new_taus, \
-            "new_log_startprob":new_log_startprob, "new_log_transmat":new_log_transmat, "log_gamma":log_gamma, "pred_cnv":pred_cnv, "llf":llf}
+            "new_log_startprob":new_log_startprob, "new_log_transmat":new_log_transmat, "log_gamma":log_gamma, "pred_cnv":pred_cnv, "llf":llf,
+            "log_emission":log_emission, "log_alpha":log_alpha, "log_beta":log_beta}
         return res
 
 
