@@ -10,6 +10,19 @@ except ImportError:
     device = 'cpu'
 
 
+def nb_llf_allow_float(nb_mean, alphas, y):
+    """
+    Compute the log likelihood of negative binomial distribution allow float values in y.
+
+    Attributes:
+        nb_mean: torch.tensor. the mean of negative binomial distribution.
+        alphas: torch.tensor. the inverse-dispersion parameter of negative binomial distribution. variance = mean + alphas * mean^2.
+        y: torch.tensor. the observed values.
+    """
+    llf = (y + 1.0/alphas).lgamma() - (1.0/alphas).lgamma() - (y+1).lgamma() - 1.0/alphas*torch.log(1 + nb_mean*alphas) - y * torch.log(1 + nb_mean*alphas) + y * torch.log(alphas) + y * torch.log(nb_mean)
+    return llf
+
+
 def fit_weighted_NegativeBinomial_gpu(y, features, weights, exposure, start_log_mu=None, start_alpha=None, n_epochs=1000):
     # convert to torch
     y = torch.from_numpy(y).to(torch.float32).to(device)
@@ -54,6 +67,54 @@ def fit_weighted_NegativeBinomial_gpu(y, features, weights, exposure, start_log_
     res = log_mu.detach().cpu().numpy().reshape(-1,1)
     res = np.append(res, torch.exp(log_disp).detach().cpu().numpy()[0])
     return res, loss_list[-1]
+
+
+def fit_weighted_NegativeBinomial_mix_gpu(y, features, weights, exposure, tumor_prop, start_log_mu=None, start_alpha=None, n_epochs=1000):
+    # convert to torch
+    y = torch.from_numpy(y).to(torch.float32).to(device)
+    features = torch.from_numpy(features).to(torch.float32).to(device)
+    weights = torch.from_numpy(weights).to(torch.float32).to(device)
+    exposure = torch.from_numpy(exposure).to(torch.float32).to(device)
+    tumor_prop = torch.from_numpy(tumor_prop).to(torch.float32).to(device)
+
+    # train
+    if start_log_mu is None:
+        log_mu = nn.Parameter(torch.zeros(features.shape[1], device=device), requires_grad=True)
+    else:
+        log_mu = nn.Parameter(torch.from_numpy(start_log_mu.flatten()).to(torch.float32).to(device), requires_grad=True)
+    if start_alpha is None:
+        log_disp = nn.Parameter(torch.log(0.1 * torch.ones(1, device=device)), requires_grad=True)
+    else:
+        log_disp = nn.Parameter(torch.log(start_alpha * torch.ones(1, device=device)), requires_grad=True)
+    
+    loss_list = []
+    optimizer = torch.optim.AdamW( [log_mu, log_disp], lr=0.1)
+    scheduler = torch.optim.lr_scheduler.MultiStepLR(optimizer, milestones=[350,700], gamma=0.1)
+    for epoch in range(int(n_epochs / 20)):
+        small_loss = []
+        for small_epoch in range(20):
+            optimizer.zero_grad()
+            # negative binomial llf
+            nb_mean = exposure * (torch.exp(features @ log_mu) * tumor_prop + (1 - tumor_prop))
+            # nb_var = nb_mean + nb_mean**2 * torch.exp(log_disp)
+            # convert parameters
+            p = 1.0 / (1.0 + nb_mean * torch.exp(log_disp))
+            n = 1.0 / torch.exp(log_disp)
+            llf = torch.distributions.negative_binomial.NegativeBinomial(n, 1-p).log_prob(y)
+            loss = -torch.matmul(llf, weights)
+            small_loss.append( loss.item() )
+            loss.backward()
+            optimizer.step()
+            scheduler.step()
+        loss_list.append( np.mean(small_loss) )
+        # decide to terminate
+        if len(loss_list) > 2 and np.abs(loss_list[-1] - np.min(loss_list[:-1])) < 1e-6 * len(y):
+            break
+
+    res = log_mu.detach().cpu().numpy().reshape(-1,1)
+    res = np.append(res, torch.exp(log_disp).detach().cpu().numpy()[0])
+    return res, loss_list[-1]
+
 
 
 def fit_weighted_BetaBinomial_gpu(y, features, weights, exposure, start_p_binom=None, start_tau=None, min_binom_prob=0.01, max_binom_prob=0.99, 
