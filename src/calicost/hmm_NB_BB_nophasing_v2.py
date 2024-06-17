@@ -37,6 +37,7 @@ class hmm_nophasing_v2(object):
         self.t = t
     #
     @staticmethod
+    @track_time
     def compute_emission_probability_nb_betabinom(X, base_nb_mean, log_mu, alphas, total_bb_RD, p_binom, taus):
         """
         Attributes
@@ -90,6 +91,7 @@ class hmm_nophasing_v2(object):
         return log_emission_rdr, log_emission_baf
     #
     @staticmethod
+    @track_time
     def compute_emission_probability_nb_betabinom_mix(X, base_nb_mean, log_mu, alphas, total_bb_RD, p_binom, taus, tumor_prop, **kwargs):
         """
         Attributes
@@ -155,6 +157,7 @@ class hmm_nophasing_v2(object):
         return log_emission_rdr, log_emission_baf
     #
     @staticmethod
+    @track_time
     @njit 
     def forward_lattice(lengths, log_transmat, log_startprob, log_emission, log_sitewise_transmat):
         '''
@@ -189,6 +192,7 @@ class hmm_nophasing_v2(object):
         return log_alpha
     #
     @staticmethod
+    @track_time
     @njit 
     def backward_lattice(lengths, log_transmat, log_startprob, log_emission, log_sitewise_transmat):
         '''

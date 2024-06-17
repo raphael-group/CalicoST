@@ -6,6 +6,29 @@ from tqdm import trange
 from sklearn.mixture import GaussianMixture
 from calicost.utils_distribution_fitting import *
 
+import time
+from functools import wraps
+
+
+timing_data = {}
+
+def track_time(func):
+    @wraps(func)
+    def wrapper(*args, **kwargs):
+        start_time = time.time()
+        result = func(*args, **kwargs)
+        end_time = time.time()
+        runtime = end_time - start_time
+
+        # Update the cumulative runtime in the timing_data dictionary
+        if func.__name__ in timing_data:
+            timing_data[func.__name__] += runtime
+        else:
+            timing_data[func.__name__] = runtime
+
+        return result
+    return wrapper
+
 
 @njit
 def np_max_ax_squeeze(arr, axis=0):
@@ -866,6 +889,7 @@ def update_transition_nophasing(log_xi, is_diag=False):
     return log_transmat
 
 
+@track_time
 def update_emission_params_nb_nophasing_uniqvalues(unique_values, mapping_matrices, log_gamma, alphas, \
     start_log_mu=None, fix_NB_dispersion=False, shared_NB_dispersion=False, min_log_rdr=-2, max_log_rdr=2):
     """
@@ -968,6 +992,7 @@ def update_emission_params_nb_nophasing_uniqvalues(unique_values, mapping_matric
     return new_log_mu, new_alphas
 
 
+@track_time
 def update_emission_params_nb_nophasing_uniqvalues_mix(unique_values, mapping_matrices, log_gamma, alphas, tumor_prop, \
     start_log_mu=None, fix_NB_dispersion=False, shared_NB_dispersion=False, min_log_rdr=-2, max_log_rdr=2):
     """
@@ -1077,6 +1102,7 @@ def update_emission_params_nb_nophasing_uniqvalues_mix(unique_values, mapping_ma
     return new_log_mu, new_alphas
 
 
+@track_time
 def update_emission_params_bb_nophasing_uniqvalues(unique_values, mapping_matrices, log_gamma, taus, \
     start_p_binom=None, fix_BB_dispersion=False, shared_BB_dispersion=False, \
     percent_threshold=0.99, min_binom_prob=0.01, max_binom_prob=0.99):
@@ -1184,6 +1210,7 @@ def update_emission_params_bb_nophasing_uniqvalues(unique_values, mapping_matric
     return new_p_binom, new_taus
 
 
+@track_time
 def update_emission_params_bb_nophasing_uniqvalues_mix(unique_values, mapping_matrices, log_gamma, taus, tumor_prop, \
     start_p_binom=None, fix_BB_dispersion=False, shared_BB_dispersion=False, \
     percent_threshold=0.99, min_binom_prob=0.01, max_binom_prob=0.99):

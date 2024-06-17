@@ -442,3 +442,8 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     main(args.configfile)
+
+    # Print the cumulative runtimes
+    print("Cumulative runtimes:")
+    for func_name, runtime in timing_data.items():
+        print(f"{func_name}: {runtime:.5f} seconds")
