@@ -78,6 +78,16 @@ class Weighted_NegativeBinomial(GenericLikelihoodModel):
                                                **kwds)
 
 
+def fit_weighted_NegativeBinomial(y, features, weights, exposure, start_log_mu=None, start_alpha=None):
+    model = Weighted_NegativeBinomial(y, features, weights=weights, exposure=exposure)
+    if start_log_mu is None:
+        res = model.fit(disp=0, maxiter=1500, xtol=1e-4, ftol=1e-4)
+    else:
+        res = model.fit(disp=0, maxiter=1500, start_params=np.append(start_log_mu, start_alpha), xtol=1e-4, ftol=1e-4)
+    n_llf = model.nloglikeobs(res.params)
+    return res.params, n_llf
+
+
 class Weighted_NegativeBinomial_mix(GenericLikelihoodModel):
     def __init__(self, endog, exog, weights, exposure, tumor_prop, seed=0, **kwds):
         super(Weighted_NegativeBinomial_mix, self).__init__(endog, exog, **kwds)
@@ -104,6 +114,16 @@ class Weighted_NegativeBinomial_mix(GenericLikelihoodModel):
         return super(Weighted_NegativeBinomial_mix, self).fit(start_params=start_params,
                                                maxiter=maxiter, maxfun=maxfun,
                                                **kwds)
+
+
+def fit_weighted_NegativeBinomial_mix(y, features, weights, exposure, tumor_prop, start_log_mu=None, start_alpha=None):
+    model = Weighted_NegativeBinomial_mix(y, features, weights=weights, exposure=exposure, tumor_prop=tumor_prop)
+    if start_log_mu is None:
+        res = model.fit(disp=0, maxiter=1500, xtol=1e-4, ftol=1e-4)
+    else:
+        res = model.fit(disp=0, maxiter=1500, start_params=np.append(start_log_mu, start_alpha), xtol=1e-4, ftol=1e-4)
+    n_llf = model.nloglikeobs(res.params)
+    return res.params, n_llf
 
 
 class Weighted_BetaBinom(GenericLikelihoodModel):
@@ -149,6 +169,16 @@ class Weighted_BetaBinom(GenericLikelihoodModel):
                                                **kwds)
 
 
+def fit_weighted_BetaBinomial(y, features, weights, exposure, start_p_binom=None, start_tau=None):
+    model = Weighted_BetaBinom(y, features, weights=weights, exposure=exposure)
+    if start_p_binom is None:
+        res = model.fit(disp=0, maxiter=1500, xtol=1e-4, ftol=1e-4)
+    else:
+        res = model.fit(disp=0, maxiter=1500, start_params=np.append(start_p_binom, start_tau), xtol=1e-4, ftol=1e-4)
+    n_llf = model.nloglikeobs(res.params)
+    return res.params, n_llf
+
+
 class Weighted_BetaBinom_mix(GenericLikelihoodModel):
     def __init__(self, endog, exog, weights, exposure, tumor_prop, **kwds):
         super(Weighted_BetaBinom_mix, self).__init__(endog, exog, **kwds)
@@ -173,6 +203,16 @@ class Weighted_BetaBinom_mix(GenericLikelihoodModel):
         return super(Weighted_BetaBinom_mix, self).fit(start_params=start_params,
                                                maxiter=maxiter, maxfun=maxfun,
                                                **kwds)
+
+
+def fit_weighted_BetaBinomial_mix(y, features, weights, exposure, tumor_prop, start_p_binom=None, start_tau=None):
+    model = Weighted_BetaBinom_mix(y, features, weights=weights, exposure=exposure, tumor_prop=tumor_prop)
+    if start_p_binom is None:
+        res = model.fit(disp=0, maxiter=1500, xtol=1e-4, ftol=1e-4)
+    else:
+        res = model.fit(disp=0, maxiter=1500, start_params=np.append(start_p_binom, start_tau), xtol=1e-4, ftol=1e-4)
+    n_llf = model.nloglikeobs(res.params)
+    return res.params, n_llf
 
 
 class Weighted_BetaBinom_fixdispersion(GenericLikelihoodModel):
