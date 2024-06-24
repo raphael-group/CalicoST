@@ -123,6 +123,23 @@ def FFBS_faster(num_sequences, log_alpha, log_gamma, log_transmat, lengths):
     return list_h
 
 
+def compute_state_prior_prob_highdim(h, log_startprob, log_transmat, lengths):
+    """
+    Attributes
+    ----------
+    h: hidden state sequence of size n_sequences * n_obs.
+    log_startprob: n_states. Start probability after log transformation.
+    log_transmat: n_states * n_states. Transition probability after log transformation.
+    lengths: sum of lengths = n_observations. Each length defines a independent HMM sequence.
+    """
+    num_sequences = h.shape[0]
+    logprob = np.zeros(num_sequences)
+    cumlen = 0
+    for le in lengths:
+        logprob += log_startprob[h[:, cumlen]]
+        logprob += log_transmat[ (h[:, cumlen:(cumlen+le-1)], h[:, (cumlen+1):(cumlen+le)]) ].sum(axis=1)
+        cumlen += le
+    return logprob
 
 
 @njit
