@@ -179,6 +179,7 @@ def infer_all(single_X, lengths, single_base_nb_mean, single_total_bb_RD, single
     list_cna_states = []
     list_log_mu = []
     list_p_binom = []
+    list_elbo = []
 
     for r in range(max_iter_outer):
         ##### Fit HMM using posterior_clones #####
@@ -242,15 +243,25 @@ def infer_all(single_X, lengths, single_base_nb_mean, single_total_bb_RD, single
         log_clonesize = np.mean(posterior_clones, axis=0)
         log_clonesize = np.repeat( log_clonesize[None,:], single_X.shape[2], axis=0 )
 
+        # update elbo
+        prior_log_prob = np.zeros(n_clones)
+        for c in range(n_clones):
+            sampled_h = list_h[:, (c*n_obs):(c*n_obs+n_obs)]
+            prior_log_prob[c] = compute_state_prior_prob_highdim(sampled_h, res['new_log_startprob'], res['new_log_transmat'], lengths).mean()
+
+        eventual_llf = [compute_potential(emission_llf + log_clonesize, l, spatial_weight, adjacency_mat) + prior_log_prob.sum() for l in list_labels]
+        list_elbo.append( np.mean(eventual_llf) )
+
         # compare the difference between the current and previous posterior_clones
         if np.square(list_posterior_clones[-1] - list_posterior_clones[-2]).mean() < sampling_tol:
             break
 
         ##### temperature annealing #####
-        if r > 2:
-            temperature = max(1.0, temperature-2)
+        temperature = max(1.0, 0.95 * temperature)
+        # if r > 2:
+        #     temperature = max(1.0, temperature-2)
 
-    return list_posterior_clones, list_cna_states, list_log_mu, list_p_binom
+    return list_posterior_clones, list_cna_states, list_log_mu, list_p_binom, list_elbo
 
 
 def plot_posterior_clones_single(list_posterior_clones, coords, idx, sample_ids=None):
@@ -287,11 +298,9 @@ def plot_posterior_clones_single(list_posterior_clones, coords, idx, sample_ids=
     return fig
 
 
-def plot_posterior_clones_interactive(list_posterior_clones, coords, sample_ids=None):
-    import mpl_interactions.ipyplot as iplt
-
-    def c_func(x, y, ite):
-        return list_posterior_clones[ite][:,c]
+def plot_posterior_clones_interactive(list_posterior_clones, coords, giffile, sample_ids=None, base_duration=500):
+    import io
+    import imageio
 
     shifted_coords = copy.copy(coords)
     if not sample_ids is None:
@@ -300,14 +309,55 @@ def plot_posterior_clones_interactive(list_posterior_clones, coords, sample_ids=
             min_x = np.min(shifted_coords[sample_ids==s, 0])
             shifted_coords[sample_ids==s, 0] = shifted_coords[sample_ids==s, 0] - min_x + offset
             offset = np.max(shifted_coords[sample_ids==s, 0]) + 1
-
-    # make a gif of the posterior probability of each clone in multiple figure panels
+    
     n_clones = list_posterior_clones[0].shape[1]
-    fig, axes = plt.subplots(1, n_clones, figsize=(n_clones * 5*len(np.unique(sample_ids)), 5), facecolor='white', dpi=150)
-    for c in range(list_posterior_clones[0].shape[1]):
-        _ = iplt.scatter(x=shifted_coords[:,0], y=-shifted_coords[:,0], ite=np.arange(len(list_posterior_clones)), c=c_func, cmap='magma_r', s=15, linewidth=0, ax=axes[c])
-    fig.tight_layout()
-    return fig
+    # List to store images and durations
+    images = []
+    # durations = base_duration * np.arange(len(list_posterior_clones))  # Different durations for each frame
+
+    # Generate scatter plots and store them in memory
+    for idx in range(len(list_posterior_clones)):
+        fig, axes = plt.subplots(1, n_clones, figsize=(n_clones * 5*len(np.unique(sample_ids)), 5), dpi=150)
+        for c in range(list_posterior_clones[idx].shape[1]):
+            axes[c].scatter(x=shifted_coords[:,0], y=-shifted_coords[:,1], c=list_posterior_clones[idx][:,c], cmap='magma_r', s=15, linewidth=0)
+            axes[c].set_title('Clone %d' % c)
+            norm = plt.Normalize(list_posterior_clones[idx][:,c].min(), list_posterior_clones[idx][:,c].max())
+            axes[c].figure.colorbar( plt.cm.ScalarMappable(cmap='magma_r', norm=norm), ax=axes[c] )
+            axes[c].axis('off')
+        fig.suptitle(f"interation {idx}")
+        fig.tight_layout()
+        buf = io.BytesIO()
+        plt.savefig(buf, format='png')
+        buf.seek(0)
+        images.append(imageio.imread(buf))
+        buf.close()
+        plt.close()
+
+    # Create a GIF from the in-memory images with different durations for each frame
+    imageio.mimsave(giffile, images, duration=base_duration)
+
+
+# def plot_posterior_clones_interactive(list_posterior_clones, coords, sample_ids=None):
+#     import mpl_interactions.ipyplot as iplt
+
+#     def c_func(x, y, ite):
+#         return list_posterior_clones[ite][:,c]
+
+#     shifted_coords = copy.copy(coords)
+#     if not sample_ids is None:
+#         offset = 0
+#         for s in np.sort(np.unique(sample_ids)):
+#             min_x = np.min(shifted_coords[sample_ids==s, 0])
+#             shifted_coords[sample_ids==s, 0] = shifted_coords[sample_ids==s, 0] - min_x + offset
+#             offset = np.max(shifted_coords[sample_ids==s, 0]) + 1
+
+#     # make a gif of the posterior probability of each clone in multiple figure panels
+#     n_clones = list_posterior_clones[0].shape[1]
+#     fig, axes = plt.subplots(1, n_clones, figsize=(n_clones * 5*len(np.unique(sample_ids)), 5), facecolor='white', dpi=150)
+#     for c in range(list_posterior_clones[0].shape[1]):
+#         _ = iplt.scatter(x=shifted_coords[:,0], y=-shifted_coords[:,0], ite=np.arange(len(list_posterior_clones)), c=c_func, cmap='magma_r', s=15, linewidth=0, ax=axes[c])
+#     fig.tight_layout()
+#     return fig
 
 
 def plot_posterior_baf_cnstate_single(single_X, single_total_bb_RD, single_tumor_prop, lengths, tumorprop_threshold, list_posterior_clones, list_cna_states, list_p_binom, idx, unique_chrs):
