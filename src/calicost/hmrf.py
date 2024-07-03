@@ -26,6 +26,7 @@ from statsmodels.tools.sm_exceptions import ValueWarning
 # Pure clone
 ############################################################
 
+@profile
 def hmrf_reassignment_posterior(single_X, single_base_nb_mean, single_total_bb_RD, res, smooth_mat, adjacency_mat, prev_assignment, sample_ids, log_persample_weights, spatial_weight, hmmclass=hmm_sitewise, return_posterior=False):
     N = single_X.shape[2]
     n_obs = single_X.shape[0]
@@ -36,7 +37,7 @@ def hmrf_reassignment_posterior(single_X, single_base_nb_mean, single_total_bb_R
     #
     posterior = np.zeros((N, n_clones))
 
-    for i in trange(N):
+    for i in trange(N, desc="hmrf_reassignment_posterior"):
         idx = smooth_mat[i,:].nonzero()[1]
         for c in range(n_clones):
             tmp_log_emission_rdr, tmp_log_emission_baf = hmmclass.compute_emission_probability_nb_betabinom( np.sum(single_X[:,:,idx], axis=2, keepdims=True), \
@@ -70,7 +71,7 @@ def hmrf_reassignment_posterior(single_X, single_base_nb_mean, single_total_bb_R
     else:
         return new_assignment, single_llf, total_llf
 
-
+@profile
 def aggr_hmrf_reassignment(single_X, single_base_nb_mean, single_total_bb_RD, res, pred, smooth_mat, adjacency_mat, prev_assignment, sample_ids, log_persample_weights, spatial_weight, hmmclass=hmm_sitewise, return_posterior=False):
     N = single_X.shape[2]
     n_obs = single_X.shape[0]
@@ -81,7 +82,7 @@ def aggr_hmrf_reassignment(single_X, single_base_nb_mean, single_total_bb_RD, re
     #
     posterior = np.zeros((N, n_clones))
 
-    for i in trange(N):
+    for i in trange(N, desc="aggr_hmrf_reassignment"):
         idx = smooth_mat[i,:].nonzero()[1]
         # idx = np.append(idx, np.array([i]))
         for c in range(n_clones):
@@ -114,7 +115,7 @@ def aggr_hmrf_reassignment(single_X, single_base_nb_mean, single_total_bb_RD, re
     else:
         return new_assignment, single_llf, total_llf
 
-
+@profile
 def hmrf_reassignment_posterior_concatenate(single_X, single_base_nb_mean, single_total_bb_RD, res, smooth_mat, adjacency_mat, prev_assignment, sample_ids, log_persample_weights, spatial_weight, hmmclass=hmm_sitewise, return_posterior=False):
     N = single_X.shape[2]
     n_obs = single_X.shape[0]
@@ -125,7 +126,7 @@ def hmrf_reassignment_posterior_concatenate(single_X, single_base_nb_mean, singl
     #
     posterior = np.zeros((N, n_clones))
 
-    for i in trange(N):
+    for i in trange(N, desc="hmrf_reassignment_posterior_concatenate"):
         idx = smooth_mat[i,:].nonzero()[1]
         tmp_log_emission_rdr, tmp_log_emission_baf = hmmclass.compute_emission_probability_nb_betabinom( np.sum(single_X[:,:,idx], axis=2, keepdims=True), \
                                             np.sum(single_base_nb_mean[:,idx], axis=1, keepdims=True), res["new_log_mu"], res["new_alphas"], \
@@ -157,7 +158,7 @@ def hmrf_reassignment_posterior_concatenate(single_X, single_base_nb_mean, singl
     else:
         return new_assignment, single_llf, total_llf
 
-
+@profile
 def aggr_hmrf_reassignment_concatenate(single_X, single_base_nb_mean, single_total_bb_RD, res, pred, smooth_mat, adjacency_mat, prev_assignment, sample_ids, log_persample_weights, spatial_weight, hmmclass=hmm_sitewise, return_posterior=False):
     """
     HMRF assign spots to tumor clones.
@@ -211,7 +212,7 @@ def aggr_hmrf_reassignment_concatenate(single_X, single_base_nb_mean, single_tot
     #
     posterior = np.zeros((N, n_clones))
 
-    for i in trange(N):
+    for i in trange(N, desc="aggr_hmrf_reassignment_concatenate"):
         idx = smooth_mat[i,:].nonzero()[1]
         # idx = np.append(idx, np.array([i]))
         tmp_log_emission_rdr, tmp_log_emission_baf = hmmclass.compute_emission_probability_nb_betabinom( np.sum(single_X[:,:,idx], axis=2, keepdims=True), \
@@ -244,7 +245,7 @@ def aggr_hmrf_reassignment_concatenate(single_X, single_base_nb_mean, single_tot
     else:
         return new_assignment, single_llf, total_llf
 
-
+@profile
 def merge_by_minspots(assignment, res, single_total_bb_RD, min_spots_thresholds=50, min_umicount_thresholds=0, single_tumor_prop=None, threshold=0.5):
     n_clones = len(np.unique(assignment))
     if n_clones == 1:
@@ -295,7 +296,7 @@ def merge_by_minspots(assignment, res, single_total_bb_RD, min_spots_thresholds=
     merged_res["log_gamma"] = np.hstack([ res["log_gamma"][:, (c[0]*n_obs):(c[0]*n_obs+n_obs)] for c in merging_groups ])
     return merging_groups, merged_res
 
-
+@profile
 def hmrf_pipeline(outdir, single_X, lengths, single_base_nb_mean, single_total_bb_RD, initial_clone_index, n_states, \
     log_sitewise_transmat, coords=None, smooth_mat=None, adjacency_mat=None, sample_ids=None, max_iter_outer=5, nodepotential="max", \
     hmmclass=hmm_sitewise, params="stmp", t=1-1e-6, random_state=0, init_log_mu=None, init_p_binom=None, init_alphas=None, init_taus=None,\
@@ -398,7 +399,7 @@ def hmrf_pipeline(outdir, single_X, lengths, single_base_nb_mean, single_total_b
             log_persample_weights[:, sidx] = np.where(this_persample_weight > 0, np.log(this_persample_weight), -50)
             log_persample_weights[:, sidx] = log_persample_weights[:, sidx] - scipy.special.logsumexp(log_persample_weights[:, sidx])
 
-
+@profile
 def hmrf_concatenate_pipeline(outdir, prefix, single_X, lengths, single_base_nb_mean, single_total_bb_RD, initial_clone_index, n_states, \
     log_sitewise_transmat, coords=None, smooth_mat=None, adjacency_mat=None, sample_ids=None, max_iter_outer=5, nodepotential="max", hmmclass=hmm_sitewise, \
     params="stmp", t=1-1e-6, random_state=0, init_log_mu=None, init_p_binom=None, init_alphas=None, init_taus=None,\
@@ -524,6 +525,7 @@ def hmrf_concatenate_pipeline(outdir, prefix, single_X, lengths, single_base_nb_
 # Normal-tumor clone mixture
 ############################################################
 
+@profile
 def aggr_hmrfmix_reassignment(single_X, single_base_nb_mean, single_total_bb_RD, single_tumor_prop, res, pred, smooth_mat, adjacency_mat, prev_assignment, sample_ids, log_persample_weights, spatial_weight, hmmclass=hmm_sitewise, return_posterior=False):
     N = single_X.shape[2]
     n_obs = single_X.shape[0]
@@ -536,7 +538,7 @@ def aggr_hmrfmix_reassignment(single_X, single_base_nb_mean, single_total_bb_RD,
     #
     posterior = np.zeros((N, n_clones))
     #
-    for i in trange(N):
+    for i in trange(N, desc="aggr_hmrfmix_reassignment"):
         idx = smooth_mat[i,:].nonzero()[1]
         idx = idx[~np.isnan(single_tumor_prop[idx])]
         for c in range(n_clones):
@@ -575,7 +577,16 @@ def aggr_hmrfmix_reassignment(single_X, single_base_nb_mean, single_total_bb_RD,
     else:
         return new_assignment, single_llf, total_llf
 
+@njit(cache=True, parallel=False)
+ def edge_update(n_clones, idx, values):
+     w_edge = np.zeros(n_clones, dtype=float)
 
+     for i, value in enumerate(values):
+         w_edge[idx[i]] += value
+
+     return w_edge
+    
+@profile
 def hmrfmix_reassignment_posterior(single_X, single_base_nb_mean, single_total_bb_RD, single_tumor_prop, res, smooth_mat, adjacency_mat, prev_assignment, sample_ids, log_persample_weights, spatial_weight, hmmclass=hmm_sitewise, return_posterior=False):
     N = single_X.shape[2]
     n_obs = single_X.shape[0]
@@ -588,7 +599,7 @@ def hmrfmix_reassignment_posterior(single_X, single_base_nb_mean, single_total_b
     #
     posterior = np.zeros((N, n_clones))
 
-    for i in trange(N):
+    for i in trange(N, desc="hmrfmix_reassignment_posterior"):
         idx = smooth_mat[i,:].nonzero()[1]
         idx = idx[~np.isnan(single_tumor_prop[idx])]
         for c in range(n_clones):
@@ -612,13 +623,26 @@ def hmrfmix_reassignment_posterior(single_X, single_base_nb_mean, single_total_b
         
         w_node = single_llf[i,:]
         w_node += log_persample_weights[:,sample_ids[i]]
+
+        """
         w_edge = np.zeros(n_clones)
+
         for j in adjacency_mat[i,:].nonzero()[1]:
             if new_assignment[j] >= 0:
                 # w_edge[new_assignment[j]] += 1
                 w_edge[new_assignment[j]] += adjacency_mat[i,j]
+        """
+
+        neighbors = adjacency_mat[i,:].nonzero()[1]
+        idx = np.where(new_assignment[neighbors] >= 0)[0]
+
+        neighbors = neighbors[idx]
+        values = adjacency_mat[i, neighbors].data
+
+        w_edge = edge_update(n_clones, new_assignment[neighbors], values)
+                 
         new_assignment[i] = np.argmax( w_node + spatial_weight * w_edge )
-        #
+
         posterior[i,:] = np.exp( w_node + spatial_weight * w_edge - scipy.special.logsumexp(w_node + spatial_weight * w_edge) )
 
     # compute total log likelihood log P(X | Z) + log P(Z)
@@ -630,7 +654,7 @@ def hmrfmix_reassignment_posterior(single_X, single_base_nb_mean, single_total_b
     else:
         return new_assignment, single_llf, total_llf
 
-
+@profile
 def hmrfmix_pipeline(outdir, prefix, single_X, lengths, single_base_nb_mean, single_total_bb_RD, single_tumor_prop, initial_clone_index, n_states, log_sitewise_transmat, \
     coords=None, smooth_mat=None, adjacency_mat=None, sample_ids=None, max_iter_outer=5, nodepotential="max", hmmclass=hmm_sitewise, params="stmp", t=1-1e-6, random_state=0, \
     init_log_mu=None, init_p_binom=None, init_alphas=None, init_taus=None,\
@@ -761,7 +785,7 @@ def hmrfmix_pipeline(outdir, prefix, single_X, lengths, single_base_nb_mean, sin
             log_persample_weights[:, sidx] = np.where(this_persample_weight > 0, np.log(this_persample_weight), -50)
             log_persample_weights[:, sidx] = log_persample_weights[:, sidx] - scipy.special.logsumexp(log_persample_weights[:, sidx])
 
-
+@profile
 def hmrfmix_reassignment_posterior_concatenate(single_X, single_base_nb_mean, single_total_bb_RD, single_tumor_prop, res, smooth_mat, adjacency_mat, prev_assignment, sample_ids, log_persample_weights, spatial_weight, hmmclass=hmm_sitewise, return_posterior=False):
     N = single_X.shape[2]
     n_obs = single_X.shape[0]
@@ -783,7 +807,7 @@ def hmrfmix_reassignment_posterior_concatenate(single_X, single_base_nb_mean, si
     #
     posterior = np.zeros((N, n_clones))
 
-    for i in trange(N):
+    for i in trange(N, desc="hmrfmix_reassignment_posterior_concatenate"):
         idx = smooth_mat[i,:].nonzero()[1]
         idx = idx[~np.isnan(single_tumor_prop[idx])]
         for c in range(n_clones):
@@ -818,7 +842,7 @@ def hmrfmix_reassignment_posterior_concatenate(single_X, single_base_nb_mean, si
     else:
         return new_assignment, single_llf, total_llf
 
-
+@profile
 def aggr_hmrfmix_reassignment_concatenate(single_X, single_base_nb_mean, single_total_bb_RD, single_tumor_prop, res, pred, smooth_mat, adjacency_mat, prev_assignment, sample_ids, log_persample_weights, spatial_weight, hmmclass=hmm_sitewise, return_posterior=False):
     N = single_X.shape[2]
     n_obs = single_X.shape[0]
@@ -831,7 +855,7 @@ def aggr_hmrfmix_reassignment_concatenate(single_X, single_base_nb_mean, single_
     #
     posterior = np.zeros((N, n_clones))
     #
-    for i in trange(N):
+    for i in trange(N, desc="aggr_hmrfmix_reassignment_concatenate"):
         idx = smooth_mat[i,:].nonzero()[1]
         idx = idx[~np.isnan(single_tumor_prop[idx])]
         for c in range(n_clones):
@@ -870,7 +894,7 @@ def aggr_hmrfmix_reassignment_concatenate(single_X, single_base_nb_mean, single_
     else:
         return new_assignment, single_llf, total_llf
 
-
+@profile
 def hmrfmix_concatenate_pipeline(outdir, prefix, single_X, lengths, single_base_nb_mean, single_total_bb_RD, single_tumor_prop, initial_clone_index, n_states, log_sitewise_transmat, \
     coords=None, smooth_mat=None, adjacency_mat=None, sample_ids=None, max_iter_outer=5, nodepotential="max", hmmclass=hmm_sitewise, params="stmp", t=1-1e-6, random_state=0, \
     init_log_mu=None, init_p_binom=None, init_alphas=None, init_taus=None,\
@@ -1001,6 +1025,7 @@ def hmrfmix_concatenate_pipeline(outdir, prefix, single_X, lengths, single_base_
 ############################################################
 # Final posterior using integer copy numbers
 ############################################################
+@profile
 def clonelabel_posterior_withinteger(single_X, single_base_nb_mean, single_total_bb_RD, single_tumor_prop, state_cnv, res, pred, smooth_mat, adjacency_mat, prev_assignment, sample_ids, base_nb_mean, log_persample_weights, spatial_weight, hmmclass=hmm_sitewise):
     """
     single_X : array, (n_obs, 2, n_spots)
@@ -1055,7 +1080,7 @@ def clonelabel_posterior_withinteger(single_X, single_base_nb_mean, single_total
     df_posterior = pd.DataFrame({k:np.zeros(N) for k in [f"post_BAF_clone_{cid}" for cid in clone_ids] + [f"post_RDR_clone_{cid}" for cid in clone_ids] + \
                                  [f"post_nodellf_clone_{cid}" for cid in clone_ids] + [f"post_combine_clone_{cid}" for cid in clone_ids] })
     #
-    for i in trange(N):
+    for i in trange(N, desc="clonelabel_posterior_withinteger"):
         idx = smooth_mat[i,:].nonzero()[1]
         if not (single_tumor_prop is None):
             idx = idx[~np.isnan(single_tumor_prop[idx])]

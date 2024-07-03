@@ -16,6 +16,8 @@ def compute_betabinom_pmf_chunk(args):
 
 
 def thread_nbinom(data, n, p, num_threads=NUM_THREADS):
+    # NB defaults to 0th axis, see
+    #    https://numpy.org/doc/stable/reference/generated/numpy.array_split.html
     data_chunks = np.array_split(data, num_threads)
     n_chunks = np.array_split(n, num_threads)
     p_chunks = np.array_split(p, num_threads)
@@ -23,6 +25,9 @@ def thread_nbinom(data, n, p, num_threads=NUM_THREADS):
     with ThreadPoolExecutor(max_workers=num_threads) as executor:
         args = [xx for xx in zip(data_chunks, n_chunks, p_chunks)]
         results = executor.map(compute_nbinom_pmf_chunk, args)
+
+        # NB defaults to 0th axis, see
+        #    https://numpy.org/doc/stable/reference/generated/numpy.concatenate.html
         pmf_values = np.concatenate(list(results))
 
     return pmf_values

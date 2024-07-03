@@ -23,6 +23,12 @@ Joint NB-BB HMM that accounts for tumor/normal genome proportions. Tumor genome 
 # whole inference
 ############################################################
 
+logger = logging.getLogger(__name__)
+
+def convergence(new, old, tol):
+    result = np.mean(np.abs( np.exp(new) - np.exp(old) ))
+    return result, result < tol
+
 class hmm_nophasing_v2(object):
     def __init__(self, params="stmp", t=1-1e-4):
         """
@@ -36,9 +42,47 @@ class hmm_nophasing_v2(object):
         """
         self.params = params
         self.t = t
+
+    @staticmethod
+    @profile
+    def compute_emission_probability_nb_betabinom(X, base_nb_mean, log_mu, alphas, total_bb_RD, p_binom, taus):
+        n_states = log_mu.shape[0]
+        (n_obs, n_comp, n_spots) = X.shape
+
+        # NB (n_states, n_obs, n_spots) == (7, 4248, 1)                                                                                                                                                              
+        log_emission_rdr = np.zeros(shape=(n_states, n_obs, n_spots), dtype=float)
+
+        # NB nb_mean, nb_std: (segments, spots) * (states, spots) = (states, segments, spots) == (7, 4248, 1)                                                                                                        
+        nb_mean = np.exp(log_mu[:, None, :]) * base_nb_mean[None, :, :]
+        nb_std = np.sqrt(nb_mean + alphas[:, None, :] * nb_mean**2)
+
+        kk = np.tile(X[:, 0, :], (n_states, 1, 1))
+        nn, pp = convert_params(nb_mean, nb_std)
+
+        idx = np.where((nb_mean > 0.))
+        log_emission_rdr[idx] = thread_binom(kk[idx], nn[idx], pp[idx])
+
+        # NB BAF                                                                                                                                                                                                     
+        log_emission_baf = np.zeros(shape=(n_states, n_obs, n_spots), dtype=float)
+
+        kk = np.tile(X[:, 1, :], (n_states, 1, 1))
+        nn = np.tile(total_bb_RD[:, :], (n_states, 1, 1))
+
+        # NB (states, spots)                                                                                                                                                                                         
+        aa = p_binom * taus
+        bb = (1. - p_binom) * taus
+
+        aa = np.tile(aa[:, None, :], (1, n_obs, 1))
+        bb = np.tile(bb[:, None, :], (1, n_obs, 1))
+
+        idx = np.where(nn > 0.)
+        log_emission_baf[idx] = thread_betabinom(kk[idx], nn[idx], aa[idx], bb[idx])
+
+        return log_emission_rdr, log_emission_baf
     
     @staticmethod
-    def compute_emission_probability_nb_betabinom(X, base_nb_mean, log_mu, alphas, total_bb_RD, p_binom, taus):
+    @profile
+    def compute_emission_probability_nb_betabinom_v1(X, base_nb_mean, log_mu, alphas, total_bb_RD, p_binom, taus):
         """
         Attributes
         ----------
@@ -72,13 +116,16 @@ class hmm_nophasing_v2(object):
         n_comp = X.shape[1]
         n_spots = X.shape[2]
         n_states = log_mu.shape[0]
+        
         # initialize log_emission
         log_emission_rdr = np.zeros((n_states, n_obs, n_spots))
         log_emission_baf = np.zeros((n_states, n_obs, n_spots))
+        
         for i in np.arange(n_states):
             for s in np.arange(n_spots):
                 # expression from NB distribution
                 idx_nonzero_rdr = np.where(base_nb_mean[:,s] > 0)[0]
+                
                 if len(idx_nonzero_rdr) > 0:
                     nb_mean = base_nb_mean[idx_nonzero_rdr,s] * np.exp(log_mu[i, s])
                     nb_std = np.sqrt(nb_mean + alphas[i, s] * nb_mean**2)
@@ -91,6 +138,7 @@ class hmm_nophasing_v2(object):
                     
                 # AF from BetaBinom distribution
                 idx_nonzero_baf = np.where(total_bb_RD[:,s] > 0)[0]
+                
                 if len(idx_nonzero_baf) > 0:
                     # DEPRECATE
                     # log_emission_baf[i, idx_nonzero_baf, s] = scipy.stats.betabinom.logpmf(X[idx_nonzero_baf,1,s], total_bb_RD[idx_nonzero_baf,s], p_binom[i, s] * taus[i, s], (1-p_binom[i, s]) * taus[i, s])
@@ -100,6 +148,7 @@ class hmm_nophasing_v2(object):
         return log_emission_rdr, log_emission_baf
     
     @staticmethod
+    @profile
     def compute_emission_probability_nb_betabinom_mix(X, base_nb_mean, log_mu, alphas, total_bb_RD, p_binom, taus, tumor_prop, **kwargs):
         """
         Attributes
@@ -134,6 +183,7 @@ class hmm_nophasing_v2(object):
         n_comp = X.shape[1]
         n_spots = X.shape[2]
         n_states = log_mu.shape[0]
+        
         # initialize log_emission
         log_emission_rdr = np.zeros((n_states, n_obs, n_spots))
         log_emission_baf = np.zeros((n_states, n_obs, n_spots))
@@ -141,6 +191,7 @@ class hmm_nophasing_v2(object):
             for s in np.arange(n_spots):
                 # expression from NB distribution
                 idx_nonzero_rdr = np.where(base_nb_mean[:,s] > 0)[0]
+                
                 if len(idx_nonzero_rdr) > 0:
                     # nb_mean = base_nb_mean[idx_nonzero_rdr,s] * (tumor_prop[s] * np.exp(log_mu[i, s]) + 1 - tumor_prop[s])
                     nb_mean = base_nb_mean[idx_nonzero_rdr,s] * (tumor_prop[idx_nonzero_rdr,s] * np.exp(log_mu[i, s]) + 1 - tumor_prop[idx_nonzero_rdr,s])
@@ -161,7 +212,9 @@ class hmm_nophasing_v2(object):
                     this_weighted_tp = np.concatenate(this_weighted_tp)
                 else:
                     this_weighted_tp = tumor_prop[:,s]
+                    
                 idx_nonzero_baf = np.where(total_bb_RD[:,s] > 0)[0]
+                
                 if len(idx_nonzero_baf) > 0:
                     mix_p_A = p_binom[i, s] * this_weighted_tp[idx_nonzero_baf] + 0.5 * (1 - this_weighted_tp[idx_nonzero_baf])
                     mix_p_B = (1 - p_binom[i, s]) * this_weighted_tp[idx_nonzero_baf] + 0.5 * (1 - this_weighted_tp[idx_nonzero_baf])
@@ -171,7 +224,7 @@ class hmm_nophasing_v2(object):
                     log_emission_baf[i, idx_nonzero_baf, s] += thread_betabinom(X[idx_nonzero_baf,1,s], total_bb_RD[idx_nonzero_baf,s], mix_p_A * taus[i, s], mix_p_B * taus[i, s])
                     
         return log_emission_rdr, log_emission_baf
-    #
+    
     @staticmethod
     @njit 
     def forward_lattice(lengths, log_transmat, log_startprob, log_emission, log_sitewise_transmat):
@@ -241,7 +294,7 @@ class hmm_nophasing_v2(object):
             cumlen += le
         return log_beta
 
-    #
+    @profile
     def run_baum_welch_nb_bb(self, X, lengths, n_states, base_nb_mean, total_bb_RD, log_sitewise_transmat=None, tumor_prop=None, \
         fix_NB_dispersion=False, shared_NB_dispersion=False, fix_BB_dispersion=False, shared_BB_dispersion=False, \
         is_diag=False, init_log_mu=None, init_p_binom=None, init_alphas=None, init_taus=None, max_iter=100, tol=1e-4, **kwargs):
@@ -275,11 +328,13 @@ class hmm_nophasing_v2(object):
             log_transmat = np.zeros((1,1))
         # initialize log_gamma
         log_gamma = kwargs["log_gamma"] if "log_gamma" in kwargs else None
+
         # a trick to speed up BetaBinom optimization: taking only unique values of (B allele count, total SNP covering read count)
         unique_values_nb, mapping_matrices_nb = construct_unique_matrix(X[:,0,:], base_nb_mean)
         unique_values_bb, mapping_matrices_bb = construct_unique_matrix(X[:,1,:], total_bb_RD)
+        
         # EM algorithm
-        for r in trange(max_iter):
+        for r in trange(max_iter, desc="EM algorithm"):
             # E step
             if tumor_prop is None:
                 log_emission_rdr, log_emission_baf = hmm_nophasing_v2.compute_emission_probability_nb_betabinom(X, base_nb_mean, log_mu, alphas, total_bb_RD, p_binom, taus)

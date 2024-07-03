@@ -58,21 +58,23 @@ class Weighted_NegativeBinomial(GenericLikelihoodModel):
         self.weights = weights
         self.exposure = exposure
         self.seed = seed
-    
+
     def nloglikeobs(self, params):
         nb_mean = np.exp(self.exog @ params[:-1]) * self.exposure
         nb_std = np.sqrt(nb_mean + params[-1] * nb_mean**2)
         n, p = convert_params(nb_mean, nb_std)
 
         # DEPRECATE
-        # llf = scipy.stats.nbinom.logpmf(self.endog, n, p)
-        llf = thread_nbinom(self.endog, n, p)
+        llf = scipy.stats.nbinom.logpmf(self.endog, n, p)
+        # llf = thread_nbinom(self.endog, n, p)
         
         neg_sum_llf = -llf.dot(self.weights)
         return neg_sum_llf
-    
-    def fit(self, start_params=None, maxiter=10000, maxfun=5000, **kwds):
+
+    @profile
+    def fit(self, start_params=None, maxiter=10_000, maxfun=5000, **kwds):
         self.exog_names.append('alpha')
+        
         if start_params is None:
             if hasattr(self, 'start_params'):
                 start_params = self.start_params
@@ -91,19 +93,20 @@ class Weighted_NegativeBinomial_mix(GenericLikelihoodModel):
         self.exposure = exposure
         self.seed = seed
         self.tumor_prop = tumor_prop
-    
+        
     def nloglikeobs(self, params):
         nb_mean = self.exposure * (self.tumor_prop * np.exp(self.exog @ params[:-1]) + 1 - self.tumor_prop)
         nb_std = np.sqrt(nb_mean + params[-1] * nb_mean**2)
         n, p = convert_params(nb_mean, nb_std)
 
         # DEPRECATE                                                                                                                                                                                                   
-        # llf = scipy.stats.nbinom.logpmf(self.endog, n, p)                                                                                                                                                           
-        llf = thread_nbinom(self.endog, n, p)
+        llf = scipy.stats.nbinom.logpmf(self.endog, n, p)                                                                                                                                                           
+        # llf = thread_nbinom(self.endog, n, p)
                 
         neg_sum_llf = -llf.dot(self.weights)
         return neg_sum_llf
-    
+
+    @profile
     def fit(self, start_params=None, maxiter=10000, maxfun=5000, **kwds):
         self.exog_names.append('alpha')
         if start_params is None:
@@ -145,13 +148,14 @@ class Weighted_BetaBinom(GenericLikelihoodModel):
         b = (1 - self.exog @ params[:-1]) * params[-1]
 
         # DEPRECATE
-        # llf = scipy.stats.betabinom.logpmf(self.endog, self.exposure, a, b)
-        llf = thread_betabinom(self.endog, self.exposure, a, b)
+        llf = scipy.stats.betabinom.logpmf(self.endog, self.exposure, a, b)
+        # llf = thread_betabinom(self.endog, self.exposure, a, b)
         
         
         neg_sum_llf = -llf.dot(self.weights)
         return neg_sum_llf
-    
+
+    @profile
     def fit(self, start_params=None, maxiter=10000, maxfun=5000, **kwds):
         self.exog_names.append("tau")
         if start_params is None:
@@ -176,12 +180,13 @@ class Weighted_BetaBinom_mix(GenericLikelihoodModel):
         b = ((1 - self.exog @ params[:-1]) * self.tumor_prop + 0.5 * (1 - self.tumor_prop)) * params[-1]
 
         # DEPRECATE                                                                                                                                                                                                   
-        # llf = scipy.stats.betabinom.logpmf(self.endog, self.exposure, a, b)                                                                                                                                         
-        llf = thread_betabinom(self.endog, self.exposure, a, b)
+        llf = scipy.stats.betabinom.logpmf(self.endog, self.exposure, a, b)                                                                                                                                         
+        # llf = thread_betabinom(self.endog, self.exposure, a, b)
         
         neg_sum_llf = -llf.dot(self.weights)
         return neg_sum_llf
-    
+
+    @profile
     def fit(self, start_params=None, maxiter=10000, maxfun=5000, **kwds):
         self.exog_names.append("tau")
         if start_params is None:
@@ -206,8 +211,8 @@ class Weighted_BetaBinom_fixdispersion(GenericLikelihoodModel):
         b = (1 - self.exog @ params) * self.tau
 
         # DEPRECATE                                                                                                                                                                                                   
-        # llf = scipy.stats.betabinom.logpmf(self.endog, self.exposure, a, b)                                                                                                                                         
-        llf = thread_betabinom(self.endog, self.exposure, a, b)
+        llf = scipy.stats.betabinom.logpmf(self.endog, self.exposure, a, b)                                                                                                                                         
+        # llf = thread_betabinom(self.endog, self.exposure, a, b)
         
         neg_sum_llf = -llf.dot(self.weights)
         return neg_sum_llf
@@ -237,12 +242,13 @@ class Weighted_BetaBinom_fixdispersion_mix(GenericLikelihoodModel):
         b = ((1 - self.exog @ params) * self.tumor_prop + 0.5 * (1 - self.tumor_prop)) * self.tau
 
         # DEPRECATE                                                                                                                                                                                                   
-        # llf = scipy.stats.betabinom.logpmf(self.endog, self.exposure, a, b)                                                                                                                                         
-        llf = thread_betabinom(self.endog, self.exposure, a, b)
+        llf = scipy.stats.betabinom.logpmf(self.endog, self.exposure, a, b)                                                                                                                                         
+        # llf = thread_betabinom(self.endog, self.exposure, a, b)
         
         neg_sum_llf = -llf.dot(self.weights)
         return neg_sum_llf
 
+    @profile
     def fit(self, start_params=None, maxiter=10000, maxfun=5000, **kwds):
         if start_params is None:
             if hasattr(self, 'start_params'):
@@ -287,7 +293,8 @@ class BAF_Binom(GenericLikelihoodModel):
         llf = scipy.stats.binom.logpmf(self.endog, self.exposure, p)
         neg_sum_llf = -llf.dot(self.weights)
         return neg_sum_llf
-    
+
+    @profile
     def fit(self, start_params=None, maxiter=10000, maxfun=5000, **kwds):
         if start_params is None:
             if hasattr(self, 'start_params'):

@@ -529,7 +529,7 @@ class hmm_gaussian_sitewise(object):
         else:
             log_transmat = np.zeros((1,1))
         # EM algorithm
-        for r in trange(max_iter):
+        for r in trange(max_iter, "EM algorithm"):
             # E step
             log_emission = compute_emission_probability_gaussian(X, rdr_mean, rdr_std, p_mean, p_std)
             log_alpha = forward_lattice_sitewise(lengths, log_transmat, log_startprob, log_emission, log_sitewise_transmat)

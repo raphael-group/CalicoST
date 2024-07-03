@@ -248,8 +248,9 @@ class hmm_nophasing(object):
         # a trick to speed up BetaBinom optimization: taking only unique values of (B allele count, total SNP covering read count)
         unique_values_nb, mapping_matrices_nb = construct_unique_matrix(X[:,0,:], base_nb_mean)
         unique_values_bb, mapping_matrices_bb = construct_unique_matrix(X[:,1,:], total_bb_RD)
+        
         # EM algorithm
-        for r in trange(max_iter):
+        for r in trange(max_iter, "EM algo."):
             # E step
             if tumor_prop is None:
                 log_emission_rdr, log_emission_baf = hmm_nophasing.compute_emission_probability_nb_betabinom(X, base_nb_mean, log_mu, alphas, total_bb_RD, p_binom, taus)
