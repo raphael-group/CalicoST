@@ -60,7 +60,7 @@ class hmm_nophasing_v2(object):
         nn, pp = convert_params(nb_mean, nb_std)
 
         idx = np.where((nb_mean > 0.))
-        log_emission_rdr[idx] = thread_binom(kk[idx], nn[idx], pp[idx])
+        log_emission_rdr[idx] = thread_nbinom(kk[idx], nn[idx], pp[idx])
 
         # NB BAF                                                                                                                                                                                                     
         log_emission_baf = np.zeros(shape=(n_states, n_obs, n_spots), dtype=float)
@@ -134,7 +134,7 @@ class hmm_nophasing_v2(object):
                     # DEPRECATE
                     # log_emission_rdr[i, idx_nonzero_rdr, s] = scipy.stats.nbinom.logpmf(X[idx_nonzero_rdr, 0, s], n, p)
 
-                    log_emission_rdr[i, idx_nonzero_rdr, s] = thread_binom(X[idx_nonzero_rdr, 0, s], n, p)
+                    log_emission_rdr[i, idx_nonzero_rdr, s] = thread_nbinom(X[idx_nonzero_rdr, 0, s], n, p)
                     
                 # AF from BetaBinom distribution
                 idx_nonzero_baf = np.where(total_bb_RD[:,s] > 0)[0]
@@ -200,7 +200,7 @@ class hmm_nophasing_v2(object):
 
                     # DEPRECATE
                     # log_emission_rdr[i, idx_nonzero_rdr, s] = scipy.stats.nbinom.logpmf(X[idx_nonzero_rdr, 0, s], n, p)
-                    log_emission_rdr[i, idx_nonzero_rdr, s] = thread_binom(X[idx_nonzero_rdr, 0, s], n, p)
+                    log_emission_rdr[i, idx_nonzero_rdr, s] = thread_nbinom(X[idx_nonzero_rdr, 0, s], n, p)
                     
                 # AF from BetaBinom distribution
                 if ("logmu_shift" in kwargs) and ("sample_length" in kwargs):
