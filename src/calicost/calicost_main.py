@@ -472,7 +472,7 @@ def main(configuration_file):
                 fig.savefig(f"{outdir}/plots/clone_spatial.pdf", transparent=True, bbox_inches="tight")
 
     end = datetime.datetime.now()
-    runtime = end_time - start_time
+    runtime = end - start
 
     logging.info(f"Complete in {runtime} [seconds].")
                 
