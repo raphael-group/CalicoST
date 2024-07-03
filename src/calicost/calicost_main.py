@@ -24,6 +24,7 @@ from calicost.utils_IO import *
 from calicost.find_integer_copynumber import *
 from calicost.parse_input import *
 from calicost.utils_plotting import *
+from tqdm import trange
 
 @profile
 def main(configuration_file):
@@ -179,6 +180,7 @@ def main(configuration_file):
                 
                 # HMRF + HMM using RDR information
                 copy_slice_sample_ids = copy.copy(sample_ids[idx_spots])
+                
                 if config["tumorprop_file"] is None:
                     hmrf_concatenate_pipeline(outdir, prefix, single_X[:,:,idx_spots], lengths, single_base_nb_mean[:,idx_spots], single_total_bb_RD[:,idx_spots], initial_clone_index, n_states=config["n_states"], \
                         log_sitewise_transmat=log_sitewise_transmat, smooth_mat=smooth_mat[np.ix_(idx_spots,idx_spots)], adjacency_mat=adjacency_mat[np.ix_(idx_spots,idx_spots)], sample_ids=copy_slice_sample_ids, max_iter_outer=10, nodepotential=config["nodepotential"], \
@@ -195,9 +197,10 @@ def main(configuration_file):
                         is_diag=True, max_iter=config["max_iter"], tol=config["tol"], spatial_weight=config["spatial_weight"], tumorprop_threshold=config["tumorprop_threshold"])
 
             ##### combine results across clones #####
-            res_combine = {"prev_assignment":np.zeros(single_X.shape[2], dtype=int)}
+            res_combine = {"prev_assignment": np.zeros(single_X.shape[2], dtype=int)}
             offset_clone = 0
-            for bafc in range(n_baf_clones):
+            
+            for bafc in trange(n_baf_clones, desc="n_baf_clones"):
                 prefix = f"clone{bafc}"
                 allres = dict( np.load(f"{outdir}/{prefix}_nstates{config['n_states']}_smp.npz", allow_pickle=True) )
                 r = allres["num_iterations"] - 1

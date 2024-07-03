@@ -26,6 +26,36 @@ from statsmodels.tools.sm_exceptions import ValueWarning
 # Pure clone
 ############################################################
 
+@njit(cache=True, parallel=False)
+def edge_update(n_clones, idx, values):
+    w_edge = np.zeros(n_clones, dtype=float)
+
+    for i, value in enumerate(values):
+        w_edge[idx[i]] += value
+
+    return w_edge
+
+def solve_edges(adjacency_mat, new_assignment, n_clones):
+    new = True
+
+    if new:
+        neighbors = adjacency_mat[i,:].nonzero()[1]
+        idx = np.where(new_assignment[neighbors] >= 0)[0]
+
+        neighbors = neighbors[idx]
+        values = adjacency_mat[i, neighbors].data
+
+        w_edge = edge_update(n_clones, new_assignment[neighbors], values)
+    else:
+        w_edge = np.zeros(n_clones)
+
+        for j in adjacency_mat[i,:].nonzero()[1]:
+            if new_assignment[j] >= 0:
+                # w_edge[new_assignment[j]] += 1                                                                                                                                                                                                                                                                                                               
+                w_edge[new_assignment[j]] += adjacency_mat[i,j]
+
+    return w_edge
+
 @profile
 def hmrf_reassignment_posterior(single_X, single_base_nb_mean, single_total_bb_RD, res, smooth_mat, adjacency_mat, prev_assignment, sample_ids, log_persample_weights, spatial_weight, hmmclass=hmm_sitewise, return_posterior=False):
     N = single_X.shape[2]
@@ -54,12 +84,11 @@ def hmrf_reassignment_posterior(single_X, single_base_nb_mean, single_total_bb_R
                     
         w_node = single_llf[i,:]
         w_node += log_persample_weights[:,sample_ids[i]]
-        w_edge = np.zeros(n_clones)
-        for j in adjacency_mat[i,:].nonzero()[1]:
-            if new_assignment[j] >= 0:
-                w_edge[new_assignment[j]] += adjacency_mat[i,j]
+
+        w_edge = solve_edges(adjacency_mat, new_assignment, n_clones)
+                
         new_assignment[i] = np.argmax( w_node + spatial_weight * w_edge )
-        #
+        
         posterior[i,:] = np.exp( w_node + spatial_weight * w_edge - scipy.special.logsumexp(w_node + spatial_weight * w_edge) )
 
     # compute total log likelihood log P(X | Z) + log P(Z)
@@ -98,12 +127,11 @@ def aggr_hmrf_reassignment(single_X, single_base_nb_mean, single_total_bb_RD, re
     
         w_node = single_llf[i,:]
         w_node += log_persample_weights[:,sample_ids[i]]
-        w_edge = np.zeros(n_clones)
-        for j in adjacency_mat[i,:].nonzero()[1]:
-            if new_assignment[j] >= 0:
-                w_edge[new_assignment[j]] += adjacency_mat[i,j]
+
+        w_edge = solve_edges(adjacency_mat, new_assignment, n_clones)
+
         new_assignment[i] = np.argmax( w_node + spatial_weight * w_edge )
-        #
+        
         posterior[i,:] = np.exp( w_node + spatial_weight * w_edge - scipy.special.logsumexp(w_node + spatial_weight * w_edge) )
 
     # compute total log likelihood log P(X | Z) + log P(Z)
@@ -142,11 +170,11 @@ def hmrf_reassignment_posterior_concatenate(single_X, single_base_nb_mean, singl
                     np.sum( scipy.special.logsumexp(tmp_log_emission_baf[:, :, 0] + res["log_gamma"][:, (c*n_obs):(c*n_obs+n_obs)], axis=0) )
         w_node = single_llf[i,:]
         w_node += log_persample_weights[:,sample_ids[i]]
-        w_edge = np.zeros(n_clones)
-        for j in adjacency_mat[i,:].nonzero()[1]:
-            w_edge[new_assignment[j]] += adjacency_mat[i,j]
+
+        w_edge = solve_edges(adjacency_mat, new_assignment, n_clones)
+
         new_assignment[i] = np.argmax( w_node + spatial_weight * w_edge )
-        #
+        
         posterior[i,:] = np.exp( w_node + spatial_weight * w_edge - scipy.special.logsumexp(w_node + spatial_weight * w_edge) )
 
     # compute total log likelihood log P(X | Z) + log P(Z)
@@ -229,11 +257,9 @@ def aggr_hmrf_reassignment_concatenate(single_X, single_base_nb_mean, single_tot
         w_node = single_llf[i,:]
         w_node += log_persample_weights[:,sample_ids[i]]
         # new_assignment[i] = np.argmax( w_node )
-        w_edge = np.zeros(n_clones)
-        for j in adjacency_mat[i,:].nonzero()[1]:
-            w_edge[new_assignment[j]] += adjacency_mat[i,j]
+
+        w_edge = solve_edges(adjacency_mat, new_assignment, n_clones)
         new_assignment[i] = np.argmax( w_node + spatial_weight * w_edge )
-        #
         posterior[i,:] = np.exp( w_node + spatial_weight * w_edge - scipy.special.logsumexp(w_node + spatial_weight * w_edge) )
 
     # compute total log likelihood log P(X | Z) + log P(Z)
@@ -559,13 +585,11 @@ def aggr_hmrfmix_reassignment(single_X, single_base_nb_mean, single_total_bb_RD,
         #
         w_node = single_llf[i,:]
         w_node += log_persample_weights[:,sample_ids[i]]
-        w_edge = np.zeros(n_clones)
-        for j in adjacency_mat[i,:].nonzero()[1]:
-            if new_assignment[j] >= 0:
-                # w_edge[new_assignment[j]] += 1
-                w_edge[new_assignment[j]] += adjacency_mat[i,j]
+
+        w_edge = solve_edges(adjacency_mat, new_assignment, n_clones)
+
         new_assignment[i] = np.argmax( w_node + spatial_weight * w_edge )
-        #
+
         posterior[i,:] = np.exp( w_node + spatial_weight * w_edge - scipy.special.logsumexp(w_node + spatial_weight * w_edge) )
     #
     # compute total log likelihood log P(X | Z) + log P(Z)
@@ -576,15 +600,6 @@ def aggr_hmrfmix_reassignment(single_X, single_base_nb_mean, single_total_bb_RD,
         return new_assignment, single_llf, total_llf, posterior
     else:
         return new_assignment, single_llf, total_llf
-
-@njit(cache=True, parallel=False)
-def edge_update(n_clones, idx, values):
-    w_edge = np.zeros(n_clones, dtype=float)
-
-    for i, value in enumerate(values):
-        w_edge[idx[i]] += value
-
-    return w_edge
     
 @profile
 def hmrfmix_reassignment_posterior(single_X, single_base_nb_mean, single_total_bb_RD, single_tumor_prop, res, smooth_mat, adjacency_mat, prev_assignment, sample_ids, log_persample_weights, spatial_weight, hmmclass=hmm_sitewise, return_posterior=False):
@@ -624,29 +639,14 @@ def hmrfmix_reassignment_posterior(single_X, single_base_nb_mean, single_total_b
         w_node = single_llf[i,:]
         w_node += log_persample_weights[:,sample_ids[i]]
 
-        """
-        # DEPRECATE
-        w_edge = np.zeros(n_clones)
-
-        for j in adjacency_mat[i,:].nonzero()[1]:
-            if new_assignment[j] >= 0:
-                # w_edge[new_assignment[j]] += 1
-                w_edge[new_assignment[j]] += adjacency_mat[i,j]
-        """
-        neighbors = adjacency_mat[i,:].nonzero()[1]
-        idx = np.where(new_assignment[neighbors] >= 0)[0]
-
-        neighbors = neighbors[idx]
-        values = adjacency_mat[i, neighbors].data
-
-        w_edge = edge_update(n_clones, new_assignment[neighbors], values)
-              
+        w_edge = solve_edges(adjacency_mat, new_assignment, n_clones)
+        
         new_assignment[i] = np.argmax( w_node + spatial_weight * w_edge )
-
         posterior[i,:] = np.exp( w_node + spatial_weight * w_edge - scipy.special.logsumexp(w_node + spatial_weight * w_edge) )
 
     # compute total log likelihood log P(X | Z) + log P(Z)
     total_llf = np.sum(single_llf[np.arange(N), new_assignment])
+    
     for i in range(N):
         total_llf += np.sum( spatial_weight * np.sum(new_assignment[adjacency_mat[i,:].nonzero()[1]] == new_assignment[i]) )
     if return_posterior:
@@ -825,12 +825,11 @@ def hmrfmix_reassignment_posterior_concatenate(single_X, single_base_nb_mean, si
                     np.sum( scipy.special.logsumexp(tmp_log_emission_baf[:, :, 0] + res["log_gamma"][:, (c*n_obs):(c*n_obs+n_obs)], axis=0) )
         w_node = single_llf[i,:]
         w_node += log_persample_weights[:,sample_ids[i]]
-        w_edge = np.zeros(n_clones)
-        for j in adjacency_mat[i,:].nonzero()[1]:
-            # w_edge[new_assignment[j]] += 1
-            w_edge[new_assignment[j]] += adjacency_mat[i,j]
+
+        w_edge = solve_edges(adjacency_mat, new_assignment, n_clones)
+
         new_assignment[i] = np.argmax( w_node + spatial_weight * w_edge )
-        #
+
         posterior[i,:] = np.exp( w_node + spatial_weight * w_edge - scipy.special.logsumexp(w_node + spatial_weight * w_edge) )
 
     # compute total log likelihood log P(X | Z) + log P(Z)
@@ -877,12 +876,11 @@ def aggr_hmrfmix_reassignment_concatenate(single_X, single_base_nb_mean, single_
                 single_llf[i,c] = np.sum(tmp_log_emission_rdr[this_pred, np.arange(n_obs), 0]) + np.sum(tmp_log_emission_baf[this_pred, np.arange(n_obs), 0])
         w_node = single_llf[i,:]
         w_node += log_persample_weights[:,sample_ids[i]]
-        w_edge = np.zeros(n_clones)
-        for j in adjacency_mat[i,:].nonzero()[1]:
-            # w_edge[new_assignment[j]] += 1
-            w_edge[new_assignment[j]] += adjacency_mat[i,j]
+
+        w_edge = solve_edges(adjacency_mat, new_assignment, n_clones)
+        
         new_assignment[i] = np.argmax( w_node + spatial_weight * w_edge )
-        #
+        
         posterior[i,:] = np.exp( w_node + spatial_weight * w_edge - scipy.special.logsumexp(w_node + spatial_weight * w_edge) )
     #
     # compute total log likelihood log P(X | Z) + log P(Z)

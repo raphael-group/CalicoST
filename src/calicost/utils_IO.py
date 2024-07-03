@@ -156,7 +156,8 @@ def load_joint_data(input_filelist, snp_dir, alignment_files, filtergenelist_fil
             adatatmp = sc.read_h5ad(f"{df_meta['spaceranger_dir'].iloc[i]}/filtered_feature_bc_matrix.h5ad")
         else:
             logging.error(f"{df_meta['spaceranger_dir'].iloc[i]} directory doesn't have a filtered_feature_bc_matrix.h5 or filtered_feature_bc_matrix.h5ad file!")
-
+            raise RuntimeError()
+        
         adatatmp.layers["count"] = adatatmp.X.A
         # reorder anndata spots to have the same order as df_this_barcode
         idx_argsort = pd.Categorical(adatatmp.obs.index, categories=list(df_this_barcode.barcode), ordered=True).argsort()

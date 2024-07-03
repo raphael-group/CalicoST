@@ -21,6 +21,8 @@ import networkx as nx
 # whole inference
 ############################################################
 
+logger = logging.getLogger(__name__)
+
 class hmm_sitewise(object):
     def __init__(self, params="stmp", t=1-1e-4):
         """
@@ -498,8 +500,9 @@ def pipeline_baum_welch(output_prefix, X, lengths, n_states, base_nb_mean, total
             init_log_mu = tmp_log_mu
         if (init_p_binom is None) and ("p" in params):
             init_p_binom = tmp_p_binom
-    print(f"init_log_mu = {init_log_mu}")
-    print(f"init_p_binom = {init_p_binom}")
+            
+    logger.info(f"init_log_mu = {init_log_mu}")
+    logger.info(f"init_p_binom = {init_p_binom}")
     
     # fit HMM-NB-BetaBinom
     # new_log_mu, new_alphas, new_p_binom, new_taus, new_log_startprob, new_log_transmat = hmmmodel.run_baum_welch_nb_bb(X, lengths, \

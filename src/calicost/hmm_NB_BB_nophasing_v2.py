@@ -334,7 +334,7 @@ class hmm_nophasing_v2(object):
         unique_values_bb, mapping_matrices_bb = construct_unique_matrix(X[:,1,:], total_bb_RD)
         
         # EM algorithm
-        for r in trange(max_iter, desc="EM algorithm"):
+        for r in trange(max_iter, desc="EM algorithm", leave=False):
             # E step
             if tumor_prop is None:
                 log_emission_rdr, log_emission_baf = hmm_nophasing_v2.compute_emission_probability_nb_betabinom(X, base_nb_mean, log_mu, alphas, total_bb_RD, p_binom, taus)
