@@ -11,6 +11,7 @@ import statsmodels.api as sm
 from statsmodels.base.model import GenericLikelihoodModel
 import copy
 from calicost.utils_distribution_fitting import *
+from calicost.utils_emission import thread_nbinom, thread_betabinom
 from calicost.utils_hmm import *
 import networkx as nx
 
@@ -35,7 +36,7 @@ class hmm_nophasing_v2(object):
         """
         self.params = params
         self.t = t
-    #
+    
     @staticmethod
     def compute_emission_probability_nb_betabinom(X, base_nb_mean, log_mu, alphas, total_bb_RD, p_binom, taus):
         """
@@ -82,13 +83,22 @@ class hmm_nophasing_v2(object):
                     nb_mean = base_nb_mean[idx_nonzero_rdr,s] * np.exp(log_mu[i, s])
                     nb_std = np.sqrt(nb_mean + alphas[i, s] * nb_mean**2)
                     n, p = convert_params(nb_mean, nb_std)
-                    log_emission_rdr[i, idx_nonzero_rdr, s] = scipy.stats.nbinom.logpmf(X[idx_nonzero_rdr, 0, s], n, p)
+
+                    # DEPRECATE
+                    # log_emission_rdr[i, idx_nonzero_rdr, s] = scipy.stats.nbinom.logpmf(X[idx_nonzero_rdr, 0, s], n, p)
+
+                    log_emission_rdr[i, idx_nonzero_rdr, s] = thread_binom(X[idx_nonzero_rdr, 0, s], n, p)
+                    
                 # AF from BetaBinom distribution
                 idx_nonzero_baf = np.where(total_bb_RD[:,s] > 0)[0]
                 if len(idx_nonzero_baf) > 0:
-                    log_emission_baf[i, idx_nonzero_baf, s] = scipy.stats.betabinom.logpmf(X[idx_nonzero_baf,1,s], total_bb_RD[idx_nonzero_baf,s], p_binom[i, s] * taus[i, s], (1-p_binom[i, s]) * taus[i, s])
+                    # DEPRECATE
+                    # log_emission_baf[i, idx_nonzero_baf, s] = scipy.stats.betabinom.logpmf(X[idx_nonzero_baf,1,s], total_bb_RD[idx_nonzero_baf,s], p_binom[i, s] * taus[i, s], (1-p_binom[i, s]) * taus[i, s])
+
+                    log_emission_baf[i, idx_nonzero_baf, s] = thread_betabinom(X[idx_nonzero_baf,1,s], total_bb_RD[idx_nonzero_baf,s], p_binom[i, s] * taus[i, s], (1-p_binom[i, s]) * taus[i, s])
+                    
         return log_emission_rdr, log_emission_baf
-    #
+    
     @staticmethod
     def compute_emission_probability_nb_betabinom_mix(X, base_nb_mean, log_mu, alphas, total_bb_RD, p_binom, taus, tumor_prop, **kwargs):
         """
@@ -136,7 +146,11 @@ class hmm_nophasing_v2(object):
                     nb_mean = base_nb_mean[idx_nonzero_rdr,s] * (tumor_prop[idx_nonzero_rdr,s] * np.exp(log_mu[i, s]) + 1 - tumor_prop[idx_nonzero_rdr,s])
                     nb_std = np.sqrt(nb_mean + alphas[i, s] * nb_mean**2)
                     n, p = convert_params(nb_mean, nb_std)
-                    log_emission_rdr[i, idx_nonzero_rdr, s] = scipy.stats.nbinom.logpmf(X[idx_nonzero_rdr, 0, s], n, p)
+
+                    # DEPRECATE
+                    # log_emission_rdr[i, idx_nonzero_rdr, s] = scipy.stats.nbinom.logpmf(X[idx_nonzero_rdr, 0, s], n, p)
+                    log_emission_rdr[i, idx_nonzero_rdr, s] = thread_binom(X[idx_nonzero_rdr, 0, s], n, p)
+                    
                 # AF from BetaBinom distribution
                 if ("logmu_shift" in kwargs) and ("sample_length" in kwargs):
                     this_weighted_tp = []
@@ -151,7 +165,11 @@ class hmm_nophasing_v2(object):
                 if len(idx_nonzero_baf) > 0:
                     mix_p_A = p_binom[i, s] * this_weighted_tp[idx_nonzero_baf] + 0.5 * (1 - this_weighted_tp[idx_nonzero_baf])
                     mix_p_B = (1 - p_binom[i, s]) * this_weighted_tp[idx_nonzero_baf] + 0.5 * (1 - this_weighted_tp[idx_nonzero_baf])
-                    log_emission_baf[i, idx_nonzero_baf, s] += scipy.stats.betabinom.logpmf(X[idx_nonzero_baf,1,s], total_bb_RD[idx_nonzero_baf,s], mix_p_A * taus[i, s], mix_p_B * taus[i, s])
+
+                    # DEPRECATE 
+                    # log_emission_baf[i, idx_nonzero_baf, s] += scipy.stats.betabinom.logpmf(X[idx_nonzero_baf,1,s], total_bb_RD[idx_nonzero_baf,s], mix_p_A * taus[i, s], mix_p_B * taus[i, s])
+                    log_emission_baf[i, idx_nonzero_baf, s] += thread_betabinom(X[idx_nonzero_baf,1,s], total_bb_RD[idx_nonzero_baf,s], mix_p_A * taus[i, s], mix_p_B * taus[i, s])
+                    
         return log_emission_rdr, log_emission_baf
     #
     @staticmethod
