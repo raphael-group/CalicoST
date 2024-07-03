@@ -65,8 +65,8 @@ class Weighted_NegativeBinomial(GenericLikelihoodModel):
         n, p = convert_params(nb_mean, nb_std)
 
         # DEPRECATE
-        llf = scipy.stats.nbinom.logpmf(self.endog, n, p)
-        # llf = thread_nbinom(self.endog, n, p)
+        # llf = scipy.stats.nbinom.logpmf(self.endog, n, p)
+        llf = thread_nbinom(self.endog, n, p)
         
         neg_sum_llf = -llf.dot(self.weights)
         return neg_sum_llf
@@ -100,8 +100,8 @@ class Weighted_NegativeBinomial_mix(GenericLikelihoodModel):
         n, p = convert_params(nb_mean, nb_std)
 
         # DEPRECATE                                                                                                                                                                                                   
-        llf = scipy.stats.nbinom.logpmf(self.endog, n, p)                                                                                                                                                           
-        # llf = thread_nbinom(self.endog, n, p)
+        # llf = scipy.stats.nbinom.logpmf(self.endog, n, p)                                                                                                                                                          
+        llf = thread_nbinom(self.endog, n, p)
                 
         neg_sum_llf = -llf.dot(self.weights)
         return neg_sum_llf
@@ -179,9 +179,9 @@ class Weighted_BetaBinom_mix(GenericLikelihoodModel):
         a = (self.exog @ params[:-1] * self.tumor_prop + 0.5 * (1 - self.tumor_prop)) * params[-1]
         b = ((1 - self.exog @ params[:-1]) * self.tumor_prop + 0.5 * (1 - self.tumor_prop)) * params[-1]
 
-        # DEPRECATE                                                                                                                                                                                                   
-        llf = scipy.stats.betabinom.logpmf(self.endog, self.exposure, a, b)                                                                                                                                         
-        # llf = thread_betabinom(self.endog, self.exposure, a, b)
+        # DEPRECATE                                                                                                                                                                                                  
+        # llf = scipy.stats.betabinom.logpmf(self.endog, self.exposure, a, b)                                                                                                                                        
+        llf = thread_betabinom(self.endog, self.exposure, a, b)
         
         neg_sum_llf = -llf.dot(self.weights)
         return neg_sum_llf
@@ -210,8 +210,8 @@ class Weighted_BetaBinom_fixdispersion(GenericLikelihoodModel):
         a = (self.exog @ params) * self.tau
         b = (1 - self.exog @ params) * self.tau
 
-        # DEPRECATE                                                                                                                                                                                                   
-        llf = scipy.stats.betabinom.logpmf(self.endog, self.exposure, a, b)                                                                                                                                         
+        # DEPRECATE                                                                                                                                                                                                  
+        llf = scipy.stats.betabinom.logpmf(self.endog, self.exposure, a, b)                                                                                                                                        
         # llf = thread_betabinom(self.endog, self.exposure, a, b)
         
         neg_sum_llf = -llf.dot(self.weights)
@@ -241,7 +241,7 @@ class Weighted_BetaBinom_fixdispersion_mix(GenericLikelihoodModel):
         a = (self.exog @ params * self.tumor_prop + 0.5 * (1 - self.tumor_prop)) * self.tau
         b = ((1 - self.exog @ params) * self.tumor_prop + 0.5 * (1 - self.tumor_prop)) * self.tau
 
-        # DEPRECATE                                                                                                                                                                                                   
+        # DEPRECATE                                                                                                                                                                                                  
         llf = scipy.stats.betabinom.logpmf(self.endog, self.exposure, a, b)                                                                                                                                         
         # llf = thread_betabinom(self.endog, self.exposure, a, b)
         
