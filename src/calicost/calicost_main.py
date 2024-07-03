@@ -1,4 +1,5 @@
 import sys
+import datetime
 import numpy as np
 import scipy
 import pandas as pd
@@ -8,8 +9,6 @@ from sklearn.cluster import KMeans
 import scanpy as sc
 import anndata
 import logging
-logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s", datefmt="%Y-%m-%d %H:%M:%S")
-logger = logging.getLogger()
 import copy
 from pathlib import Path
 import functools
@@ -26,15 +25,20 @@ from calicost.parse_input import *
 from calicost.utils_plotting import *
 from tqdm import trange
 
+logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s", datefmt="%Y-%m-%d %H:%M:%S")
+logger = logging.getLogger()
+
 @profile
 def main(configuration_file):
+    start = datetime.datetime.now()
+    
     try:
         config = read_configuration_file(configuration_file)
     except:
         config = read_joint_configuration_file(configuration_file)
-    print("Configurations:")
+    logger.info("Configurations:")
     for k in sorted(list(config.keys())):
-        print(f"\t{k} : {config[k]}")
+        logger.info(f"\t{k} : {config[k]}")
 
     lengths, single_X, single_base_nb_mean, single_total_bb_RD, log_sitewise_transmat, df_bininfo, df_gene_snp, \
         barcodes, coords, single_tumor_prop, sample_list, sample_ids, adjacency_mat, smooth_mat, exp_counts = run_parse_n_load(config)
@@ -90,13 +94,13 @@ def main(configuration_file):
             X, base_nb_mean, total_bb_RD, tumor_prop = merge_pseudobulk_by_index_mix(single_X, single_base_nb_mean, single_total_bb_RD, [np.where(res["new_assignment"]==c)[0] for c in np.sort(np.unique(res["new_assignment"]))], single_tumor_prop, threshold=config["tumorprop_threshold"])
             tumor_prop = np.repeat(tumor_prop, X.shape[0]).reshape(-1,1)
         merging_groups, merged_res = similarity_components_rdrbaf_neymanpearson(X, base_nb_mean, total_bb_RD, res, threshold=config["np_threshold"], minlength=config["np_eventminlen"], params="sp", tumor_prop=tumor_prop, hmmclass=hmm_nophasing_v2)
-        print(f"BAF clone merging after comparing similarity: {merging_groups}")
+        logger.info(f"BAF clone merging after comparing similarity: {merging_groups}")
         #
         if config["tumorprop_file"] is None:
             merging_groups, merged_res = merge_by_minspots(merged_res["new_assignment"], merged_res, single_total_bb_RD, min_spots_thresholds=config["min_spots_per_clone"], min_umicount_thresholds=config["min_avgumi_per_clone"]*n_obs)
         else:
             merging_groups, merged_res = merge_by_minspots(merged_res["new_assignment"], merged_res, single_total_bb_RD, min_spots_thresholds=config["min_spots_per_clone"], min_umicount_thresholds=config["min_avgumi_per_clone"]*n_obs, single_tumor_prop=single_tumor_prop, threshold=config["tumorprop_threshold"])
-        print(f"BAF clone merging after requiring minimum # spots: {merging_groups}")
+        logger.info(f"BAF clone merging after requiring minimum # spots: {merging_groups}")
         n_baf_clones = len(merging_groups)
         np.savez(f"{outdir}/mergedallspots_nstates{config['n_states']}_sp.npz", **merged_res)
 
@@ -228,13 +232,13 @@ def main(configuration_file):
                         X, base_nb_mean, total_bb_RD, tumor_prop = merge_pseudobulk_by_index_mix(single_X[:,:,idx_spots], single_base_nb_mean[:,idx_spots], single_total_bb_RD[:,idx_spots], [np.where(res["new_assignment"]==c)[0] for c in np.sort(np.unique(res["new_assignment"])) ], single_tumor_prop[idx_spots], threshold=config["tumorprop_threshold"])
                         tumor_prop = np.repeat(tumor_prop, X.shape[0]).reshape(-1,1)
                     merging_groups, merged_res = similarity_components_rdrbaf_neymanpearson(X, base_nb_mean, total_bb_RD, res, threshold=config["np_threshold"], minlength=config["np_eventminlen"], params="smp", tumor_prop=tumor_prop, hmmclass=hmm_nophasing_v2)
-                    print(f"part {bafc} merging_groups: {merging_groups}")
+                    logger.info(f"part {bafc} merging_groups: {merging_groups}")
                     #
                     if config["tumorprop_file"] is None:
                         merging_groups, merged_res = merge_by_minspots(merged_res["new_assignment"], merged_res, single_total_bb_RD[:,idx_spots], min_spots_thresholds=config["min_spots_per_clone"], min_umicount_thresholds=config["min_avgumi_per_clone"]*n_obs)
                     else:
                         merging_groups, merged_res = merge_by_minspots(merged_res["new_assignment"], merged_res, single_total_bb_RD[:,idx_spots], min_spots_thresholds=config["min_spots_per_clone"], min_umicount_thresholds=config["min_avgumi_per_clone"]*n_obs, single_tumor_prop=single_tumor_prop[idx_spots], threshold=config["tumorprop_threshold"])
-                    print(f"part {bafc} merging after requiring minimum # spots: {merging_groups}")
+                    logger.info(f"part {bafc} merging after requiring minimum # spots: {merging_groups}")
                     # compute posterior using the newly merged pseudobulk
                     n_merged_clones = len(merging_groups)
                     tmp = copy.copy(merged_res["new_assignment"])
@@ -342,7 +346,7 @@ def main(configuration_file):
                                 finding_distate_failed = True
                                 continue
 
-                    print(f"max med ploidy = {max_medploidy}, clone {s}, integer copy inference loss = {_}")
+                    logger.info(f"max med ploidy = {max_medploidy}, clone {s}, integer copy inference loss = {_}")
                     #
                     allele_specific_copy.append( pd.DataFrame( best_integer_copies[res_combine["pred_cnv"][:,s], 0].reshape(1,-1), index=[f"clone{cid} A"], columns=np.arange(n_obs) ) )
                     allele_specific_copy.append( pd.DataFrame( best_integer_copies[res_combine["pred_cnv"][:,s], 1].reshape(1,-1), index=[f"clone{cid} B"], columns=np.arange(n_obs) ) )
@@ -437,6 +441,11 @@ def main(configuration_file):
                 assignment = pd.Series([f"clone {x}" for x in res_combine["new_assignment"]])
                 fig = plot_individual_spots_in_space(coords, assignment, single_tumor_prop, sample_list=sample_list, sample_ids=sample_ids)
                 fig.savefig(f"{outdir}/plots/clone_spatial.pdf", transparent=True, bbox_inches="tight")
+
+    end = datetime.datetime.now()
+    runtime = end_time - start_time
+
+    logging.info(f"Complete in {runtime} [seconds].")
                 
 
 if __name__ == "__main__":
