@@ -32,13 +32,14 @@ logger = logging.getLogger(__name__)
 def edge_update(n_clones, idx, values):
     w_edge = np.zeros(n_clones, dtype=float)
 
-    for i, value in enumerate(values):
+    for i in range(len(values)):
+        value = values[i]
         w_edge[idx[i]] += value
 
     return w_edge
 
 def solve_edges(i, adjacency_mat, new_assignment, n_clones):
-    new = True
+    new = False
 
     if new:
         neighbors = adjacency_mat[i,:].nonzero()[1]

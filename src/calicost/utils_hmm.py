@@ -389,9 +389,11 @@ def update_emission_params_nb_sitewise_uniqvalues(unique_values, mapping_matrice
     n_spots = len(unique_values)
     n_states = int(log_gamma.shape[0] / 2)
     gamma = np.exp(log_gamma)
+    
     # initialization
     new_log_mu = copy.copy(start_log_mu) if not start_log_mu is None else np.zeros((n_states, n_spots))
     new_alphas = copy.copy(alphas)
+    
     # expression signal by NB distribution
     if fix_NB_dispersion:
         new_log_mu = np.zeros((n_states, n_spots))
