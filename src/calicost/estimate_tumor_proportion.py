@@ -4,8 +4,7 @@ import scipy
 import pandas as pd
 from pathlib import Path
 import logging
-logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s", datefmt="%Y-%m-%d %H:%M:%S")
-logger = logging.getLogger()
+
 import copy
 import functools
 import subprocess
@@ -15,6 +14,13 @@ from calicost.parse_input import *
 from calicost.utils_hmrf import *
 from calicost.hmrf import *
 
+logger = logging.getLogger()
+logger.setLevel(logging.INFO)
+
+handler = logging.StreamHandler(sys.stdout)
+formatter = logging.Formatter("%(asctime)s - %(process)d - %(levelname)s - %(name)s - %(message)s")
+handler.setFormatter(formatter)
+logger.addHandler(handler)
 
 def main(configuration_file):
     try:

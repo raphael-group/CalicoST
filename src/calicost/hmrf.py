@@ -37,7 +37,7 @@ def edge_update(n_clones, idx, values):
 
     return w_edge
 
-def solve_edges(adjacency_mat, new_assignment, n_clones):
+def solve_edges(i, adjacency_mat, new_assignment, n_clones):
     new = True
 
     if new:
@@ -59,22 +59,38 @@ def solve_edges(adjacency_mat, new_assignment, n_clones):
     return w_edge
 
 @profile
-def hmrf_reassignment_posterior(single_X, single_base_nb_mean, single_total_bb_RD, res, smooth_mat, adjacency_mat, prev_assignment, sample_ids, log_persample_weights, spatial_weight, hmmclass=hmm_sitewise, return_posterior=False):
+def hmrf_reassignment_posterior(
+         single_X,
+         single_base_nb_mean,
+         single_total_bb_RD,
+         res,
+         smooth_mat,
+         adjacency_mat,
+         prev_assignment,
+         sample_ids,
+         log_persample_weights,
+         spatial_weight,
+         hmmclass=hmm_sitewise,
+         return_posterior=False
+ ):
     N = single_X.shape[2]
     n_obs = single_X.shape[0]
     n_clones = res["new_log_mu"].shape[1]
     n_states = res["new_p_binom"].shape[0]
-    single_llf = np.zeros((N, n_clones))
+
     new_assignment = copy.copy(prev_assignment)
-    
+
+    single_llf = np.zeros((N, n_clones))
     posterior = np.zeros((N, n_clones))
 
     for i in trange(N, desc="hmrf_reassignment_posterior"):
         idx = smooth_mat[i,:].nonzero()[1]
+        
         for c in range(n_clones):
             tmp_log_emission_rdr, tmp_log_emission_baf = hmmclass.compute_emission_probability_nb_betabinom( np.sum(single_X[:,:,idx], axis=2, keepdims=True), \
                                                 np.sum(single_base_nb_mean[:,idx], axis=1, keepdims=True), res["new_log_mu"][:,c:(c+1)], res["new_alphas"][:,c:(c+1)], \
                                                 np.sum(single_total_bb_RD[:,idx], axis=1, keepdims=True), res["new_p_binom"][:,c:(c+1)], res["new_taus"][:,c:(c+1)])
+            
             if np.sum(single_base_nb_mean[:,idx] > 0) > 0 and np.sum(single_total_bb_RD[:,idx] > 0) > 0:
                 ratio_nonzeros = 1.0 * np.sum(single_total_bb_RD[:,i:(i+1)] > 0) / np.sum(single_base_nb_mean[:,i:(i+1)] > 0)
                 # ratio_nonzeros = 1.0 * np.sum(np.sum(single_total_bb_RD[:,idx], axis=1) > 0) / np.sum(np.sum(single_base_nb_mean[:,idx], axis=1) > 0)
@@ -87,7 +103,7 @@ def hmrf_reassignment_posterior(single_X, single_base_nb_mean, single_total_bb_R
         w_node = single_llf[i,:]
         w_node += log_persample_weights[:,sample_ids[i]]
 
-        w_edge = solve_edges(adjacency_mat, new_assignment, n_clones)
+        w_edge = solve_edges(i, adjacency_mat, new_assignment, n_clones)
                 
         new_assignment[i] = np.argmax( w_node + spatial_weight * w_edge )
         
@@ -131,7 +147,7 @@ def aggr_hmrf_reassignment(single_X, single_base_nb_mean, single_total_bb_RD, re
         w_node = single_llf[i,:]
         w_node += log_persample_weights[:,sample_ids[i]]
 
-        w_edge = solve_edges(adjacency_mat, new_assignment, n_clones)
+        w_edge = solve_edges(i, adjacency_mat, new_assignment, n_clones)
 
         new_assignment[i] = np.argmax( w_node + spatial_weight * w_edge )
         
@@ -159,9 +175,14 @@ def hmrf_reassignment_posterior_concatenate(single_X, single_base_nb_mean, singl
 
     for i in trange(N, desc="hmrf_reassignment_posterior_concatenate"):
         idx = smooth_mat[i,:].nonzero()[1]
-        tmp_log_emission_rdr, tmp_log_emission_baf = hmmclass.compute_emission_probability_nb_betabinom( np.sum(single_X[:,:,idx], axis=2, keepdims=True), \
-                                            np.sum(single_base_nb_mean[:,idx], axis=1, keepdims=True), res["new_log_mu"], res["new_alphas"], \
-                                            np.sum(single_total_bb_RD[:,idx], axis=1, keepdims=True), res["new_p_binom"], res["new_taus"])
+        tmp_log_emission_rdr, tmp_log_emission_baf = hmmclass.compute_emission_probability_nb_betabinom(
+            np.sum(single_X[:,:,idx], axis=2, keepdims=True),
+            np.sum(single_base_nb_mean[:,idx], axis=1, keepdims=True),
+            res["new_log_mu"],
+            res["new_alphas"],
+            np.sum(single_total_bb_RD[:,idx], axis=1, keepdims=True), res["new_p_binom"], res["new_taus"]
+        )
+        
         for c in range(n_clones):
             if np.sum(single_base_nb_mean[:,i:(i+1)] > 0) > 0 and np.sum(single_total_bb_RD[:,i:(i+1)] > 0) > 0:
                 ratio_nonzeros = 1.0 * np.sum(single_total_bb_RD[:,i:(i+1)] > 0) / np.sum(single_base_nb_mean[:,i:(i+1)] > 0)
@@ -174,7 +195,7 @@ def hmrf_reassignment_posterior_concatenate(single_X, single_base_nb_mean, singl
         w_node = single_llf[i,:]
         w_node += log_persample_weights[:,sample_ids[i]]
 
-        w_edge = solve_edges(adjacency_mat, new_assignment, n_clones)
+        w_edge = solve_edges(i, adjacency_mat, new_assignment, n_clones)
 
         new_assignment[i] = np.argmax( w_node + spatial_weight * w_edge )
         
@@ -182,6 +203,7 @@ def hmrf_reassignment_posterior_concatenate(single_X, single_base_nb_mean, singl
 
     # compute total log likelihood log P(X | Z) + log P(Z)
     total_llf = np.sum(single_llf[np.arange(N), new_assignment])
+    
     for i in range(N):
         total_llf += np.sum( spatial_weight * np.sum(new_assignment[adjacency_mat[i,:].nonzero()[1]] == new_assignment[i]) )
     if return_posterior:
@@ -261,7 +283,8 @@ def aggr_hmrf_reassignment_concatenate(single_X, single_base_nb_mean, single_tot
         w_node += log_persample_weights[:,sample_ids[i]]
         # new_assignment[i] = np.argmax( w_node )
 
-        w_edge = solve_edges(adjacency_mat, new_assignment, n_clones)
+        w_edge = solve_edges(iadjacency_mat, new_assignment, n_clones)
+        
         new_assignment[i] = np.argmax( w_node + spatial_weight * w_edge )
         posterior[i,:] = np.exp( w_node + spatial_weight * w_edge - scipy.special.logsumexp(w_node + spatial_weight * w_edge) )
 
@@ -416,12 +439,14 @@ def hmrf_pipeline(outdir, single_X, lengths, single_base_nb_mean, single_total_b
         logger.info("outer iteration {}: ARI between assignment = {}".format( r, adjusted_rand_score(last_assignment, res["new_assignment"]) ))
         if adjusted_rand_score(last_assignment, res["new_assignment"]) > 0.99 or len(np.unique(res["new_assignment"])) == 1:
             break
+        
         last_log_mu = res["new_log_mu"]
         last_p_binom = res["new_p_binom"]
         last_alphas = res["new_alphas"]
         last_taus = res["new_taus"]
         last_assignment = res["new_assignment"]
         log_persample_weights = np.ones((X.shape[2], n_samples)) * (-np.log(X.shape[2]))
+        
         for sidx in range(n_samples):
             index = np.where(sample_ids == sidx)[0]
             this_persample_weight = np.bincount(res["new_assignment"][index], minlength=X.shape[2]) / len(index)
@@ -589,7 +614,7 @@ def aggr_hmrfmix_reassignment(single_X, single_base_nb_mean, single_total_bb_RD,
         w_node = single_llf[i,:]
         w_node += log_persample_weights[:,sample_ids[i]]
 
-        w_edge = solve_edges(adjacency_mat, new_assignment, n_clones)
+        w_edge = solve_edges(i, adjacency_mat, new_assignment, n_clones)
 
         new_assignment[i] = np.argmax( w_node + spatial_weight * w_edge )
 
@@ -642,7 +667,7 @@ def hmrfmix_reassignment_posterior(single_X, single_base_nb_mean, single_total_b
         w_node = single_llf[i,:]
         w_node += log_persample_weights[:,sample_ids[i]]
 
-        w_edge = solve_edges(adjacency_mat, new_assignment, n_clones)
+        w_edge = solve_edges(i, adjacency_mat, new_assignment, n_clones)
         
         new_assignment[i] = np.argmax( w_node + spatial_weight * w_edge )
         posterior[i,:] = np.exp( w_node + spatial_weight * w_edge - scipy.special.logsumexp(w_node + spatial_weight * w_edge) )
@@ -859,7 +884,7 @@ def hmrfmix_reassignment_posterior_concatenate(single_X, single_base_nb_mean, si
         w_node = single_llf[i,:]
         w_node += log_persample_weights[:,sample_ids[i]]
 
-        w_edge = solve_edges(adjacency_mat, new_assignment, n_clones)
+        w_edge = solve_edges(i, adjacency_mat, new_assignment, n_clones)
 
         new_assignment[i] = np.argmax( w_node + spatial_weight * w_edge )
 
@@ -912,7 +937,7 @@ def aggr_hmrfmix_reassignment_concatenate(single_X, single_base_nb_mean, single_
         w_node = single_llf[i,:]
         w_node += log_persample_weights[:,sample_ids[i]]
 
-        w_edge = solve_edges(adjacency_mat, new_assignment, n_clones)
+        w_edge = solve_edges(i, adjacency_mat, new_assignment, n_clones)
         
         new_assignment[i] = np.argmax( w_node + spatial_weight * w_edge )
         
@@ -972,11 +997,12 @@ def hmrfmix_concatenate_pipeline(outdir, prefix, single_X, lengths, single_base_
     for c,idx in enumerate(initial_clone_index):
         last_assignment[idx] = c
 
-    # HMM
-    for r in trange(max_iter_outer, desc="HMM (hmrfmix_concatenate_pipeline)", leave=False):
+    # HMM?
+    for r in trange(max_iter_outer, desc="HMRF (hmrfmix_concatenate_pipeline)", leave=True):
         # assuming file f"{outdir}/{prefix}_nstates{n_states}_{params}.npz" exists. When r == 0, f"{outdir}/{prefix}_nstates{n_states}_{params}.npz" should contain two keys: "num_iterations" and f"round_-1_assignment" for clone initialization
         allres = np.load(f"{outdir}/{prefix}_nstates{n_states}_{params}.npz", allow_pickle=True)
         allres = dict(allres)
+        
         if allres["num_iterations"] > r:
             res = {"new_log_mu":allres[f"round{r}_new_log_mu"], "new_alphas":allres[f"round{r}_new_alphas"], \
                 "new_p_binom":allres[f"round{r}_new_p_binom"], "new_taus":allres[f"round{r}_new_taus"], \
@@ -1033,12 +1059,13 @@ def hmrfmix_concatenate_pipeline(outdir, prefix, single_X, lengths, single_base_
         X, base_nb_mean, total_bb_RD, tumor_prop = merge_pseudobulk_by_index_mix(single_X, single_base_nb_mean, single_total_bb_RD, clone_index, single_tumor_prop, threshold=tumorprop_threshold)
 
         if "mp" in params:
-            logger.info("outer iteration {}: difference between parameters = {}, {}".format( r, np.mean(np.abs(last_log_mu-res["new_log_mu"])), np.mean(np.abs(last_p_binom-res["new_p_binom"])) ))
+            logger.info("HMM (outer) iteration {}: difference between parameters = {:6e}, {:6e}".format( r, np.mean(np.abs(last_log_mu-res["new_log_mu"])), np.mean(np.abs(last_p_binom-res["new_p_binom"])) ))
         elif "m" in params:
-            logger.info("outer iteration {}: difference between NB parameters = {}".format( r, np.mean(np.abs(last_log_mu-res["new_log_mu"])) ))
+            logger.info("HMM (outer) iteration {}: difference between NB parameters = {:6e}".format( r, np.mean(np.abs(last_log_mu-res["new_log_mu"])) ))
         elif "p" in params:
-            logger.info("outer iteration {}: difference between BetaBinom parameters = {}".format( r, np.mean(np.abs(last_p_binom-res["new_p_binom"])) ))
-        logger.info("outer iteration {}: ARI between assignment = {}".format( r, adjusted_rand_score(last_assignment, res["new_assignment"]) ))
+            logger.info("HMM (outer) iteration {}: difference between BetaBinom parameters = {:6e}".format( r, np.mean(np.abs(last_p_binom-res["new_p_binom"])) ))
+            
+        logger.info("HMM (outer) iteration {}: ARI between assignment = {:6e}".format( r, adjusted_rand_score(last_assignment, res["new_assignment"]) ))
 
         # if np.all( last_assignment == res["new_assignment"] ):
         if adjusted_rand_score(last_assignment, res["new_assignment"]) > 0.99 or len(np.unique(res["new_assignment"])) == 1:
@@ -1050,6 +1077,7 @@ def hmrfmix_concatenate_pipeline(outdir, prefix, single_X, lengths, single_base_
         last_taus = res["new_taus"]
         last_assignment = res["new_assignment"]
         log_persample_weights = np.ones((X.shape[2], n_samples)) * (-np.log(X.shape[2]))
+        
         for sidx in range(n_samples):
             index = np.where(sample_ids == sidx)[0]
             this_persample_weight = np.bincount(res["new_assignment"][index], minlength=X.shape[2]) / len(index)

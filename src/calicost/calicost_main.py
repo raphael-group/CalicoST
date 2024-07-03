@@ -25,8 +25,13 @@ from calicost.parse_input import *
 from calicost.utils_plotting import *
 from tqdm import trange
 
-logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s", datefmt="%Y-%m-%d %H:%M:%S")
 logger = logging.getLogger()
+logger.setLevel(logging.INFO)
+
+handler = logging.StreamHandler(sys.stdout)
+formatter = logging.Formatter("%(asctime)s - %(process)d - %(levelname)s - %(name)s - %(message)s")
+handler.setFormatter(formatter)
+logger.addHandler(handler)
 
 @profile
 def main(configuration_file):
@@ -454,3 +459,4 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     main(args.configfile)
+B

@@ -7,8 +7,7 @@ from sklearn.metrics import adjusted_rand_score
 import scanpy as sc
 import anndata
 import logging
-logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s", datefmt="%Y-%m-%d %H:%M:%S")
-logger = logging.getLogger()
+
 import copy
 from pathlib import Path
 import functools
@@ -18,6 +17,7 @@ from calicost.utils_IO import *
 from calicost.phasing import *
 from calicost.arg_parse import *
 
+logger = logging.getLogger(__name__)
 
 def genesnp_to_bininfo(df_gene_snp):
     table_bininfo = df_gene_snp[~df_gene_snp.bin_id.isnull()].groupby('bin_id').agg({"CHR":'first', 'START':'first', 'END':'last', 'gene':set, 'snp_id':set}).reset_index()

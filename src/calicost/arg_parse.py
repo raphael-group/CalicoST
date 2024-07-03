@@ -3,9 +3,8 @@ import numpy as np
 import scipy
 import pandas as pd
 import logging
-logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s", datefmt="%Y-%m-%d %H:%M:%S")
-logger = logging.getLogger()
 
+logger = logging.getLogger(__name__)
 
 def load_default_config():
     config_joint = {

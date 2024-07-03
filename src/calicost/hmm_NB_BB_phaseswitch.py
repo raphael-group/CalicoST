@@ -228,7 +228,7 @@ class hmm_sitewise(object):
                     log_beta[i, (cumlen + t)] = mylogsumexp(buf)
             cumlen += le
         return log_beta
-    #
+    
     def run_baum_welch_nb_bb(self, X, lengths, n_states, base_nb_mean, total_bb_RD, log_sitewise_transmat, tumor_prop=None, \
         fix_NB_dispersion=False, shared_NB_dispersion=False, fix_BB_dispersion=False, shared_BB_dispersion=False, \
         is_diag=False, init_log_mu=None, init_p_binom=None, init_alphas=None, init_taus=None, max_iter=100, tol=1e-4):
@@ -263,6 +263,7 @@ class hmm_sitewise(object):
         # a trick to speed up BetaBinom optimization: taking only unique values of (B allele count, total SNP covering read count)
         unique_values_nb, mapping_matrices_nb = construct_unique_matrix(X[:,0,:], base_nb_mean)
         unique_values_bb, mapping_matrices_bb = construct_unique_matrix(X[:,1,:], total_bb_RD)
+
         # EM algorithm
         for r in trange(max_iter, desc="EM algorithm"):
             # E step
@@ -308,21 +309,30 @@ class hmm_sitewise(object):
             else:
                 new_p_binom = p_binom
                 new_taus = taus
+                
             # check convergence
-            print( np.mean(np.abs( np.exp(new_log_startprob) - np.exp(log_startprob) )), \
-                np.mean(np.abs( np.exp(new_log_transmat) - np.exp(log_transmat) )), \
-                np.mean(np.abs(new_log_mu - log_mu)),\
-                np.mean(np.abs(new_p_binom - p_binom)) )
-            print( np.hstack([new_log_mu, new_p_binom]) )
+            names = ["log_startprob", "log_transmat", "log_mu", "p_binom"]
+            old_arrays = (log_startprob, log_transmat, log_mu, np.log(p_binom))
+            new_arrays = (new_log_startprob, new_log_transmat, new_log_mu, np.log(new_p_binom))
+
+            for name, new, old in zip(names, new_arrays, old_arrays):
+                result = convergence(new, old, tol)
+                logger.info(f"EM convergence ({tol:.3e} tol): {name} diff.\t{result[0]:.6e}\t{result[1]}")
+
+            # TODO HACK
+            # print( np.hstack([new_log_mu, new_p_binom]) )
+            
             if np.mean(np.abs( np.exp(new_log_transmat) - np.exp(log_transmat) )) < tol and \
                 np.mean(np.abs(new_log_mu - log_mu)) < tol and np.mean(np.abs(new_p_binom - p_binom)) < tol:
                 break
+            
             log_startprob = new_log_startprob
             log_transmat = new_log_transmat
             log_mu = new_log_mu
             alphas = new_alphas
             p_binom = new_p_binom
             taus = new_taus
+            
         return new_log_mu, new_alphas, new_p_binom, new_taus, new_log_startprob, new_log_transmat, log_gamma
 
 
@@ -686,7 +696,7 @@ def similarity_components_rdrbaf_neymanpearson(X, base_nb_mean, total_bb_RD, res
                     t_neymanpearson = eval_neymanpearson_rdrbaf(log_emission_rdr[:,:,c1], log_emission_baf[:,:,c1], reshaped_pred[c1,:], log_emission_rdr[:,:,c2], log_emission_baf[:,:,c2], reshaped_pred[c2,:], bidx, n_states, res, p)
                 elif "p" in params:
                     t_neymanpearson = eval_neymanpearson_bafonly(log_emission_baf[:,:,c1], reshaped_pred[c1,:], log_emission_baf[:,:,c2], reshaped_pred[c2,:], bidx, n_states, res, p)
-                print(c1, c2, p, len(bidx), t_neymanpearson)
+                logger.info("TODO", c1, c2, p, len(bidx), t_neymanpearson)
                 all_test_statistics.append( [c1, c2, p, t_neymanpearson] )
                 if len(bidx) >= minlength:
                     list_t_neymanpearson.append(t_neymanpearson)
@@ -743,7 +753,7 @@ def combine_similar_states_across_clones(X, base_nb_mean, total_bb_RD, res, para
                     c_change = c2 if c_keep == c1 else c1
                     bidx = np.where( (reshaped_pred_cnv[c1,:]==p1) & (reshaped_pred_cnv[c2,:]==p2) )[0]
                     res['pred_cnv'][(c_change*n_obs):(c_change*n_obs+n_obs)][bidx] = res['pred_cnv'][(c_keep*n_obs):(c_keep*n_obs+n_obs)][bidx]
-                    print(f"Merging states {[p1,p2]} in clone {c1} and clone {c2}. NP statistics = {t_neymanpearson}")
+                    logger.info(f"Merging states {[p1,p2]} in clone {c1} and clone {c2}. NP statistics = {t_neymanpearson}")
     return res
 
 

@@ -6,6 +6,9 @@ from tqdm import trange
 from sklearn.mixture import GaussianMixture
 from calicost.utils_distribution_fitting import *
 
+def convergence(new, old, tol):
+    result = np.mean(np.abs( np.exp(new) - np.exp(old) ))
+    return result, result < tol
 
 @njit
 def np_max_ax_squeeze(arr, axis=0):

@@ -8,8 +8,6 @@ from sklearn.cluster import KMeans
 import scanpy as sc
 import anndata
 import logging
-logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s", datefmt="%Y-%m-%d %H:%M:%S")
-logger = logging.getLogger()
 import copy
 from pathlib import Path
 import functools
@@ -32,8 +30,9 @@ import seaborn
 plt.rcParams.update({'font.size': 14})
 
 import mkl
-mkl.set_num_threads(1)
+# mkl.set_num_threads(1)
 
+logger = logging.getLogger(__name__)
 
 def main(configuration_file):
     try:

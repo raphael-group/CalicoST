@@ -25,10 +25,6 @@ Joint NB-BB HMM that accounts for tumor/normal genome proportions. Tumor genome 
 
 logger = logging.getLogger(__name__)
 
-def convergence(new, old, tol):
-    result = np.mean(np.abs( np.exp(new) - np.exp(old) ))
-    return result, result < tol
-
 class hmm_nophasing_v2(object):
     def __init__(self, params="stmp", t=1-1e-4):
         """
@@ -326,15 +322,18 @@ class hmm_nophasing_v2(object):
             log_transmat = np.log(transmat)
         else:
             log_transmat = np.zeros((1,1))
+            
         # initialize log_gamma
         log_gamma = kwargs["log_gamma"] if "log_gamma" in kwargs else None
 
+        logger.info(f"Baum-Welch initialization complete. log_mu=\n{log_mu}; p_binom=\n{p_binom}; alphas=\n{alphas}; taus=\n{taus}")
+        
         # a trick to speed up BetaBinom optimization: taking only unique values of (B allele count, total SNP covering read count)
         unique_values_nb, mapping_matrices_nb = construct_unique_matrix(X[:,0,:], base_nb_mean)
         unique_values_bb, mapping_matrices_bb = construct_unique_matrix(X[:,1,:], total_bb_RD)
         
         # EM algorithm
-        for r in trange(max_iter, desc="EM algorithm", leave=False):
+        for r in trange(max_iter, desc="EM algorithm (v2)", leave=False):
             # E step
             if tumor_prop is None:
                 log_emission_rdr, log_emission_baf = hmm_nophasing_v2.compute_emission_probability_nb_betabinom(X, base_nb_mean, log_mu, alphas, total_bb_RD, p_binom, taus)
@@ -395,21 +394,27 @@ class hmm_nophasing_v2(object):
             else:
                 new_p_binom = p_binom
                 new_taus = taus
+                
             # check convergence
-            print( np.mean(np.abs( np.exp(new_log_startprob) - np.exp(log_startprob) )), \
-                np.mean(np.abs( np.exp(new_log_transmat) - np.exp(log_transmat) )), \
-                np.mean(np.abs(new_log_mu - log_mu)),\
-                np.mean(np.abs(new_p_binom - p_binom)) )
-            print( np.hstack([new_log_mu, new_p_binom]) )
+            names = ["log_startprob", "log_transmat", "log_mu", "p_binom"]
+            old_arrays = (log_startprob, log_transmat, log_mu, np.log(p_binom))
+            new_arrays = (new_log_startprob, new_log_transmat, new_log_mu, np.log(new_p_binom))
+
+            for name, new, old in zip(names, new_arrays, old_arrays):
+                result = convergence(new, old, tol)
+                logger.info(f"EM convergence ({tol:.3e} tol): {name} diff.\t{result[0]:.6e}\t{result[1]}")
+            
             if np.mean(np.abs( np.exp(new_log_transmat) - np.exp(log_transmat) )) < tol and \
                 np.mean(np.abs(new_log_mu - log_mu)) < tol and np.mean(np.abs(new_p_binom - p_binom)) < tol:
                 break
+            
             log_startprob = new_log_startprob
             log_transmat = new_log_transmat
             log_mu = new_log_mu
             alphas = new_alphas
             p_binom = new_p_binom
             taus = new_taus
+            
         return new_log_mu, new_alphas, new_p_binom, new_taus, new_log_startprob, new_log_transmat, log_gamma
 
 

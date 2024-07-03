@@ -11,13 +11,12 @@ from sklearn.cluster import KMeans
 import scanpy as sc
 import anndata
 import logging
-logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s", datefmt="%Y-%m-%d %H:%M:%S")
-logger = logging.getLogger()
 
 from calicost.utils_phase_switch import *
 from calicost.utils_distribution_fitting import *
 import subprocess
 
+logger = logging.getLogger(__name__)
 
 def load_data(spaceranger_dir, snp_dir, filtergenelist_file, filterregion_file, normalidx_file, min_snpumis=50, min_percent_expressed_spots=0.005):
     ##### read raw UMI count matrix #####
