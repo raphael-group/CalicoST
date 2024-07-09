@@ -21,14 +21,14 @@ os.environ["OPENBLAS_NUM_THREADS"] = "1"
 os.environ["OMP_NUM_THREADS"] = "1"
 
 
-def convert_params(mean, std):
+def convert_params(mean, alpha):
     """
     Convert mean/dispersion parameterization of a negative binomial to the ones scipy supports
 
     See https://mathworld.wolfram.com/NegativeBinomialDistribution.html
     """
-    p = mean/std**2
-    n = mean*p/(1.0 - p)
+    p = 1.0 / (1.0 + mean * alpha)
+    n = 1.0 / alpha
     return n, p
 
 
