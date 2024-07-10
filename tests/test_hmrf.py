@@ -51,10 +51,8 @@ def test_get_raw_spatial_data():
     sample_length = kwargs["sample_length"]
 
     n_obs, n_comp, n_spots = single_X.shape
-
-    # TBC
-    n_clones = 2
-    
+    n_clones = len(kwargs["sample_length"])
+        
     assert single_base_nb_mean.shape == (n_obs, n_spots)
     assert single_tumor_prop.shape == (n_spots,)
     assert single_X.shape == (n_obs, n_comp, n_spots)
@@ -62,10 +60,15 @@ def test_get_raw_spatial_data():
     assert smooth_mat.shape == (n_spots, n_spots)
     assert logmu_shift.shape == (n_clones, 1)
     assert sample_length.shape == (n_clones,)
-
+    assert np.all(sample_length == n_obs)
+    
 def get_spatial_data():
     np.random.seed(314)
 
+    # TODO HACK
+    # see https://github.com/raphael-group/CalicoST/blob/4696325d5ca103d0d72ea2d471c60d1d753b097b/src/calicost/hmrf.py#L765
+    n_states = 7
+    
     (
         res,
         single_base_nb_mean,
@@ -78,10 +81,7 @@ def get_spatial_data():
 
     N = single_X.shape[2]
     n_obs = single_X.shape[0]
-
-    # TODO HACK
-    n_clones = 2
-    n_states = 7
+    n_clones = len(kwargs["sample_length"])
 
     kwargs["logmu_shift"] = np.tile(inkwargs["logmu_shift"], (1, N))
 
