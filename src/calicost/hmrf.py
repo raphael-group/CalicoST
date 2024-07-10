@@ -777,7 +777,7 @@ def hmrfmix_reassignment_posterior_concatenate_emission_v1(
         dry_run=False,
     ):
 
-    N, _, n_obs = single_X.shape
+    n_obs, _, N = single_X.shape
 
     tmp_log_emission_rdr = []
     tmp_log_emission_baf = []

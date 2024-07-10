@@ -236,6 +236,10 @@ class hmm_nophasing_v2(object):
         
         # NB (n_states, n_obs, n_spots) == (7, 4248, 1)
         log_emission_rdr = np.zeros(shape=(n_states, n_obs, n_spots), dtype=float)
+
+        assert base_nb_mean.shape == (n_obs, n_spots)
+        assert tumor_prop.shape == (n_obs, n_spots)
+        assert log_mu.shape == (n_states, n_spots)
         
         # NB nb_mean, nb_std: (segments, spots) * (states, spots) = (states, segments, spots) == (7, 4248, 1)
         nb_mean = base_nb_mean[None, :, :] * (tumor_prop[None, :, :] * np.exp(log_mu[:, None, :]) + 1. - tumor_prop[None, :, :])
@@ -252,7 +256,11 @@ class hmm_nophasing_v2(object):
         if ("logmu_shift" in kwargs) and ("sample_length" in kwargs):
             sample_lengths = kwargs["sample_length"]
             logmu_shift = kwargs["logmu_shift"]
+
+            # TODO HACK ask Cong.
+            logmu_shift = np.tile(logmu_shift, (1, n_spots))
             
+            # NB see ../src/calicost/utils_tumor.py
             tumor_weight = get_tumor_weight(sample_lengths, tumor_prop, log_mu, logmu_shift)
         else:
             tumor_weight = np.tile(tumor_prop, (n_states, 1, 1))
@@ -260,8 +268,11 @@ class hmm_nophasing_v2(object):
         # NB initialize log_emission
         log_emission_baf = np.zeros((n_states, n_obs, n_spots))
 
-        print(tumor_weight.shape)
-        print(log_emission_baf.shape)
+        # (3, 2407, 17792)
+        # (3, 2407, 1)
+        
+        # print(tumor_weight.shape)
+        # print(log_emission_baf.shape)
         
         mix_p_A = p_binom[:, None, :] * tumor_weight + 0.5 * (1. - tumor_weight)
         mix_p_B = (1. - p_binom[:, None, :]) * tumor_weight + 0.5 * (1. - tumor_weight)

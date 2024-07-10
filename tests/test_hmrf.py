@@ -90,8 +90,6 @@ def get_spatial_data():
     n_obs = single_X.shape[0]
     n_clones = len(kwargs["sample_length"])
 
-    kwargs["logmu_shift"] = np.tile(kwargs["logmu_shift"], (1, N))
-
     # TODO 
     new_log_mu = 20.0 + 5 * np.random.uniform(size=N)
     new_log_mu = np.tile(new_log_mu, (n_states, 1))
