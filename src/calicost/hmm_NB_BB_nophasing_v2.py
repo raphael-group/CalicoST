@@ -99,15 +99,13 @@ class hmm_nophasing_v2(object):
         log_emission_rdr = np.zeros(shape=(n_states, n_obs, n_spots), dtype=float)
 
         # NB nb_mean, nb_std: (segments, spots) * (states, spots) = (states, segments, spots) == (7, 4248, 1)                                                                                                       
-        nb_mean = np.exp(log_mu[:, None, :]) * base_nb_mean[None, :, :]
+        nb_mean = np.exp(log_mu)[:, None, :] * base_nb_mean[None, :, :]
         nb_var = nb_mean + alphas[:, None, :] * nb_mean**2
 
         kk = np.tile(X[:, 0, :], (n_states, 1, 1))
         nn, pp = convert_params_var(nb_mean, nb_var)
 
-        idx = (base_nb_mean > 0.)
-        idx = np.tile(idx, (n_states, 1, 1))
-
+        idx = np.tile(base_nb_mean > 0., (n_states, 1, 1))
         log_emission_rdr[idx] = scipy.stats.nbinom(kk[idx], nn[idx], pp[idx])
 
         # NB BAF                                                                                                                                                                                                    
@@ -117,15 +115,10 @@ class hmm_nophasing_v2(object):
         nn = np.tile(total_bb_RD[:, :], (n_states, 1, 1))
 
         # NB (states, spots)                                                                                                                                                                                        
-        aa = p_binom * taus
-        bb = (1. - p_binom) * taus
+        aa = np.tile((p_binom * taus)[:, None, :], (1, n_obs, 1))
+        bb = np.tile(((1. - p_binom) * taus)[:, None, :], (1, n_obs, 1))
 
-        aa = np.tile(aa[:, None, :], (1, n_obs, 1))
-        bb = np.tile(bb[:, None, :], (1, n_obs, 1))
-
-        idx = (total_bb_RD > 0.)
-        idx = np.tile(idx, (n_states, 1, 1))
-        
+        idx = np.tile(total_bb_RD > 0., (n_states, 1, 1))
         log_emission_baf[idx] = scipy.stats.betabinom(kk[idx], nn[idx], aa[idx], bb[idx])
 
         return log_emission_rdr, log_emission_baf

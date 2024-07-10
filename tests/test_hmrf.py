@@ -169,7 +169,7 @@ def test_get_spatial_data(spatial_data):
     n_states = new_log_mu.shape[0]
     n_clones = len(kwargs["sample_length"])
 
-    assert new_log_mu.shape == (n_state, n_spots)
+    assert new_log_mu.shape == (n_states, n_spots)
     assert new_log_mu.shape == new_alphas.shape
     assert new_p_binom.shape == new_p_binom.shape
     assert new_taus == new_taus.shape
