@@ -5,6 +5,8 @@ from calicost.hmm_NB_BB_nophasing_v2 import hmm_nophasing_v2
 from calicost.hmrf import hmrfmix_reassignment_posterior_concatenate_emission_v1
 from calicost.hmrf import hmrfmix_reassignment_posterior_concatenate_emission_v2
 
+ITERATIONS = ROUNDS = 1
+
 
 def get_raw_spatial_data():
     # TODO HACK
@@ -36,6 +38,7 @@ def get_raw_spatial_data():
         kwargs,
     )
 
+
 @pytest.mark.skip(reason="This test is currently not needed")
 def test_get_raw_spatial_data():
     (
@@ -53,7 +56,7 @@ def test_get_raw_spatial_data():
 
     n_obs, n_comp, n_spots = single_X.shape
     n_clones = len(kwargs["sample_length"])
-        
+
     assert single_base_nb_mean.shape == (n_obs, n_spots)
     assert single_tumor_prop.shape == (n_spots,)
     assert single_X.shape == (n_obs, n_comp, n_spots)
@@ -67,14 +70,15 @@ def test_get_raw_spatial_data():
 
     # NB expect (will fail):
     assert logmu_shift.shape == (n_clones, n_spots)
-    
+
+
 def get_spatial_data():
     np.random.seed(314)
 
     # TODO HACK
     # see https://github.com/raphael-group/CalicoST/blob/4696325d5ca103d0d72ea2d471c60d1d753b097b/src/calicost/hmrf.py#L765
     n_states = 3
-    
+
     (
         res,
         single_base_nb_mean,
@@ -90,10 +94,10 @@ def get_spatial_data():
     n_obs = single_X.shape[0]
     n_clones = len(kwargs["sample_length"])
 
-    # TODO 
+    # TODO
     new_log_mu = 20.0 + 5 * np.random.uniform(size=N)
     new_log_mu = np.tile(new_log_mu, (n_states, 1))
-    
+
     new_alphas = np.ones_like(new_log_mu)
 
     new_p_binom = np.random.uniform(size=N)
@@ -101,8 +105,7 @@ def get_spatial_data():
 
     new_taus = np.ones_like(new_p_binom)
 
-    hmm = hmm_nophasing_v2()
-
+    hmm = hmm_nophasing_v2()    
     exp = hmrfmix_reassignment_posterior_concatenate_emission_v1(
         single_X,
         single_base_nb_mean,
@@ -134,9 +137,11 @@ def get_spatial_data():
         exp,
     )
 
+
 @pytest.fixture
 def spatial_data():
     return get_spatial_data()
+
 
 def test_get_spatial_data(spatial_data):
     (
@@ -155,20 +160,26 @@ def test_get_spatial_data(spatial_data):
         exp,
     ) = spatial_data
 
-    # NB usually n_spots, or one spot / clone.                                                                                                                                     
+    # NB usually n_spots, or one spot / clone.
     N = single_X.shape[2]
     n_obs = single_X.shape[0]
     n_states = new_log_mu.shape[0]
     n_clones = len(kwargs["sample_length"])
-    
+
     assert new_log_mu.shape == (n_states, n_spots)
     assert new_log_mu.shape == new_alphas.shape
     assert new_p_binom.shape == new_p_binom.shape
     assert new_taus == new_taus.shape
-    
-def test_hmrfmix_reassignment_posterior_concatenate_emission_v1(benchmark, spatial_data):
+
+
+def test_hmrfmix_reassignment_posterior_concatenate_emission_v1(
+    benchmark, spatial_data
+):
     """
     pytest -s test_hmrf.py::test_hmrfmix_reassignment_posterior_concatenate_emission_v1
+
+    Tests the original loop version of the HMRF emission calc.  Calls the underlying
+    hmm.emission calc.
     """
     (
         kwargs,
@@ -205,12 +216,17 @@ def test_hmrfmix_reassignment_posterior_concatenate_emission_v1(benchmark, spati
             dry_run=True,
         )
 
-    benchmark.pedantic(benchmark_v1, iterations=1, rounds=1)
+    benchmark.pedantic(benchmark_v1, iterations=ITERATIONS, rounds=ROUNDS)
 
 
-def test_hmrfmix_reassignment_posterior_concatenate_emission_v2(benchmark, spatial_data):
+def test_hmrfmix_reassignment_posterior_concatenate_emission_v2(
+    benchmark, spatial_data
+):
     """
     pytest -s test_hmrf.py::test_hmrfmix_reassignment_posterior_concatenate_emission_v2
+
+    Tests the new loop version of the HMRF emission calc.  Calls the underlying                                                                                                                                  
+    hmm.emission calc.
     """
     (
         kwargs,
@@ -227,35 +243,28 @@ def test_hmrfmix_reassignment_posterior_concatenate_emission_v2(benchmark, spati
         new_taus,
         exp,
     ) = spatial_data
-    """
-    N = single_X.shape[2]
-    n_obs = single_X.shape[0]
-    n_clones = 5
-    n_states = 7
 
-    def benchmark_v2():    
-        tmp_log_emission_rdr2, tmp_log_emission_baf2 = (
-            hmrfmix_reassignment_posterior_concatenate_emission_v2(
-                single_X,
-                single_base_nb_mean,
-                single_total_bb_RD,
-                single_tumor_prop,
-                new_log_mu,
-                new_alphas,
-                new_p_binom,
-                new_taus,
-                smooth_mat,
-                hmm,
-                kwargs["logmu_shift"],
-                kwargs["sample_length"],
-            )
+    # print(exp[0].shape)
+    
+    def benchmark_v2():
+        # See emacs +812 ../src/calicost/hmrf.py
+        #     emacs +201 ../src/calicost/hmm_NB_BB_nophasing_v2.py
+        return hmrfmix_reassignment_posterior_concatenate_emission_v2(
+            single_X,
+            single_base_nb_mean,
+            single_total_bb_RD,
+            single_tumor_prop,
+            new_log_mu,
+            new_alphas,
+            new_p_binom,
+            new_taus,
+            smooth_mat,
+            hmm,
+            kwargs["logmu_shift"],
+            kwargs["sample_length"],
         )
 
-        return tmp_log_emission_rdr2, tmp_log_emission_baf2
+    tmp_log_emission_rdr, tmp_log_emission_baf = benchmark.pedantic(benchmark_v2, iterations=ITERATIONS, rounds=ROUNDS)
 
-    # tmp_log_emission_rdr, tmp_log_emission_baf = benchmark_v2() 
-    tmp_log_emission_rdr, tmp_log_emission_baf = benchmark.pedantic(benchmark_v2, iterations=1, rounds=1)
-    
-    assert np.allclose(tmp_log_emission_rdr, exp[0])
-    assert np.allclose(tmp_log_emission_baf, exp[1])
-    """
+    assert np.allclose(tmp_log_emission_rdr, exp[0][:,:,0,:])
+    assert np.allclose(tmp_log_emission_baf, exp[1][:,:,0,:])

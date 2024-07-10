@@ -823,7 +823,7 @@ def hmrfmix_reassignment_posterior_concatenate_emission_v2(
         logmu_shift,
         sample_length
     ):
-    n_obs = single_X.shape[0]
+    n_obs, _, n_spots = single_X.shape
 
     # TODO BUG? .copy()?
     smooth_mat = smooth_mat.tolil()
@@ -835,8 +835,8 @@ def hmrfmix_reassignment_posterior_concatenate_emission_v2(
         smooth_mat[idx, :] = 0
 
         # TODO SIC
-        smooth_mat[:, idx] = 0
-
+        # smooth_mat[:, idx] = 0
+        
     smooth_mat = smooth_mat.tocsr()
 
     smooth_baseline = single_base_nb_mean @ smooth_mat
@@ -845,7 +845,6 @@ def hmrfmix_reassignment_posterior_concatenate_emission_v2(
     smooth_xrd = single_X[:, 0, :] @ smooth_mat
     smooth_xbaf = single_X[:, 1, :] @ smooth_mat
 
-    # NB (2407, 2, 17792)
     smooth_X = np.stack([smooth_xrd, smooth_xbaf], axis=1)
     norm = np.sum(smooth_mat, axis=0)
 
@@ -853,6 +852,11 @@ def hmrfmix_reassignment_posterior_concatenate_emission_v2(
     smooth_tumor_prop /= norm
 
     smooth_tumor_prop = np.tile(smooth_tumor_prop, (n_obs, 1))
+
+    assert smooth_mat.shape == (n_spots, n_spots)
+    assert smooth_baseline.shape == (n_obs, n_spots)
+    assert smooth_rd.shape == (n_obs, n_spots)
+    assert smooth_tumor_prop.shape == (n_obs, n_spots)
     
     # TODO BUG? clone_kwargs?
     return hmmclass.compute_emission_probability_nb_betabinom_mix(
