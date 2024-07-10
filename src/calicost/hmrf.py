@@ -786,17 +786,18 @@ def hmrfmix_reassignment_posterior_concatenate_emission_v1(
     for i in trange(N):
         idx = smooth_mat[i,:].nonzero()[1]
         idx = idx[~np.isnan(single_tumor_prop[idx])]
-
+        
         # TODO BUG? clone is not used.
         this_tmp_log_emission_rdr, this_tmp_log_emission_baf = hmmclass.compute_emission_probability_nb_betabinom_mix(
             np.sum(single_X[:,:,idx], axis=2, keepdims=True),
             np.sum(single_base_nb_mean[:,idx], axis=1, keepdims=True),
-            new_log_mu,
-            new_alphas,
+            new_log_mu[:, i:i+1],
+            new_alphas[:, i:i+1],
             np.sum(single_total_bb_RD[:,idx], axis=1, keepdims=True),
-            new_p_binom,
-            new_taus,
-            np.ones((n_obs,1)) * np.mean(single_tumor_prop[idx]),
+            new_p_binom[:, i:i+1],
+            new_taus[:, i:i+1],
+            # TODO HACK BUG ASK CONG idx or i?
+            np.ones((n_obs, 1)) * np.mean(single_tumor_prop[i]),
             **{"logmu_shift": logmu_shift, "sample_length": sample_length}
         )
 
@@ -832,6 +833,9 @@ def hmrfmix_reassignment_posterior_concatenate_emission_v2(
     for idx in bad_tumor_prop_idx:
         smooth_mat[idx, :] = 0
 
+        # TODO SIC
+        smooth_mat[:, idx] = 0
+
     smooth_mat = smooth_mat.tocsr()
 
     smooth_baseline = single_base_nb_mean @ smooth_mat
@@ -840,8 +844,8 @@ def hmrfmix_reassignment_posterior_concatenate_emission_v2(
     smooth_xrd = single_X[:, 0, :] @ smooth_mat
     smooth_xbaf = single_X[:, 1, :] @ smooth_mat
 
+    # NB (2407, 2, 17792)
     smooth_X = np.stack([smooth_xrd, smooth_xbaf], axis=1)
-
     norm = np.sum(smooth_mat, axis=0)
 
     smooth_tumor_prop = np.expand_dims(single_tumor_prop @ smooth_mat, -1).T
@@ -850,21 +854,17 @@ def hmrfmix_reassignment_posterior_concatenate_emission_v2(
     smooth_tumor_prop = np.tile(smooth_tumor_prop, (n_obs, 1))
     
     # TODO BUG? clone_kwargs?
-    tmp_log_emission_rdr, tmp_log_emission_baf = (
-        hmmclass.compute_emission_probability_nb_betabinom_mix(
-            smooth_X,
-            smooth_baseline,
-            new_log_mu,
-            new_alphas,
-            smooth_rd,
-            new_p_binom,
-            new_taus,
-            smooth_tumor_prop,
-            **{"logmu_shift": logmu_shift, "sample_length": sample_length},
-        )
+    return hmmclass.compute_emission_probability_nb_betabinom_mix(
+        smooth_X,
+        smooth_baseline,
+        new_log_mu,
+        new_alphas,
+        smooth_rd,
+        new_p_binom,
+        new_taus,
+        smooth_tumor_prop,
+        **{"logmu_shift": logmu_shift, "sample_length": sample_length},
     )
-
-    return tmp_log_emission_rdr, tmp_log_emission_baf
 
 def hmrfmix_reassignment_posterior_concatenate_v1(
     single_X,
