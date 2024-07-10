@@ -1,4 +1,5 @@
 import pytest
+import line_profiler
 import numpy as np
 from scipy.sparse import csr_matrix
 from calicost.hmm_NB_BB_nophasing_v2 import hmm_nophasing_v2
@@ -107,8 +108,8 @@ def get_spatial_data():
 
     hmm = hmm_nophasing_v2()
 
-    # See emacs +764 ../src/calicost/hmrf.py                                                                                                                                                                       
-    #     emacs +201 ../src/calicost/hmm_NB_BB_nophasing_v2.py  
+    # See emacs +764 ../src/calicost/hmrf.py
+    #     emacs +201 ../src/calicost/hmm_NB_BB_nophasing_v2.py
     exp = hmrfmix_reassignment_posterior_concatenate_emission_v1(
         single_X,
         single_base_nb_mean,
@@ -228,7 +229,7 @@ def test_hmrfmix_reassignment_posterior_concatenate_emission_v2(
     """
     pytest -s test_hmrf.py::test_hmrfmix_reassignment_posterior_concatenate_emission_v2
 
-    Tests the new loop version of the HMRF emission calc.  Calls the underlying                                                                                                                                  
+    Tests the new loop version of the HMRF emission calc.  Calls the underlying
     hmm.emission calc.
     """
     (
@@ -265,7 +266,49 @@ def test_hmrfmix_reassignment_posterior_concatenate_emission_v2(
             kwargs["sample_length"],
         )
 
-    tmp_log_emission_rdr, tmp_log_emission_baf = benchmark.pedantic(benchmark_v2, iterations=ITERATIONS, rounds=ROUNDS)
+    tmp_log_emission_rdr, tmp_log_emission_baf = benchmark.pedantic(
+        benchmark_v2, iterations=ITERATIONS, rounds=ROUNDS
+    )
 
     assert np.allclose(tmp_log_emission_rdr, exp[0])
     assert np.allclose(tmp_log_emission_baf, exp[1])
+
+@line_profiler.profile
+def profile(iterations=ITERATIONS):
+    (
+        kwargs,
+        res,
+        single_base_nb_mean,
+        single_tumor_prop,
+        single_X,
+        single_total_bb_RD,
+        smooth_mat,
+        hmm,
+        new_log_mu,
+        new_alphas,
+        new_p_binom,
+        new_taus,
+        exp,
+    ) = get_spatial_data()
+
+    for _ in range(iterations):
+        tmp_log_emission_rdr, tmp_log_emission_baf = (
+            hmrfmix_reassignment_posterior_concatenate_emission_v2(
+                single_X,
+                single_base_nb_mean,
+                single_total_bb_RD,
+                single_tumor_prop,
+                new_log_mu,
+                new_alphas,
+                new_p_binom,
+                new_taus,
+                smooth_mat,
+                hmm,
+                kwargs["logmu_shift"],
+                kwargs["sample_length"],
+            )
+        )
+
+
+if __name__ == "__main__":
+    profile(iterations=1)

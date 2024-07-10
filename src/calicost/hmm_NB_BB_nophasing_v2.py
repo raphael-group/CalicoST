@@ -191,6 +191,7 @@ class hmm_nophasing_v2(object):
         return log_emission_rdr, log_emission_baf
 
     @staticmethod
+    @profile
     def compute_emission_probability_nb_betabinom_mix(X, base_nb_mean, log_mu, alphas, total_bb_RD, p_binom, taus, tumor_prop, **kwargs):
         """
         Attributes
@@ -235,15 +236,13 @@ class hmm_nophasing_v2(object):
         assert log_mu.shape == (n_states, n_spots)
         
         # NB nb_mean, nb_std: (segments, spots) * (states, spots) = (states, segments, spots) == (7, 4248, 1)
-        nb_mean = base_nb_mean[None, :, :] * (tumor_prop[None, :, :] * np.exp(log_mu[:, None, :]) + 1. - tumor_prop[None, :, :])
+        nb_mean = base_nb_mean[None, :, :] * (tumor_prop[None, :, :] * np.exp(log_mu)[:, None, :] + 1. - tumor_prop[None, :, :])
         nb_var = nb_mean + alphas[:, None, :] * nb_mean**2
         
         kk = np.tile(X[:, 0, :], (n_states, 1, 1))
         nn, pp = convert_params_var(nb_mean, nb_var)
 
-        idx = (base_nb_mean > 0.)
-        idx = np.tile(idx, (n_states, 1, 1))
-
+        idx = np.tile(base_nb_mean > 0., (n_states, 1, 1))
         log_emission_rdr[idx] = scipy.stats.nbinom.logpmf(kk[idx], nn[idx], pp[idx])
 
         if ("logmu_shift" in kwargs) and ("sample_length" in kwargs):
@@ -260,27 +259,18 @@ class hmm_nophasing_v2(object):
 
         # NB initialize log_emission
         log_emission_baf = np.zeros((n_states, n_obs, n_spots))
-
-        # (3, 2407, 17792)
-        # (3, 2407, 1)
-        
-        # print(tumor_weight.shape)
-        # print(log_emission_baf.shape)
         
         mix_p_A = p_binom[:, None, :] * tumor_weight + 0.5 * (1. - tumor_weight)
         mix_p_B = (1. - p_binom[:, None, :]) * tumor_weight + 0.5 * (1. - tumor_weight)
 
         aa = mix_p_A * taus[:, None, :]
         bb = mix_p_B * taus[:, None, :]
-
-        idx = (total_bb_RD > 0.)
-        idx = np.tile(idx, (n_states, 1, 1))
         
         kk = np.tile(X[:, 1, :], (n_states, 1, 1))
         nn = np.tile(total_bb_RD[:, :], (n_states, 1, 1))
-        
+
+        idx = np.tile(total_bb_RD > 0., (n_states, 1, 1))
         log_emission_baf[idx] = scipy.stats.betabinom.logpmf(kk[idx], nn[idx], aa[idx], bb[idx])
-        # log_emission_baf[idx] = thread_betabinom(kk[idx], nn[idx], aa[idx], bb[idx], axis=max_axis)
 
         return log_emission_rdr, log_emission_baf
     
