@@ -31,6 +31,15 @@ def convert_params(mean, std):
     n = mean*p/(1.0 - p)
     return n, p
 
+def convert_params_var(mean, var):
+    """
+    Convert mean/dispersion parameterization of a negative binomial to the ones scipy supports
+    See https://mathworld.wolfram.com/NegativeBinomialDistribution.html
+    """
+    p = mean / var
+    n = mean * p / (1.0 - p)
+
+    return n, p
 
 class Weighted_NegativeBinomial(GenericLikelihoodModel):
     """
