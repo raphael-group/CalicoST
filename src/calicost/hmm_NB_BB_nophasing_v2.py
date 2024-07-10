@@ -245,7 +245,7 @@ class hmm_nophasing_v2(object):
         idx = (base_nb_mean > 0.)
         idx = np.tile(idx, (n_states, 1, 1))
         
-        log_emission_rdr[idx] = thread_nbinom(kk[idx], nn[idx], pp[idx])
+        log_emission_rdr[idx] = scipy.stats.nbinom(kk[idx], nn[idx], pp[idx])
 
         if ("logmu_shift" in kwargs) and ("sample_length" in kwargs):
             sample_lengths = kwargs["sample_length"]

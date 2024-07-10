@@ -2,6 +2,7 @@ import pytest
 import numpy as np
 from scipy.sparse import csr_matrix
 from calicost.hmm_NB_BB_nophasing_v2 import hmm_nophasing_v2
+from calicost.hmrf import hmrfmix_reassignment_posterior_concatenate_emission
 
 def get_spatial_data():
     np.random.seed(314)
@@ -66,6 +67,26 @@ def get_spatial_data():
 def spatial_data():
     return get_spatial_data()
 
+def test_get_spatial_data():
+    (
+        kwargs_dict,
+        res,
+        single_base_nb_mean,
+        single_tumor_prop,
+        single_X,
+        single_total_bb_RD,
+        smooth_mat,
+        hmm,
+        new_log_mu,
+        new_alphas,
+        new_p_binom,
+        new_taus,
+    ) = get_spatial_data()
+
+    # TODO
+    print(kwargs_dict["sample_length"].shape)
+    print(kwargs_dict["logmu_shift"].shape)
+    
 
 def test_spatial_data(spatial_data):
     (
@@ -124,18 +145,22 @@ def test_spatial_data(spatial_data):
     smooth_tumor_prop /= norm
 
     smooth_tumor_prop = np.tile(smooth_tumor_prop, (n_obs, 1))
-    """
+    """    
     tmp_log_emission_rdr_array, tmp_log_emission_baf_array = (
-        hmm.compute_emission_probability_nb_betabinom_mix(
+        hmrfmix_reassignment_posterior_concatenate_emission(
             single_X,
             single_base_nb_mean,
+            single_total_bb_RD,
+            single_tumor_prop,
             new_log_mu,
             new_alphas,
-            single_total_bb_RD,
             new_p_binom,
             new_taus,
-            single_tumor_prop,
-            **kwargs,
+            smooth_mat,
+            0,
+            hmm,
+            kwargs["logmu_shift"],
+            kwargs["sample_length"],
         )
     )
 
