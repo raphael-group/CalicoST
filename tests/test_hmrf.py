@@ -267,5 +267,6 @@ def test_hmrfmix_reassignment_posterior_concatenate_emission_v2(
 
     tmp_log_emission_rdr, tmp_log_emission_baf = benchmark.pedantic(benchmark_v2, iterations=ITERATIONS, rounds=ROUNDS)
 
+    # TODO HACK exp returns an additional dimension.
     assert np.allclose(tmp_log_emission_rdr, exp[0][:,:,0,:])
     assert np.allclose(tmp_log_emission_baf, exp[1][:,:,0,:])
