@@ -105,7 +105,10 @@ def get_spatial_data():
 
     new_taus = np.ones_like(new_p_binom)
 
-    hmm = hmm_nophasing_v2()    
+    hmm = hmm_nophasing_v2()
+
+    # See emacs +764 ../src/calicost/hmrf.py                                                                                                                                                                       
+    #     emacs +201 ../src/calicost/hmm_NB_BB_nophasing_v2.py  
     exp = hmrfmix_reassignment_posterior_concatenate_emission_v1(
         single_X,
         single_base_nb_mean,
@@ -161,12 +164,12 @@ def test_get_spatial_data(spatial_data):
     ) = spatial_data
 
     # NB usually n_spots, or one spot / clone.
-    N = single_X.shape[2]
+    n_spots = single_X.shape[2]
     n_obs = single_X.shape[0]
     n_states = new_log_mu.shape[0]
     n_clones = len(kwargs["sample_length"])
 
-    assert new_log_mu.shape == (n_states, n_spots)
+    assert new_log_mu.shape == (n_state, n_spots)
     assert new_log_mu.shape == new_alphas.shape
     assert new_p_binom.shape == new_p_binom.shape
     assert new_taus == new_taus.shape
