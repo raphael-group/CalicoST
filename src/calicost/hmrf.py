@@ -777,14 +777,16 @@ def hmrfmix_reassignment_posterior_concatenate_emission_v1(
         dry_run=False,
     ):
 
-    N = single_X.shape[2]
-    n_obs = single_X.shape[0]
+    N, _, n_obs = single_X.shape
 
     tmp_log_emission_rdr = []
     tmp_log_emission_baf = []
 
-    for i in trange(N):
+    for i in range(N):
+        # NB smooth_mat.shape == (n_spots, n_spots)
         idx = smooth_mat[i,:].nonzero()[1]
+
+        # NB single_tumor_prop.shape == (n_spots,)
         idx = idx[~np.isnan(single_tumor_prop[idx])]
         
         # TODO BUG? clone is not used.
@@ -796,8 +798,7 @@ def hmrfmix_reassignment_posterior_concatenate_emission_v1(
             np.sum(single_total_bb_RD[:,idx], axis=1, keepdims=True),
             new_p_binom[:, i:i+1],
             new_taus[:, i:i+1],
-            # TODO HACK BUG ASK CONG idx or i?
-            np.ones((n_obs, 1)) * np.mean(single_tumor_prop[i]),
+            np.ones((n_obs, 1)) * np.mean(single_tumor_prop[idx]),
             **{"logmu_shift": logmu_shift, "sample_length": sample_length}
         )
 
