@@ -791,7 +791,7 @@ def hmrfmix_reassignment_posterior_concatenate_emission_v1(
         idx = idx[~np.isnan(single_tumor_prop[idx])]
         
         # TODO BUG? clone is not used.
-        this_tmp_log_emission_rdr, this_tmp_log_emission_baf = hmmclass.compute_emission_probability_nb_betabinom_mix(
+        this_tmp_log_emission_rdr, this_tmp_log_emission_baf = hmmclass.compute_emission_probability_nb_betabinom_mix_v1(
             np.sum(single_X[:,:,idx], axis=2, keepdims=True),
             np.sum(single_base_nb_mean[:,idx], axis=1, keepdims=True),
             new_log_mu[:, i:i+1],
