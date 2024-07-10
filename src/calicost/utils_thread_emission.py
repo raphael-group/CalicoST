@@ -4,7 +4,7 @@ from concurrent.futures import ThreadPoolExecutor
 import numpy as np
 import scipy
 
-NUM_THREADS = 8
+NUM_THREADS = 6
 
 os.environ["RAYON_NUM_THREADS"] = str(NUM_THREADS)
 os.environ["OMP_NUM_THREADS"] = str(NUM_THREADS)
