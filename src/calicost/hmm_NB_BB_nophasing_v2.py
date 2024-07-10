@@ -1,5 +1,6 @@
 import logging
 import numpy as np
+import line_profiler
 from numba import njit
 from scipy.stats import norm, multivariate_normal, poisson
 import scipy.special
@@ -191,7 +192,7 @@ class hmm_nophasing_v2(object):
         return log_emission_rdr, log_emission_baf
 
     @staticmethod
-    @profile
+    @line_profiler.profile
     def compute_emission_probability_nb_betabinom_mix(X, base_nb_mean, log_mu, alphas, total_bb_RD, p_binom, taus, tumor_prop, **kwargs):
         """
         Attributes
