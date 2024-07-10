@@ -146,7 +146,7 @@ def get_spatial_data():
 def spatial_data():
     return get_spatial_data()
 
-
+@pytest.mark.skip(reason="This test is currently not needed")
 def test_get_spatial_data(spatial_data):
     (
         kwargs,

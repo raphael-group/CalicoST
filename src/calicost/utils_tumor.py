@@ -13,14 +13,11 @@ def get_tumor_weight(sample_lengths, tumor_prop, log_mu, logmu_shift):
         range_t = np.sum(sample_lengths[:c + 1])
 
         range_tumor_prop = tumor_prop[range_s:range_t, :]
-        shifted_mu = np.exp(log_mu - logmu_shift[c, :])
-
-        # print(log_mu.shape, logmu_shift.shape, shifted_mu.shape)
-        
+        shifted_mu = np.exp(log_mu - logmu_shift[c, :])[:, None, :]
         result = (
             range_tumor_prop
-            * shifted_mu[:, None, :]
-            / (range_tumor_prop * shifted_mu[:, None, :] + 1. - range_tumor_prop)
+            * shifted_mu
+            / (range_tumor_prop * shifted_mu + 1. - range_tumor_prop)
         )
 
         weighted_tumor_prop.append(result)
