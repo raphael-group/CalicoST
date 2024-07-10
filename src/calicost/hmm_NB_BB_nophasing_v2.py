@@ -38,7 +38,7 @@ class hmm_nophasing_v2(object):
         self.t = t
 
     @staticmethod
-    def compute_emission_probability_nb_betabinom_v1(X, base_nb_mean, log_mu, alphas, total_bb_RD, p_binom, taus):
+    def compute_emission_probability_nb_betabinom(X, base_nb_mean, log_mu, alphas, total_bb_RD, p_binom, taus):
         """
         Attributes
         ----------
@@ -91,7 +91,7 @@ class hmm_nophasing_v2(object):
         return log_emission_rdr, log_emission_baf
 
     @staticmethod
-    def compute_emission_probability_nb_betabinom(X, base_nb_mean, log_mu, alphas, total_bb_RD, p_binom, taus):
+    def compute_emission_probability_nb_betabinom_v2(X, base_nb_mean, log_mu, alphas, total_bb_RD, p_binom, taus):
         n_states = log_mu.shape[0]
         (n_obs, n_comp, n_spots) = X.shape
 
