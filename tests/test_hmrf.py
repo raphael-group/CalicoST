@@ -246,7 +246,7 @@ def test_hmrfmix_reassignment_posterior_concatenate_emission_v2(
         new_taus,
         exp,
     ) = spatial_data
-    
+
     def benchmark_v2():
         # See emacs +812 ../src/calicost/hmrf.py
         #     emacs +201 ../src/calicost/hmm_NB_BB_nophasing_v2.py
@@ -267,6 +267,5 @@ def test_hmrfmix_reassignment_posterior_concatenate_emission_v2(
 
     tmp_log_emission_rdr, tmp_log_emission_baf = benchmark.pedantic(benchmark_v2, iterations=ITERATIONS, rounds=ROUNDS)
 
-    # TODO HACK exp returns an additional dimension.
-    assert np.allclose(tmp_log_emission_rdr, exp[0][:,:,0,:])
-    assert np.allclose(tmp_log_emission_baf, exp[1][:,:,0,:])
+    assert np.allclose(tmp_log_emission_rdr, exp[0])
+    assert np.allclose(tmp_log_emission_baf, exp[1])

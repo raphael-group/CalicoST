@@ -777,6 +777,7 @@ def hmrfmix_reassignment_posterior_concatenate_emission_v1(
         dry_run=False,
     ):
 
+    n_states = new_log_mu.shape[0]
     n_obs, _, N = single_X.shape
 
     tmp_log_emission_rdr = []
@@ -802,12 +803,15 @@ def hmrfmix_reassignment_posterior_concatenate_emission_v1(
             **{"logmu_shift": logmu_shift, "sample_length": sample_length}
         )
 
+        assert this_tmp_log_emission_rdr.shape == (n_states, n_obs, 1)
+        assert this_tmp_log_emission_baf.shape == (n_states, n_obs, 1)
+                
         if not dry_run:
             tmp_log_emission_rdr.append(this_tmp_log_emission_rdr)
             tmp_log_emission_baf.append(this_tmp_log_emission_baf)
 
     if not dry_run:
-        return np.stack(tmp_log_emission_rdr, axis=-1), np.stack(tmp_log_emission_baf, axis=-1)
+        return np.concatenate(tmp_log_emission_rdr, axis=2), np.concatenate(tmp_log_emission_baf, axis=2)
 
 def hmrfmix_reassignment_posterior_concatenate_emission_v2(
         single_X,
@@ -823,6 +827,10 @@ def hmrfmix_reassignment_posterior_concatenate_emission_v2(
         logmu_shift,
         sample_length
     ):
+    """
+    Aggregate the observables according to the adjacency matrix and
+    calculate emission.
+    """
     n_obs, _, n_spots = single_X.shape
 
     # TODO BUG? .copy()?
@@ -834,7 +842,7 @@ def hmrfmix_reassignment_posterior_concatenate_emission_v2(
     for idx in bad_tumor_prop_idx:
         smooth_mat[idx, :] = 0
 
-        # TODO SIC
+        # TODO SIC original calc. did not mask these.
         # smooth_mat[:, idx] = 0
         
     smooth_mat = smooth_mat.tocsr()
