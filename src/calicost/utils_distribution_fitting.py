@@ -37,7 +37,7 @@ def convert_params_var(mean, var):
     See https://mathworld.wolfram.com/NegativeBinomialDistribution.html
     """
     p = mean / var
-    n = mean * p / (1.0 - p)
+    n = mean * p / (1. - p)
 
     return n, p
 

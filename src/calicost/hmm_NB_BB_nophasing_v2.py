@@ -14,6 +14,7 @@ import copy
 from calicost.utils_distribution_fitting import *
 from calicost.utils_hmm import *
 from calicost.utils_tumor import get_tumor_weight
+from calicost.utils_thread_emission import thread_betabinom, thread_nbinom
 import networkx as nx
 
 """
@@ -244,8 +245,10 @@ class hmm_nophasing_v2(object):
         nn, pp = convert_params_var(nb_mean, nb_var)
 
         idx = np.tile(base_nb_mean > 0., (n_states, 1, 1))
-        log_emission_rdr[idx] = scipy.stats.nbinom.logpmf(kk[idx], nn[idx], pp[idx])
 
+        # log_emission_rdr[idx] = scipy.stats.nbinom.logpmf(kk[idx], nn[idx], pp[idx])
+        log_emission_rdr[idx] = thread_nbinom(kk[idx], nn[idx], pp[idx]) 
+        
         if ("logmu_shift" in kwargs) and ("sample_length" in kwargs):
             sample_lengths = kwargs["sample_length"]
             logmu_shift = kwargs["logmu_shift"]
@@ -262,7 +265,7 @@ class hmm_nophasing_v2(object):
         log_emission_baf = np.zeros((n_states, n_obs, n_spots))
         
         mix_p_A = p_binom[:, None, :] * tumor_weight + 0.5 * (1. - tumor_weight)
-        mix_p_B = (1. - p_binom[:, None, :]) * tumor_weight + 0.5 * (1. - tumor_weight)
+        mix_p_B = (1. - p_binom)[:, None, :] * tumor_weight + 0.5 * (1. - tumor_weight)
 
         aa = mix_p_A * taus[:, None, :]
         bb = mix_p_B * taus[:, None, :]
@@ -271,8 +274,10 @@ class hmm_nophasing_v2(object):
         nn = np.tile(total_bb_RD[:, :], (n_states, 1, 1))
 
         idx = np.tile(total_bb_RD > 0., (n_states, 1, 1))
-        log_emission_baf[idx] = scipy.stats.betabinom.logpmf(kk[idx], nn[idx], aa[idx], bb[idx])
-
+        
+        # log_emission_baf[idx] = scipy.stats.betabinom.logpmf(kk[idx], nn[idx], aa[idx], bb[idx])
+        log_emission_baf[idx] = thread_betabinom(kk[idx], nn[idx], aa[idx], bb[idx])
+        
         return log_emission_rdr, log_emission_baf
     
     @staticmethod
