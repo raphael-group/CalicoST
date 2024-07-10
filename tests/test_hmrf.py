@@ -243,8 +243,6 @@ def test_hmrfmix_reassignment_posterior_concatenate_emission_v2(
         new_taus,
         exp,
     ) = spatial_data
-
-    # print(exp[0].shape)
     
     def benchmark_v2():
         # See emacs +812 ../src/calicost/hmrf.py
