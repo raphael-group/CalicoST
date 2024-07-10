@@ -761,7 +761,7 @@ def hmrfmix_pipeline(outdir, prefix, single_X, lengths, single_base_nb_mean, sin
             log_persample_weights[:, sidx] = np.where(this_persample_weight > 0, np.log(this_persample_weight), -50)
             log_persample_weights[:, sidx] = log_persample_weights[:, sidx] - scipy.special.logsumexp(log_persample_weights[:, sidx])
 
-def hmrfmix_reassignment_posterior_concatenate_emission(
+def hmrfmix_reassignment_posterior_concatenate_emission_v1(
         single_X,
         single_base_nb_mean,
         single_total_bb_RD,
@@ -771,10 +771,10 @@ def hmrfmix_reassignment_posterior_concatenate_emission(
         new_p_binom,
         new_taus,
         smooth_mat,
-        clone,
         hmmclass,
         logmu_shift,
-        sample_length
+        sample_length,
+        dry_run=False,
     ):
 
     N = single_X.shape[2]
@@ -787,6 +787,7 @@ def hmrfmix_reassignment_posterior_concatenate_emission(
         idx = smooth_mat[i,:].nonzero()[1]
         idx = idx[~np.isnan(single_tumor_prop[idx])]
 
+        # TODO BUG? clone is not used.
         this_tmp_log_emission_rdr, this_tmp_log_emission_baf = hmmclass.compute_emission_probability_nb_betabinom_mix(
             np.sum(single_X[:,:,idx], axis=2, keepdims=True),
             np.sum(single_base_nb_mean[:,idx], axis=1, keepdims=True),
@@ -799,35 +800,117 @@ def hmrfmix_reassignment_posterior_concatenate_emission(
             **{"logmu_shift": logmu_shift, "sample_length": sample_length}
         )
 
-        tmp_log_emission_rdr.append(this_tmp_log_emission_rdr)
-        tmp_log_emission_baf.append(this_tmp_log_emission_baf)
+        if not dry_run:
+            tmp_log_emission_rdr.append(this_tmp_log_emission_rdr)
+            tmp_log_emission_baf.append(this_tmp_log_emission_baf)
 
-    return np.stack(tmp_log_emission_rdr, axis=-1), np.stack(tmp_log_emission_baf, axis=-1)
+    if not dry_run:
+        return np.stack(tmp_log_emission_rdr, axis=-1), np.stack(tmp_log_emission_baf, axis=-1)
 
-def hmrfmix_reassignment_posterior_concatenate_v1(single_X, single_base_nb_mean, single_total_bb_RD, single_tumor_prop, res, smooth_mat, adjacency_mat, prev_assignment, sample_ids, log_persample_weights, spatial_weight, hmmclass=hmm_sitewise, return_posterior=False):
+def hmrfmix_reassignment_posterior_concatenate_emission_v2(
+        single_X,
+        single_base_nb_mean,
+        single_total_bb_RD,
+        single_tumor_prop,
+        new_log_mu,
+        new_alphas,
+        new_p_binom,
+        new_taus,
+        smooth_mat,
+        hmmclass,
+        logmu_shift,
+        sample_length
+    ):
+    n_obs = single_X.shape[0]
+
+    # TODO BUG? .copy()?
+    smooth_mat = smooth_mat.tolil()
+    
+    bad_tumor_prop = np.isnan(single_tumor_prop).astype(int)
+    bad_tumor_prop_idx = np.argwhere(bad_tumor_prop).squeeze()
+    
+    for idx in bad_tumor_prop_idx:
+        smooth_mat[idx, :] = 0
+
+    smooth_mat = smooth_mat.tocsr()
+
+    smooth_baseline = single_base_nb_mean @ smooth_mat
+    smooth_rd = single_total_bb_RD @ smooth_mat
+
+    smooth_xrd = single_X[:, 0, :] @ smooth_mat
+    smooth_xbaf = single_X[:, 1, :] @ smooth_mat
+
+    smooth_X = np.stack([smooth_xrd, smooth_xbaf], axis=1)
+
+    norm = np.sum(smooth_mat, axis=0)
+
+    smooth_tumor_prop = np.expand_dims(single_tumor_prop @ smooth_mat, -1).T
+    smooth_tumor_prop /= norm
+
+    smooth_tumor_prop = np.tile(smooth_tumor_prop, (n_obs, 1))
+    
+    # TODO BUG? clone_kwargs?
+    tmp_log_emission_rdr, tmp_log_emission_baf = (
+        hmmclass.compute_emission_probability_nb_betabinom_mix(
+            smooth_X,
+            smooth_baseline,
+            new_log_mu,
+            new_alphas,
+            smooth_rd,
+            new_p_binom,
+            new_taus,
+            smooth_tumor_prop,
+            **{"logmu_shift": logmu_shift, "sample_length": sample_length},
+        )
+    )
+
+    return tmp_log_emission_rdr, tmp_log_emission_baf
+
+def hmrfmix_reassignment_posterior_concatenate_v1(
+    single_X,
+    single_base_nb_mean,
+    single_total_bb_RD,
+    single_tumor_prop,
+    res,
+    smooth_mat,
+    adjacency_mat,
+    prev_assignment,
+    sample_ids,
+    log_persample_weights,
+    spatial_weight,
+    hmmclass=hmm_sitewise,
+    return_posterior=False
+):
     N = single_X.shape[2]
+
+    # NB clones are stacked along the observation axis.
     n_obs = single_X.shape[0]
     n_clones = np.max(prev_assignment) + 1
     n_states = res["new_p_binom"].shape[0]
     single_llf = np.zeros((N, n_clones))
     new_assignment = copy.copy(prev_assignment)
     
-    lambd = np.sum(single_base_nb_mean, axis=1) / np.sum(single_base_nb_mean)
+    single_base_nb_mean_sum = np.sum(single_base_nb_mean)
+    lambd = np.sum(single_base_nb_mean, axis=1) / single_base_nb_mean_sum
 
-    if np.sum(single_base_nb_mean) > 0:
+    if single_base_nb_mean_sum > 0:
         logmu_shift = []
 
         for c in range(n_clones):
-            this_pred_cnv = np.argmax(res["log_gamma"][:, (c*n_obs):(c*n_obs+n_obs)], axis=0)%n_states
-            logmu_shift.append( scipy.special.logsumexp(res["new_log_mu"][this_pred_cnv,:] + np.log(lambd).reshape(-1,1), axis=0) )
+            # NB extract predicted copy number state for n_obs segments for a given clone.
+            this_pred_cnv = np.argmax(res["log_gamma"][:, (c * n_obs) : (c * n_obs + n_obs)], axis=0) % n_states
+            logmu_shift.append(
+                scipy.special.logsumexp(res["new_log_mu"][this_pred_cnv, :] + np.log(lambd).reshape(-1,1), axis=0)
+            )
 
         logmu_shift = np.vstack(logmu_shift)
-        kwargs = {"logmu_shift": logmu_shift, "sample_length": np.ones(n_clones,dtype=int) * n_obs}
+        kwargs = {"logmu_shift": logmu_shift, "sample_length": n_obs * np.ones(n_clones, dtype=int)}
     else:
         kwargs = {}
     
     posterior = np.zeros((N, n_clones))
 
+    # NB clones are stacked along the observation axis.
     tmp_log_emission_rdr, tmp_log_emission_baf = hmrfmix_reassignment_posterior_concatenate_emission(
         single_X,
         single_base_nb_mean,
@@ -838,7 +921,6 @@ def hmrfmix_reassignment_posterior_concatenate_v1(single_X, single_base_nb_mean,
         res["new_p_binom"],
         res["new_taus"],
         smooth_mat,
-        clone,
         hmmclass,
         kwargs["logmu_shift"],
         kwargs["sample_length"],
@@ -846,7 +928,7 @@ def hmrfmix_reassignment_posterior_concatenate_v1(single_X, single_base_nb_mean,
 
     for i in trange(N):
         for c in range(n_clones):
-            if np.sum(single_base_nb_mean[:,i:(i+1)] > 0) > 0 and np.sum(single_total_bb_RD[:,i:(i+1)] > 0) > 0:
+            if np.sum(single_base_nb_mean[:, i:(i+1)] > 0) > 0 and np.sum(single_total_bb_RD[:, i:(i+1)] > 0) > 0:
                 ratio_nonzeros = 1.0 * np.sum(single_total_bb_RD[:,i:(i+1)] > 0) / np.sum(single_base_nb_mean[:,i:(i+1)] > 0)
                 # ratio_nonzeros = 1.0 * np.sum(np.sum(single_total_bb_RD[:,idx], axis=1) > 0) / np.sum(np.sum(single_base_nb_mean[:,idx], axis=1) > 0)
                 single_llf[i,c] = ratio_nonzeros * np.sum( scipy.special.logsumexp(tmp_log_emission_rdr[:, :, i] + res["log_gamma"][:, (c*n_obs):(c*n_obs+n_obs)], axis=0) ) + \
