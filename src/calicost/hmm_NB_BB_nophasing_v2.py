@@ -91,7 +91,7 @@ class hmm_nophasing_v2(object):
         return log_emission_rdr, log_emission_baf
 
     @staticmethod
-    def compute_emission_probability_nb_betabinom_v2(X, base_nb_mean, log_mu, alphas, total_bb_RD, p_binom, taus):
+    def compute_emission_probability_nb_betabinom(X, base_nb_mean, log_mu, alphas, total_bb_RD, p_binom, taus):
         n_states = log_mu.shape[0]
         (n_obs, n_comp, n_spots) = X.shape
 
@@ -129,15 +129,6 @@ class hmm_nophasing_v2(object):
         log_emission_baf[idx] = scipy.stats.betabinom(kk[idx], nn[idx], aa[idx], bb[idx])
 
         return log_emission_rdr, log_emission_baf
-
-    @staticmethod
-    def compute_emission_probability_nb_betabinom(X, base_nb_mean, log_mu, alphas, total_bb_RD, p_binom, taus, version="v2"):
-        if version == "v2":
-            return compute_emission_probability_nb_betabinom_v2(X, base_nb_mean, log_mu, alphas, total_bb_RD, p_binom, taus)
-        elif version == "v1":
-            return compute_emission_probability_nb_betabinom_v1(X, base_nb_mean, log_mu, alphas, total_bb_RD, p_binom, taus)
-        else:
-            raise ValueError(f"Version {version} is not supported.")
 
     @staticmethod
     def compute_emission_probability_nb_betabinom_mix_v1(X, base_nb_mean, log_mu, alphas, total_bb_RD, p_binom, taus, tumor_prop, **kwargs):
@@ -205,7 +196,7 @@ class hmm_nophasing_v2(object):
         return log_emission_rdr, log_emission_baf
 
     @staticmethod
-    def compute_emission_probability_nb_betabinom_mix_v2(X, base_nb_mean, log_mu, alphas, total_bb_RD, p_binom, taus, tumor_prop, **kwargs):
+    def compute_emission_probability_nb_betabinom_mix(X, base_nb_mean, log_mu, alphas, total_bb_RD, p_binom, taus, tumor_prop, **kwargs):
         """
         Attributes
         ----------
@@ -282,18 +273,8 @@ class hmm_nophasing_v2(object):
         log_emission_baf[idx] = scipy.stats.betabinom.logpmf(kk[idx], nn[idx], aa[idx], bb[idx])
         # log_emission_baf[idx] = thread_betabinom(kk[idx], nn[idx], aa[idx], bb[idx], axis=max_axis)
 
-        return log_emission_rdr, log_emission_baf    
-
-    @staticmethod
-    @profile
-    def compute_emission_probability_nb_betabinom_mix(X, base_nb_mean, log_mu, alphas, total_bb_RD, p_binom, taus, tumor_prop, version="v2", **kwargs):
-        if version == "v2":
-            return compute_emission_probability_nb_betabinom_mix_v2(X, base_nb_mean, log_mu, alphas, total_bb_RD, p_binom, taus, tumor_prop, **kwargs)
-        elif version == "v1":
-            return compute_emission_probability_nb_betabinom_mix_v1(X, base_nb_mean, log_mu, alphas, total_bb_RD, p_binom, taus, tumor_prop, **kwargs)
-        else:
-            raise ValueError(f"Version {version} is not supported.")
-
+        return log_emission_rdr, log_emission_baf
+    
     @staticmethod
     @njit 
     def forward_lattice(lengths, log_transmat, log_startprob, log_emission, log_sitewise_transmat):
@@ -477,6 +458,6 @@ class hmm_nophasing_v2(object):
             alphas = new_alphas
             p_binom = new_p_binom
             taus = new_taus
-        return new_log_mu, new_alphas, new_p_binom, new_taus, new_log_startprob, new_log_transmat, log_gamma]
+        return new_log_mu, new_alphas, new_p_binom, new_taus, new_log_startprob, new_log_transmat, log_gamma
 
 

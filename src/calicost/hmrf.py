@@ -893,7 +893,7 @@ def hmrfmix_reassignment_posterior_concatenate_v2(single_X, single_base_nb_mean,
         idx = smooth_mat[i,:].nonzero()[1]
         idx = idx[ ~np.isnan(single_tumor_prop[idx]) ]
 
-        """
+        '''
         tmp_log_emission_rdr, tmp_log_emission_baf = hmmclass.compute_emission_probability_nb_betabinom_mix(
                 np.sum(single_X[:,:,idx], axis=2, keepdims=True),
                 np.sum(single_base_nb_mean[:,idx], axis=1, keepdims=True),
@@ -905,7 +905,7 @@ def hmrfmix_reassignment_posterior_concatenate_v2(single_X, single_base_nb_mean,
                 np.ones((n_obs, 1)) * np.mean(single_tumor_prop[idx]),
                 **kwargs
         )
-        """"
+        '''
 
         for c in range(n_clones):
             if np.sum(single_base_nb_mean[:,i:(i+1)] > 0) > 0 and np.sum(single_total_bb_RD[:,i:(i+1)] > 0) > 0:
