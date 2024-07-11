@@ -21,14 +21,14 @@ os.environ["OPENBLAS_NUM_THREADS"] = "1"
 os.environ["OMP_NUM_THREADS"] = "1"
 
 
-def convert_params(mean, std):
+def convert_params(mean, alpha):
     """
     Convert mean/dispersion parameterization of a negative binomial to the ones scipy supports
 
     See https://mathworld.wolfram.com/NegativeBinomialDistribution.html
     """
-    p = mean/std**2
-    n = mean*p/(1.0 - p)
+    p = 1.0 / (1.0 + mean * alpha)
+    n = 1.0 / alpha
     return n, p
 
 
@@ -59,8 +59,8 @@ class Weighted_NegativeBinomial(GenericLikelihoodModel):
     #
     def nloglikeobs(self, params):
         nb_mean = np.exp(self.exog @ params[:-1]) * self.exposure
-        nb_std = np.sqrt(nb_mean + params[-1] * nb_mean**2)
-        n, p = convert_params(nb_mean, nb_std)
+        # nb_std = np.sqrt(nb_mean + params[-1] * nb_mean**2)
+        n, p = convert_params(nb_mean, params[-1])
         llf = scipy.stats.nbinom.logpmf(self.endog, n, p)
         neg_sum_llf = -llf.dot(self.weights)
         return neg_sum_llf
@@ -88,8 +88,8 @@ class Weighted_NegativeBinomial_mix(GenericLikelihoodModel):
     #
     def nloglikeobs(self, params):
         nb_mean = self.exposure * (self.tumor_prop * np.exp(self.exog @ params[:-1]) + 1 - self.tumor_prop)
-        nb_std = np.sqrt(nb_mean + params[-1] * nb_mean**2)
-        n, p = convert_params(nb_mean, nb_std)
+        # nb_std = np.sqrt(nb_mean + params[-1] * nb_mean**2)
+        n, p = convert_params(nb_mean, params[-1])
         llf = scipy.stats.nbinom.logpmf(self.endog, n, p)
         neg_sum_llf = -llf.dot(self.weights)
         return neg_sum_llf

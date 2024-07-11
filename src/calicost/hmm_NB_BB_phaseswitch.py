@@ -79,8 +79,8 @@ class hmm_sitewise(object):
                 idx_nonzero_rdr = np.where(base_nb_mean[:,s] > 0)[0]
                 if len(idx_nonzero_rdr) > 0:
                     nb_mean = base_nb_mean[idx_nonzero_rdr,s] * np.exp(log_mu[i, s])
-                    nb_std = np.sqrt(nb_mean + alphas[i, s] * nb_mean**2)
-                    n, p = convert_params(nb_mean, nb_std)
+                    # nb_std = np.sqrt(nb_mean + alphas[i, s] * nb_mean**2)
+                    n, p = convert_params(nb_mean, alphas[i, s])
                     log_emission_rdr[i, idx_nonzero_rdr, s] = scipy.stats.nbinom.logpmf(X[idx_nonzero_rdr, 0, s], n, p)
                     log_emission_rdr[i + n_states, idx_nonzero_rdr, s] = log_emission_rdr[i, idx_nonzero_rdr, s]
                 # AF from BetaBinom distribution
@@ -134,8 +134,8 @@ class hmm_sitewise(object):
                 idx_nonzero_rdr = np.where(base_nb_mean[:,s] > 0)[0]
                 if len(idx_nonzero_rdr) > 0:
                     nb_mean = base_nb_mean[idx_nonzero_rdr,s] * (tumor_prop[idx_nonzero_rdr,s] * np.exp(log_mu[i, s]) + 1 - tumor_prop[idx_nonzero_rdr,s])
-                    nb_std = np.sqrt(nb_mean + alphas[i, s] * nb_mean**2)
-                    n, p = convert_params(nb_mean, nb_std)
+                    # nb_std = np.sqrt(nb_mean + alphas[i, s] * nb_mean**2)
+                    n, p = convert_params(nb_mean, alphas[i, s])
                     log_emission_rdr[i, idx_nonzero_rdr, s] = scipy.stats.nbinom.logpmf(X[idx_nonzero_rdr, 0, s], n, p)
                     log_emission_rdr[i + n_states, idx_nonzero_rdr, s] = log_emission_rdr[i, idx_nonzero_rdr, s]
                 # AF from BetaBinom distribution
