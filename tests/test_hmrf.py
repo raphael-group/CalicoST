@@ -307,10 +307,12 @@ def test_hmrfmix_reassignment_posterior_concatenate_emission_v3_exp(
             new_taus,
             np.tile(single_tumor_prop, (n_obs, 1)),
         )
-
+    """
     log_emission_rdr = benchmark.pedantic(
         get_exp, iterations=ITERATIONS, rounds=ROUNDS
     )
+    """
+    log_emission_rdr = benchmark(get_exp)
 
 
 def test_hmrfmix_reassignment_posterior_concatenate_emission_v3(
@@ -353,10 +355,13 @@ def test_hmrfmix_reassignment_posterior_concatenate_emission_v3(
         new_taus,
         np.tile(single_tumor_prop, (n_obs, 1)),
     )
-
+    """
     log_emission_rdr = benchmark.pedantic(
         benchmark_v3, iterations=ITERATIONS, rounds=ROUNDS
     )
+    """
+
+    log_emission_rdr = benchmark(benchmark_v3)
 
     print(f"\n{exp[0,0,:]}")
     print(f"\n{log_emission_rdr[0,0,:]}")

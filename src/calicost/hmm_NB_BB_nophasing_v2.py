@@ -213,10 +213,10 @@ class hmm_nophasing_v2(object):
         nn, pp = convert_params_var(nb_mean, nb_var)
 
         # TODO HACK
-        nn = np.round(nn)
+        ## nn = np.round(nn)
         
         idx = np.tile(base_nb_mean > 0., (n_states, 1, 1))
-        log_emission_rdr[idx] = kk[idx] * np.log(1. - pp[idx]) + nn[idx] * np.log(pp[idx]); # scipy.stats.nbinom.logpmf(kk[idx], nn[idx], pp[idx])
+        log_emission_rdr[idx] = scipy.stats.nbinom.logpmf(kk[idx], nn[idx], pp[idx])
 
         return log_emission_rdr
         
