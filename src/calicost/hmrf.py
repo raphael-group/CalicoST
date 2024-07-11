@@ -762,21 +762,20 @@ def hmrfmix_pipeline(outdir, prefix, single_X, lengths, single_base_nb_mean, sin
             log_persample_weights[:, sidx] = log_persample_weights[:, sidx] - scipy.special.logsumexp(log_persample_weights[:, sidx])
 
 def hmrfmix_reassignment_posterior_concatenate_emission_v1(
-        single_X,
-        single_base_nb_mean,
-        single_total_bb_RD,
-        single_tumor_prop,
-        new_log_mu,
-        new_alphas,
-        new_p_binom,
-        new_taus,
-        smooth_mat,
-        hmmclass,
-        logmu_shift,
-        sample_length,
-        dry_run=False,
-    ):
-
+    single_X,
+    single_base_nb_mean,
+    single_total_bb_RD,
+    single_tumor_prop,
+    new_log_mu,
+    new_alphas,
+    new_p_binom,
+    new_taus,
+    smooth_mat,
+    hmmclass,
+    logmu_shift,
+    sample_length,
+    dry_run=False,
+):
     n_states = new_log_mu.shape[0]
     n_obs, _, N = single_X.shape
 
