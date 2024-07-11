@@ -194,6 +194,34 @@ class hmm_nophasing_v2(object):
 
     @staticmethod
     @line_profiler.profile
+    def compute_emission_probability_nb_mix(X, base_nb_mean, log_mu, alphas, total_bb_RD, p_binom, taus, tumor_prop, **kwargs):
+        n_states = log_mu.shape[0]
+        n_obs, n_comp, n_spots = X.shape
+        
+        # NB (n_states, n_obs, n_spots) == (7, 4248, 1)
+        log_emission_rdr = np.zeros(shape=(n_states, n_obs, n_spots), dtype=float)
+
+        assert base_nb_mean.shape == (n_obs, n_spots)
+        assert tumor_prop.shape == (n_obs, n_spots)
+        assert log_mu.shape == (n_states, n_spots)
+        
+        # NB nb_mean, nb_std: (segments, spots) * (states, spots) = (states, segments, spots) == (7, 4248, 1)
+        nb_mean = base_nb_mean[None, :, :] * (tumor_prop[None, :, :] * np.exp(log_mu)[:, None, :] + 1. - tumor_prop[None, :, :])
+        nb_var = nb_mean + alphas[:, None, :] * nb_mean**2
+        
+        kk = np.tile(X[:, 0, :], (n_states, 1, 1))
+        nn, pp = convert_params_var(nb_mean, nb_var)
+
+        # TODO HACK
+        nn = np.round(nn)
+        
+        idx = np.tile(base_nb_mean > 0., (n_states, 1, 1))
+        log_emission_rdr[idx] = kk[idx] * np.log(1. - pp[idx]) + nn[idx] * np.log(pp[idx]); # scipy.stats.nbinom.logpmf(kk[idx], nn[idx], pp[idx])
+
+        return log_emission_rdr
+        
+    @staticmethod
+    @line_profiler.profile
     def compute_emission_probability_nb_betabinom_mix(X, base_nb_mean, log_mu, alphas, total_bb_RD, p_binom, taus, tumor_prop, **kwargs):
         """
         Attributes
