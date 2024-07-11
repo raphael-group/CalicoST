@@ -59,8 +59,8 @@ class Weighted_NegativeBinomial(GenericLikelihoodModel):
     #
     def nloglikeobs(self, params):
         nb_mean = np.exp(self.exog @ params[:-1]) * self.exposure
-        nb_std = np.sqrt(nb_mean + params[-1] * nb_mean**2)
-        n, p = convert_params(nb_mean, nb_std)
+        # nb_std = np.sqrt(nb_mean + params[-1] * nb_mean**2)
+        n, p = convert_params(nb_mean, params[-1])
         llf = scipy.stats.nbinom.logpmf(self.endog, n, p)
         neg_sum_llf = -llf.dot(self.weights)
         return neg_sum_llf
@@ -88,8 +88,8 @@ class Weighted_NegativeBinomial_mix(GenericLikelihoodModel):
     #
     def nloglikeobs(self, params):
         nb_mean = self.exposure * (self.tumor_prop * np.exp(self.exog @ params[:-1]) + 1 - self.tumor_prop)
-        nb_std = np.sqrt(nb_mean + params[-1] * nb_mean**2)
-        n, p = convert_params(nb_mean, nb_std)
+        # nb_std = np.sqrt(nb_mean + params[-1] * nb_mean**2)
+        n, p = convert_params(nb_mean, params[-1])
         llf = scipy.stats.nbinom.logpmf(self.endog, n, p)
         neg_sum_llf = -llf.dot(self.weights)
         return neg_sum_llf
