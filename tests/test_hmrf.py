@@ -277,84 +277,7 @@ def test_hmrfmix_reassignment_posterior_concatenate_emission_v2(
     assert np.allclose(tmp_log_emission_rdr, exp[0])
     assert np.allclose(tmp_log_emission_baf, exp[1])
 
-
-@pytest.mark.skip(reason="deprecate")
-def test_get_tumor_weight_v1(benchmark, spatial_data):
-    (
-        kwargs,
-        res,
-        single_base_nb_mean,
-        single_tumor_prop,
-        single_X,
-        single_total_bb_RD,
-        smooth_mat,
-        hmm,
-        new_log_mu,
-        new_alphas,
-        new_p_binom,
-        new_taus,
-    ) = spatial_data
-
-    n_obs, _, n_spots = single_X.shape
-
-    sample_lengths = kwargs["sample_length"]
-    logmu_shift = kwargs["logmu_shift"]
-
-    single_tumor_prop = np.tile(single_tumor_prop, (n_obs, 1))
-
-    def get_exp():
-        return get_tumor_weight_v1(
-            sample_lengths, single_tumor_prop, new_log_mu, logmu_shift
-        )
-
-    benchmark.group = "get_tumor_weight"
-    result = benchmark(get_exp)
-
-
-@pytest.mark.skip(reason="deprecate")
-def test_get_tumor_weight(benchmark, spatial_data):
-    (
-        kwargs,
-        res,
-        single_base_nb_mean,
-        single_tumor_prop,
-        single_X,
-        single_total_bb_RD,
-        smooth_mat,
-        hmm,
-        new_log_mu,
-        new_alphas,
-        new_p_binom,
-        new_taus,
-    ) = spatial_data
-
-    n_obs, _, n_spots = single_X.shape
-
-    sample_lengths = kwargs["sample_length"]
-    logmu_shift = kwargs["logmu_shift"]
-
-    single_tumor_prop = np.tile(single_tumor_prop, (n_obs, 1))
-
-    def get_result():
-        return get_tumor_weight(
-            sample_lengths, single_tumor_prop, new_log_mu, logmu_shift
-        )
-
-    exp = get_tumor_weight_v1(
-        sample_lengths, single_tumor_prop, new_log_mu, logmu_shift
-    )
-
-    benchmark.group = "get_tumor_weight"
-    result = benchmark(get_result)
-
-    print()
-    print(exp[0, 0, :])
-    print(result[0, 0, :])
-
-    assert np.allclose(exp, result, atol=1.0e-6, equal_nan=True)
-
-
-def test_compute_emission_probability_nb_mix_exp(benchmark, spatial_data):
+def test_compute_emission_probability_nb_exp(benchmark, spatial_data):
     """
     Tests the vectorized emission for the nb only.  Expected result.
     """
@@ -376,7 +299,7 @@ def test_compute_emission_probability_nb_mix_exp(benchmark, spatial_data):
     n_obs, _, n_spots = single_X.shape
 
     def get_exp():
-        return hmm.compute_emission_probability_nb_mix(
+        return hmm.compute_emission_probability_nb(
             single_X,
             single_base_nb_mean,
             new_log_mu,
@@ -387,7 +310,7 @@ def test_compute_emission_probability_nb_mix_exp(benchmark, spatial_data):
             np.tile(single_tumor_prop, (n_obs, 1)),
         )
 
-    benchmark.group = "compute_emission_probability_nb_mix"
+    benchmark.group = "compute_emission_probability_nb"
     log_emission_rdr = benchmark(get_exp)
 
 
@@ -663,6 +586,10 @@ def test_compute_emission_probability_nb(benchmark, spatial_data):
     good = np.isclose(log_emission_rdr, exp, atol=1.0e-6, equal_nan=True)
     mean = np.mean(good)
 
+    print(mean)
+    print(log_emission_rdr[0,0,:])
+    print(exp[0,0,:])
+    
     # NB TODO Rust NaNs matched to 0.0s
     assert mean >= 0.99997
 
