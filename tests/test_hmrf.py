@@ -510,9 +510,6 @@ def test_compute_emission_probability_bb_mix_weighted(benchmark, spatial_data):
 
     # TODO HACK ask Cong.
     logmu_shift = np.tile(logmu_shift, (1, n_spots))
-    tumor_weight = get_tumor_weight(
-        sample_lengths, single_tumor_prop, new_log_mu, logmu_shift
-    )
     
     def get_result():
         return core.compute_emission_probability_bb_mix_weighted(
@@ -535,7 +532,9 @@ def test_compute_emission_probability_bb_mix_weighted(benchmark, spatial_data):
         new_p_binom,
         new_taus,
         single_tumor_prop,
-        tumor_weight=tumor_weight,
+        tumor_weight=get_tumor_weight(
+        sample_lengths, single_tumor_prop, new_log_mu, logmu_shift
+    )
     )
 
     benchmark.group = "compute_emission_probability_bb_mix_weighted"
@@ -550,9 +549,9 @@ def test_compute_emission_probability_bb_mix_weighted(benchmark, spatial_data):
     print(np.nanmin(exp), exp[0, 0, :])
 
     # NB TODO Rust NaNs matched to 0.0s
-    # assert mean >= 0.9998
+    assert mean >= 0.9998
 
-
+    
 def test_compute_emission_probability_bb_mix(benchmark, spatial_data):
     """
     Tests the vectorized emission for the bb only.
