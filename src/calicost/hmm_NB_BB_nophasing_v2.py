@@ -211,15 +211,48 @@ class hmm_nophasing_v2(object):
         
         kk = np.tile(X[:, 0, :], (n_states, 1, 1))
         nn, pp = convert_params_var(nb_mean, nb_var)
-
-        # TODO HACK
-        ## nn = np.round(nn)
         
         idx = np.tile(base_nb_mean > 0., (n_states, 1, 1))
         log_emission_rdr[idx] = scipy.stats.nbinom.logpmf(kk[idx], nn[idx], pp[idx])
 
         return log_emission_rdr
+
+    @staticmethod
+    @line_profiler.profile
+    def compute_emission_probability_bb_mix(X, base_nb_mean, total_bb_RD, p_binom, taus, tumor_prop, tumor_weight=None):
+        n_states = p_binom.shape[0]
+        n_obs, n_comp, n_spots = X.shape
+
+        assert base_nb_mean.shape == (n_obs, n_spots)
+        assert tumor_prop.shape == (n_obs, n_spots)
+        assert p_binom.shape == (n_states, n_spots)
+
+        log_emission_baf = np.zeros((n_states, n_obs, n_spots))
+        """
+        for i in np.arange(n_states):
+            for s in np.arange(n_spots):
+                idx_nonzero_baf = np.where(total_bb_RD[:,s] > 0)[0]
+                
+                if len(idx_nonzero_baf) > 0:
+                    log_emission_baf[i, idx_nonzero_baf, s] = scipy.stats.betabinom.logpmf(X[idx_nonzero_baf,1,s], total_bb_RD[idx_nonzero_baf,s], p_binom[i, s] * taus[i, s], (1-p_binom[i, s]) * taus[i, s])
+        """
+        if tumor_weight is None:
+            tumor_weight = tumor_prop
         
+        mix_p_A = p_binom[:, None, :] * tumor_weight + 0.5 * (1. - tumor_weight)
+        mix_p_B = (1. - p_binom)[:, None, :] * tumor_weight + 0.5 * (1. - tumor_weight)
+
+        aa = mix_p_A * taus[:, None, :]
+        bb = mix_p_B * taus[:, None, :]
+
+        kk = np.tile(X[:, 1, :], (n_states, 1, 1))
+        nn = np.tile(total_bb_RD[:, :], (n_states, 1, 1))
+
+        idx = np.tile(total_bb_RD > 0., (n_states, 1, 1))
+
+        log_emission_baf[idx] = scipy.stats.betabinom.logpmf(kk[idx], nn[idx], aa[idx], bb[idx])                                                                                                                            
+        return log_emission_baf
+    
     @staticmethod
     @line_profiler.profile
     def compute_emission_probability_nb_betabinom_mix(X, base_nb_mean, log_mu, alphas, total_bb_RD, p_binom, taus, tumor_prop, **kwargs):

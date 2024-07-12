@@ -6,6 +6,7 @@ from scipy.sparse import csr_matrix
 from calicost.hmm_NB_BB_nophasing_v2 import hmm_nophasing_v2
 from calicost.hmrf import hmrfmix_reassignment_posterior_concatenate_emission_v1
 from calicost.hmrf import hmrfmix_reassignment_posterior_concatenate_emission_v2
+from calicost.utils_tumor import get_tumor_weight
 
 ITERATIONS = ROUNDS = 1
 
@@ -97,7 +98,7 @@ def get_spatial_data():
     n_clones = len(kwargs["sample_length"])
 
     # TODO
-    new_log_mu = np.log(2.0 + 2. * np.random.uniform(size=N))
+    new_log_mu = np.log(2.0 + 2.0 * np.random.uniform(size=N))
     new_log_mu = np.tile(new_log_mu, (n_states, 1))
 
     new_alphas = 0.01 * np.ones_like(new_log_mu, dtype=float)
@@ -177,6 +178,7 @@ def test_get_spatial_data(spatial_data):
     assert new_p_binom.shape == new_p_binom.shape
     assert new_taus == new_taus.shape
 
+
 @pytest.mark.skip(reason="This test is currently not needed")
 def test_hmrfmix_reassignment_posterior_concatenate_emission_v1(
     benchmark, spatial_data
@@ -223,6 +225,7 @@ def test_hmrfmix_reassignment_posterior_concatenate_emission_v1(
         )
 
     benchmark.pedantic(benchmark_v1, iterations=ITERATIONS, rounds=ROUNDS)
+
 
 @pytest.mark.skip(reason="This test is currently not needed")
 def test_hmrfmix_reassignment_posterior_concatenate_emission_v2(
@@ -275,9 +278,8 @@ def test_hmrfmix_reassignment_posterior_concatenate_emission_v2(
     assert np.allclose(tmp_log_emission_rdr, exp[0])
     assert np.allclose(tmp_log_emission_baf, exp[1])
 
-def test_hmrfmix_reassignment_posterior_concatenate_emission_v3_exp(
-    benchmark, spatial_data
-):
+
+def test_compute_emission_probability_nb_mix_exp(benchmark, spatial_data):
     (
         kwargs,
         res,
@@ -307,17 +309,118 @@ def test_hmrfmix_reassignment_posterior_concatenate_emission_v3_exp(
             new_taus,
             np.tile(single_tumor_prop, (n_obs, 1)),
         )
-    """
-    log_emission_rdr = benchmark.pedantic(
-        get_exp, iterations=ITERATIONS, rounds=ROUNDS
-    )
-    """
+
     log_emission_rdr = benchmark(get_exp)
 
 
-def test_hmrfmix_reassignment_posterior_concatenate_emission_v3(
-    benchmark, spatial_data
-):
+def test_compute_emission_probability_bb_mix_exp(benchmark, spatial_data):
+    (
+        kwargs,
+        res,
+        single_base_nb_mean,
+        single_tumor_prop,
+        single_X,
+        single_total_bb_RD,
+        smooth_mat,
+        hmm,
+        new_log_mu,
+        new_alphas,
+        new_p_binom,
+        new_taus,
+        _,
+    ) = spatial_data
+
+    n_obs, _, n_spots = single_X.shape
+
+    sample_lengths = kwargs["sample_length"]
+    logmu_shift = kwargs["logmu_shift"]
+
+    single_tumor_prop = np.tile(single_tumor_prop, (n_obs, 1))
+
+    # TODO HACK ask Cong.
+    logmu_shift = np.tile(logmu_shift, (1, n_spots))
+    tumor_weight = get_tumor_weight(sample_lengths, single_tumor_prop, new_log_mu, logmu_shift)
+
+    # tumor_weight=tumor_weight
+    def get_exp():
+        return hmm.compute_emission_probability_bb_mix(
+            single_X,
+            single_base_nb_mean,
+            single_total_bb_RD,
+            new_p_binom,
+            new_taus,
+            single_tumor_prop,
+            tumor_weight = tumor_weight
+        )
+
+    log_emission_baf = benchmark(get_exp)
+
+    # print(np.nanmin(log_emission_baf), log_emission_baf[0, 0, :])
+
+
+def test_compute_emission_probability_bb_mix(benchmark, spatial_data):
+    (
+        kwargs,
+        res,
+        single_base_nb_mean,
+        single_tumor_prop,
+        single_X,
+        single_total_bb_RD,
+        smooth_mat,
+        hmm,
+        new_log_mu,
+        new_alphas,
+        new_p_binom,
+        new_taus,
+        _,
+    ) = spatial_data
+
+    n_obs, _, n_spots = single_X.shape
+
+    sample_lengths = kwargs["sample_length"]
+    logmu_shift = kwargs["logmu_shift"]
+
+    single_tumor_prop = np.tile(single_tumor_prop, (n_obs, 1))
+
+    # TODO HACK ask Cong.
+    logmu_shift = np.tile(logmu_shift, (1, n_spots))
+    # tumor_weight = get_tumor_weight(sample_lengths, single_tumor_prop, new_log_mu, logmu_shift)
+
+    def get_result():
+        return core.compute_emission_probability_bb_mix(
+            single_X[:, 1, :],
+            single_base_nb_mean,
+            single_total_bb_RD.astype(float),
+            new_p_binom,
+            new_taus,
+            single_tumor_prop,
+        )
+
+    # TODO tumor_weight=tumor_weight
+    exp = hmm.compute_emission_probability_bb_mix(
+        single_X,
+        single_base_nb_mean,
+        single_total_bb_RD,
+        new_p_binom,
+        new_taus,
+        single_tumor_prop,
+    )
+
+    log_emission_baf = benchmark(get_result)
+
+    good = np.isclose(log_emission_baf, exp, atol=1.0e-6, equal_nan=True)
+    mean = np.mean(good)
+
+    print()
+    print(mean)
+    print(np.nanmin(log_emission_baf), log_emission_baf[0, 0, :])
+    print(np.nanmin(exp), exp[0, 0, :])
+    
+    # NB TODO Rust NaNs matched to 0.0s
+    assert mean >= 0.9998
+    
+
+def test_compute_emission_probability_nb_mix(benchmark, spatial_data):
     (
         kwargs,
         res,
@@ -355,6 +458,7 @@ def test_hmrfmix_reassignment_posterior_concatenate_emission_v3(
         new_taus,
         np.tile(single_tumor_prop, (n_obs, 1)),
     )
+
     """
     log_emission_rdr = benchmark.pedantic(
         benchmark_v3, iterations=ITERATIONS, rounds=ROUNDS
@@ -363,10 +467,11 @@ def test_hmrfmix_reassignment_posterior_concatenate_emission_v3(
 
     log_emission_rdr = benchmark(benchmark_v3)
 
-    print(f"\n{exp[0,0,:]}")
-    print(f"\n{log_emission_rdr[0,0,:]}")
-    
-    # assert np.allclose(tmp_log_emission_rdr, exp_rdr)
+    good = np.isclose(log_emission_rdr, exp, atol=1.0e-6, equal_nan=True)
+    mean = np.mean(good)
+
+    # NB TODO Rust NaNs matched to 0.0s
+    assert mean >= 0.99997
 
 
 @line_profiler.profile
