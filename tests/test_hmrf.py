@@ -42,8 +42,10 @@ def get_raw_spatial_data():
     )
 
 
-@pytest.mark.skip(reason="This test is currently not needed")
 def test_get_raw_spatial_data():
+    """
+    Explicit demo of expected shapes, etc.
+    """
     (
         res,
         single_base_nb_mean,
@@ -76,6 +78,9 @@ def test_get_raw_spatial_data():
 
 
 def get_spatial_data():
+    """
+    Raw data + generated model parameters.
+    """
     np.random.seed(314)
 
     # TODO HACK
@@ -131,7 +136,6 @@ def spatial_data():
     return get_spatial_data()
 
 
-@pytest.mark.skip(reason="This test is currently not needed")
 def test_get_spatial_data(spatial_data):
     (
         kwargs,
@@ -160,15 +164,14 @@ def test_get_spatial_data(spatial_data):
     assert new_taus == new_taus.shape
 
 
-@pytest.mark.skip(reason="This test is currently not needed")
 def test_hmrfmix_reassignment_posterior_concatenate_emission_v1(
     benchmark, spatial_data
 ):
     """
     pytest -s test_hmrf.py::test_hmrfmix_reassignment_posterior_concatenate_emission_v1
 
-    Tests the original loop version of the HMRF emission calc.  Calls the underlying
-    hmm.emission calc.
+    Tests the original loop version of the HMRF emission calc.
+    Calls the underlying hmm.emission calc for each of n_spots.
     """
     (
         kwargs,
@@ -188,7 +191,7 @@ def test_hmrfmix_reassignment_posterior_concatenate_emission_v1(
     def benchmark_v1():
         # See emacs +764 ../src/calicost/hmrf.py
         #     emacs +201 ../src/calicost/hmm_NB_BB_nophasing_v2.py
-        hmrfmix_reassignment_posterior_concatenate_emission_v1(
+        return hmrfmix_reassignment_posterior_concatenate_emission_v1(
             single_X,
             single_base_nb_mean,
             single_total_bb_RD,
@@ -204,7 +207,8 @@ def test_hmrfmix_reassignment_posterior_concatenate_emission_v1(
             dry_run=True,
         )
 
-    benchmark.pedantic(benchmark_v1, iterations=ITERATIONS, rounds=ROUNDS)
+    benchmark.group = "hmrfmix_reassignment_posterior_concatenate_emission"
+    benchmark(benchmark_v1)
 
 
 @pytest.mark.skip(reason="This test is currently not needed")
@@ -214,8 +218,7 @@ def test_hmrfmix_reassignment_posterior_concatenate_emission_v2(
     """
     pytest -s test_hmrf.py::test_hmrfmix_reassignment_posterior_concatenate_emission_v2
 
-    Tests the new loop version of the HMRF emission calc.  Calls the underlying
-    hmm.emission calc.
+    Tests the new vectorized version of the HMRF emission calc.
     """
     (
         kwargs,
@@ -250,9 +253,8 @@ def test_hmrfmix_reassignment_posterior_concatenate_emission_v2(
             kwargs["sample_length"],
         )
 
-    tmp_log_emission_rdr, tmp_log_emission_baf = benchmark.pedantic(
-        benchmark_v2, iterations=ITERATIONS, rounds=ROUNDS
-    )
+    benchmark.group = "hmrfmix_reassignment_posterior_concatenate_emission"
+    tmp_log_emission_rdr, tmp_log_emission_baf = benchmark(benchmark_v2)
 
     # See emacs +764 ../src/calicost/hmrf.py                                                                                                                                                                     
     #     emacs +201 ../src/calicost/hmm_NB_BB_nophasing_v2.py                                                                                                                                                   
@@ -276,6 +278,9 @@ def test_hmrfmix_reassignment_posterior_concatenate_emission_v2(
 
 
 def test_compute_emission_probability_nb_mix_exp(benchmark, spatial_data):
+    """
+    Tests the vectorized emission for the nb only.  Expected result.
+    """
     (
         kwargs,
         res,
@@ -305,10 +310,14 @@ def test_compute_emission_probability_nb_mix_exp(benchmark, spatial_data):
             np.tile(single_tumor_prop, (n_obs, 1)),
         )
 
+    benchmark.group = "compute_emission_probability_nb_mix"
     log_emission_rdr = benchmark(get_exp)
 
 
 def test_compute_emission_probability_bb_mix_exp(benchmark, spatial_data):
+    """                                                                                                                                                                                                          
+    Tests the vectorized emission for the bb only.  Expected result.                                                                                                                                             
+    """
     (
         kwargs,
         res,
@@ -347,10 +356,14 @@ def test_compute_emission_probability_bb_mix_exp(benchmark, spatial_data):
             tumor_weight = tumor_weight
         )
 
+    benchmark.group = "compute_emission_probability_bb_mix"
     log_emission_baf = benchmark(get_exp)
 
 
 def test_compute_emission_probability_bb_mix(benchmark, spatial_data):
+    """                                                                                                                                                                                                          
+    Tests the vectorized emission for the bb only.
+    """
     (
         kwargs,
         res,
@@ -397,6 +410,7 @@ def test_compute_emission_probability_bb_mix(benchmark, spatial_data):
         single_tumor_prop,
     )
 
+    benchmark.group = "compute_emission_probability_bb_mix"
     log_emission_baf = benchmark(get_result)
 
     good = np.isclose(log_emission_baf, exp, atol=1.0e-6, equal_nan=True)
@@ -412,6 +426,9 @@ def test_compute_emission_probability_bb_mix(benchmark, spatial_data):
     
 
 def test_compute_emission_probability_nb_mix(benchmark, spatial_data):
+    """                                                                                                                                                                                                          
+    Tests the vectorized emission for the nb only.
+    """
     (
         kwargs,
         res,
@@ -455,6 +472,7 @@ def test_compute_emission_probability_nb_mix(benchmark, spatial_data):
     )
     """
 
+    benchmark.group = "compute_emission_probability_nb_mix"
     log_emission_rdr = benchmark(benchmark_v3)
 
     good = np.isclose(log_emission_rdr, exp, atol=1.0e-6, equal_nan=True)
@@ -466,6 +484,9 @@ def test_compute_emission_probability_nb_mix(benchmark, spatial_data):
 
 @line_profiler.profile
 def profile(iterations=ITERATIONS):
+    """
+    Wrapper for line_profiler.
+    """
     (
         kwargs,
         res,
