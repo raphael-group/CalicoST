@@ -110,23 +110,6 @@ def get_spatial_data():
 
     hmm = hmm_nophasing_v2()
 
-    # See emacs +764 ../src/calicost/hmrf.py
-    #     emacs +201 ../src/calicost/hmm_NB_BB_nophasing_v2.py
-    exp = hmrfmix_reassignment_posterior_concatenate_emission_v1(
-        single_X,
-        single_base_nb_mean,
-        single_total_bb_RD,
-        single_tumor_prop,
-        new_log_mu,
-        new_alphas,
-        new_p_binom,
-        new_taus,
-        smooth_mat,
-        hmm,
-        kwargs["logmu_shift"],
-        kwargs["sample_length"],
-    )
-
     return (
         kwargs,
         res,
@@ -140,7 +123,6 @@ def get_spatial_data():
         new_alphas,
         new_p_binom,
         new_taus,
-        exp,
     )
 
 
@@ -164,7 +146,6 @@ def test_get_spatial_data(spatial_data):
         new_alphas,
         new_p_binom,
         new_taus,
-        exp,
     ) = spatial_data
 
     # NB usually n_spots, or one spot / clone.
@@ -202,7 +183,6 @@ def test_hmrfmix_reassignment_posterior_concatenate_emission_v1(
         new_alphas,
         new_p_binom,
         new_taus,
-        exp,
     ) = spatial_data
 
     def benchmark_v1():
@@ -250,7 +230,6 @@ def test_hmrfmix_reassignment_posterior_concatenate_emission_v2(
         new_alphas,
         new_p_binom,
         new_taus,
-        exp,
     ) = spatial_data
 
     def benchmark_v2():
@@ -275,6 +254,23 @@ def test_hmrfmix_reassignment_posterior_concatenate_emission_v2(
         benchmark_v2, iterations=ITERATIONS, rounds=ROUNDS
     )
 
+    # See emacs +764 ../src/calicost/hmrf.py                                                                                                                                                                     
+    #     emacs +201 ../src/calicost/hmm_NB_BB_nophasing_v2.py                                                                                                                                                   
+    exp = hmrfmix_reassignment_posterior_concatenate_emission_v1(
+        single_X,
+        single_base_nb_mean,
+        single_total_bb_RD,
+        single_tumor_prop,
+        new_log_mu,
+        new_alphas,
+        new_p_binom,
+        new_taus,
+        smooth_mat,
+        hmm,
+        kwargs["logmu_shift"],
+        kwargs["sample_length"],
+    )
+    
     assert np.allclose(tmp_log_emission_rdr, exp[0])
     assert np.allclose(tmp_log_emission_baf, exp[1])
 
@@ -293,7 +289,6 @@ def test_compute_emission_probability_nb_mix_exp(benchmark, spatial_data):
         new_alphas,
         new_p_binom,
         new_taus,
-        _,
     ) = spatial_data
 
     n_obs, _, n_spots = single_X.shape
@@ -327,7 +322,6 @@ def test_compute_emission_probability_bb_mix_exp(benchmark, spatial_data):
         new_alphas,
         new_p_binom,
         new_taus,
-        _,
     ) = spatial_data
 
     n_obs, _, n_spots = single_X.shape
@@ -355,8 +349,6 @@ def test_compute_emission_probability_bb_mix_exp(benchmark, spatial_data):
 
     log_emission_baf = benchmark(get_exp)
 
-    # print(np.nanmin(log_emission_baf), log_emission_baf[0, 0, :])
-
 
 def test_compute_emission_probability_bb_mix(benchmark, spatial_data):
     (
@@ -372,7 +364,6 @@ def test_compute_emission_probability_bb_mix(benchmark, spatial_data):
         new_alphas,
         new_p_binom,
         new_taus,
-        _,
     ) = spatial_data
 
     n_obs, _, n_spots = single_X.shape
@@ -434,7 +425,6 @@ def test_compute_emission_probability_nb_mix(benchmark, spatial_data):
         new_alphas,
         new_p_binom,
         new_taus,
-        _,
     ) = spatial_data
 
     n_obs, _, n_spots = single_X.shape
