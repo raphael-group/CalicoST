@@ -6,7 +6,7 @@ from scipy.sparse import csr_matrix
 from calicost.hmm_NB_BB_nophasing_v2 import hmm_nophasing_v2
 from calicost.hmrf import hmrfmix_reassignment_posterior_concatenate_emission_v1
 from calicost.hmrf import hmrfmix_reassignment_posterior_concatenate_emission_v2
-from calicost.utils_tumor import get_tumor_weight_v1, get_tumor_weight
+from calicost.utils_tumor import get_tumor_weight, get_tumor_weight
 
 ITERATIONS = ROUNDS = 1
 
