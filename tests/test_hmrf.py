@@ -86,7 +86,7 @@ def get_spatial_data():
 
     # TODO HACK
     # see https://github.com/raphael-group/CalicoST/blob/4696325d5ca103d0d72ea2d471c60d1d753b097b/src/calicost/hmrf.py#L765
-    n_states = 3
+    n_states = 4
 
     (
         res,
