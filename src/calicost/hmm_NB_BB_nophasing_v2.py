@@ -194,7 +194,7 @@ class hmm_nophasing_v2(object):
 
     @staticmethod
     @line_profiler.profile
-    def compute_emission_probability_nb_mix(X, base_nb_mean, log_mu, alphas, total_bb_RD, p_binom, taus, tumor_prop, **kwargs):
+    def compute_emission_probability_nb(X, base_nb_mean, log_mu, alphas, total_bb_RD, p_binom, taus, tumor_prop, **kwargs):
         n_states = log_mu.shape[0]
         n_obs, n_comp, n_spots = X.shape
         

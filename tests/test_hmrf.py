@@ -616,7 +616,7 @@ def test_compute_emission_probability_bb_mix(benchmark, spatial_data):
     assert mean >= 0.9998
 
 
-def test_compute_emission_probability_nb_mix(benchmark, spatial_data):
+def test_compute_emission_probability_nb(benchmark, spatial_data):
     """
     Tests the vectorized emission for the nb only.
     """
@@ -638,7 +638,7 @@ def test_compute_emission_probability_nb_mix(benchmark, spatial_data):
     n_obs, _, n_spots = single_X.shape
 
     def benchmark_v3():
-        return core.compute_emission_probability_nb_mix(
+        return core.compute_emission_probability_nb(
             single_X[:, 0, :],
             single_base_nb_mean,
             np.tile(single_tumor_prop, (n_obs, 1)),
@@ -646,7 +646,7 @@ def test_compute_emission_probability_nb_mix(benchmark, spatial_data):
             new_alphas,
         )
 
-    exp = hmm.compute_emission_probability_nb_mix(
+    exp = hmm.compute_emission_probability_nb(
         single_X,
         single_base_nb_mean,
         new_log_mu,
@@ -657,7 +657,7 @@ def test_compute_emission_probability_nb_mix(benchmark, spatial_data):
         np.tile(single_tumor_prop, (n_obs, 1)),
     )
     
-    benchmark.group = "compute_emission_probability_nb_mix"
+    benchmark.group = "compute_emission_probability_nb"
     log_emission_rdr = benchmark(benchmark_v3)
 
     good = np.isclose(log_emission_rdr, exp, atol=1.0e-6, equal_nan=True)
