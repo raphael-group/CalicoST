@@ -156,7 +156,8 @@ def load_joint_data(input_filelist, snp_dir, alignment_files, filtergenelist_fil
             adatatmp = sc.read_h5ad(f"{df_meta['spaceranger_dir'].iloc[i]}/filtered_feature_bc_matrix.h5ad")
         else:
             logging.error(f"{df_meta['spaceranger_dir'].iloc[i]} directory doesn't have a filtered_feature_bc_matrix.h5 or filtered_feature_bc_matrix.h5ad file!")
-
+            raise RuntimeError()
+            
         adatatmp.layers["count"] = adatatmp.X.toarray()
         # reorder anndata spots to have the same order as df_this_barcode
         idx_argsort = pd.Categorical(adatatmp.obs.index, categories=list(df_this_barcode.barcode), ordered=True).argsort()
@@ -236,7 +237,7 @@ def load_joint_data(input_filelist, snp_dir, alignment_files, filtergenelist_fil
         across_slice_adjacency_mat = across_slice_adjacency_mat[indicator,:][:,indicator]
 
     # filter out spots with too small number of SNP-covering UMIs
-    indicator = ( np.sum(cell_snp_Aallele, axis=1).toarray().flatten() + np.sum(cell_snp_Ballele, axis=1).toarray().flatten() >= min_snpumis )
+    indicator = ( np.sum(cell_snp_Aallele, axis=1).A.flatten() + np.sum(cell_snp_Ballele, axis=1).A.flatten() >= min_snpumis )
     adata = adata[indicator, :]
     cell_snp_Aallele = cell_snp_Aallele[indicator, :]
     cell_snp_Ballele = cell_snp_Ballele[indicator, :]
@@ -244,7 +245,7 @@ def load_joint_data(input_filelist, snp_dir, alignment_files, filtergenelist_fil
         across_slice_adjacency_mat = across_slice_adjacency_mat[indicator,:][:,indicator]
 
     # filter out genes that are expressed in <min_percent_expressed_spots cells
-    indicator = (np.sum(adata.X > 0, axis=0) >= min_percent_expressed_spots * adata.shape[0]).toarray().flatten()
+    indicator = (np.sum(adata.X > 0, axis=0) >= min_percent_expressed_spots * adata.shape[0]).A.flatten()
     genenames = set(list(adata.var.index[indicator]))
     adata = adata[:, indicator]
     print(adata)
