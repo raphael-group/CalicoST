@@ -163,8 +163,8 @@ def multislice_adjacency(sample_ids, sample_list, coords, single_total_bb_RD, ex
         else:
             raise("Unknown adjacency construction method")
         # tmpsmooth_mat, tmpadjacency_mat = choose_adjacency_by_readcounts_slidedna(this_coords, maxspots_pooling=config["maxspots_pooling"])
-        adjacency_mat.append( tmpadjacency_mat.A )
-        smooth_mat.append( tmpsmooth_mat.A )
+        adjacency_mat.append( tmpadjacency_mat.toarray() )
+        smooth_mat.append( tmpsmooth_mat.toarray() )
     adjacency_mat = scipy.linalg.block_diag(*adjacency_mat)
     adjacency_mat = scipy.sparse.csr_matrix( adjacency_mat )
     if not across_slice_adjacency_mat is None:
