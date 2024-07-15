@@ -764,14 +764,28 @@ def hmrfmix_pipeline(outdir, prefix, single_X, lengths, single_base_nb_mean, sin
             log_persample_weights[:, sidx] = log_persample_weights[:, sidx] - scipy.special.logsumexp(log_persample_weights[:, sidx])
 
 @profile
-def hmrfmix_reassignment_posterior_concatenate(single_X, single_base_nb_mean, single_total_bb_RD, single_tumor_prop, res, smooth_mat, adjacency_mat, prev_assignment, sample_ids, log_persample_weights, spatial_weight, hmmclass=hmm_sitewise, return_posterior=False):
+def hmrfmix_reassignment_posterior_concatenate(
+        single_X,
+        single_base_nb_mean,
+        single_total_bb_RD,
+        single_tumor_prop,
+        res,
+        smooth_mat,
+        adjacency_mat,
+        prev_assignment,
+        sample_ids,
+        log_persample_weights,
+        spatial_weight,
+        hmmclass=hmm_sitewise,
+        return_posterior=False
+):
     N = single_X.shape[2]
     n_obs = single_X.shape[0]
     n_clones = np.max(prev_assignment) + 1
     n_states = res["new_p_binom"].shape[0]
     single_llf = np.zeros((N, n_clones))
     new_assignment = copy.copy(prev_assignment)
-    #
+    
     lambd = np.sum(single_base_nb_mean, axis=1) / np.sum(single_base_nb_mean)
     if np.sum(single_base_nb_mean) > 0:
         logmu_shift = []
@@ -782,7 +796,7 @@ def hmrfmix_reassignment_posterior_concatenate(single_X, single_base_nb_mean, si
         kwargs = {"logmu_shift":logmu_shift, "sample_length":np.ones(n_clones,dtype=int) * n_obs}
     else:
         kwargs = {}
-    #
+    
     posterior = np.zeros((N, n_clones))
 
     for i in trange(N):
@@ -808,10 +822,10 @@ def hmrfmix_reassignment_posterior_concatenate(single_X, single_base_nb_mean, si
             # w_edge[new_assignment[j]] += 1
             w_edge[new_assignment[j]] += adjacency_mat[i,j]
         new_assignment[i] = np.argmax( w_node + spatial_weight * w_edge )
-        #
+        
         posterior[i,:] = np.exp( w_node + spatial_weight * w_edge - scipy.special.logsumexp(w_node + spatial_weight * w_edge) )
 
-    # compute total log likelihood log P(X | Z) + log P(Z)
+    # NB compute total log likelihood log P(X | Z) + log P(Z)
     total_llf = np.sum(single_llf[np.arange(N), new_assignment])
     for i in range(N):
         total_llf += np.sum( spatial_weight * np.sum(new_assignment[adjacency_mat[i,:].nonzero()[1]] == new_assignment[i]) )
