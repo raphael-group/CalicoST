@@ -870,7 +870,7 @@ def hmrfmix_reassignment_posterior_concatenate(
             )
             
         logmu_shift = np.vstack(logmu_shift)
-        kwargs = {"logmu_shift": logmu_shift, "sample_length": np.ones(n_clones,dtype=int) * n_obs}
+        kwargs = {"logmu_shift": logmu_shift, "sample_length": np.ones(n_clones, dtype=int) * n_obs}
     else:
         kwargs = {}
     
@@ -901,7 +901,8 @@ def hmrfmix_reassignment_posterior_concatenate(
     smooth_tumor_prop /= norm
 
     smooth_tumor_prop = np.tile(smooth_tumor_prop, (n_obs, 1))
-    
+
+    # TODO BUG? clone kwargs?
     for i in trange(N):
         idx = smooth_mat[i,:].nonzero()[1]
         idx = idx[~np.isnan(single_tumor_prop[idx])]
@@ -921,18 +922,20 @@ def hmrfmix_reassignment_posterior_concatenate(
 
             if np.sum(single_base_nb_mean[:,i:(i+1)] > 0) > 0 and np.sum(single_total_bb_RD[:,i:(i+1)] > 0) > 0:
                 ratio_nonzeros = 1.0 * np.sum(single_total_bb_RD[:,i:(i+1)] > 0) / np.sum(single_base_nb_mean[:,i:(i+1)] > 0)
-                # ratio_nonzeros = 1.0 * np.sum(np.sum(single_total_bb_RD[:,idx], axis=1) > 0) / np.sum(np.sum(single_base_nb_mean[:,idx], axis=1) > 0)
+
                 single_llf[i,c] = ratio_nonzeros * np.sum( scipy.special.logsumexp(tmp_log_emission_rdr[:, :, 0] + res["log_gamma"][:, (c*n_obs):(c*n_obs+n_obs)], axis=0) ) + \
                     np.sum( scipy.special.logsumexp(tmp_log_emission_baf[:, :, 0] + res["log_gamma"][:, (c*n_obs):(c*n_obs+n_obs)], axis=0) )
             else:
                 single_llf[i,c] = np.sum( scipy.special.logsumexp(tmp_log_emission_rdr[:, :, 0] + res["log_gamma"][:, (c*n_obs):(c*n_obs+n_obs)], axis=0) ) + \
                     np.sum( scipy.special.logsumexp(tmp_log_emission_baf[:, :, 0] + res["log_gamma"][:, (c*n_obs):(c*n_obs+n_obs)], axis=0) )
+                
         w_node = single_llf[i,:]
         w_node += log_persample_weights[:,sample_ids[i]]
         w_edge = np.zeros(n_clones)
+        
         for j in adjacency_mat[i,:].nonzero()[1]:
-            # w_edge[new_assignment[j]] += 1
             w_edge[new_assignment[j]] += adjacency_mat[i,j]
+            
         new_assignment[i] = np.argmax( w_node + spatial_weight * w_edge )
         
         posterior[i,:] = np.exp( w_node + spatial_weight * w_edge - scipy.special.logsumexp(w_node + spatial_weight * w_edge) )
