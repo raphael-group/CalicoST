@@ -1,20 +1,21 @@
-import logging
-import numpy as np
-from numba import njit
-from scipy.stats import norm, multivariate_normal, poisson
-import scipy.special
-from scipy.optimize import minimize
-from scipy.optimize import Bounds
-from sklearn.mixture import GaussianMixture
-from tqdm import trange
-import statsmodels.api as sm
-from statsmodels.base.model import GenericLikelihoodModel
 import copy
+import logging
+
+import calicostem
+import networkx as nx
+import numpy as np
+import scipy.special
+import statsmodels.api as sm
 from calicost.utils_distribution_fitting import *
 from calicost.utils_hmm import *
 from calicost.utils_profiling import profile
 from calicost.utils_tumor import get_tumor_weight
-import networkx as nx
+from numba import njit
+from scipy.optimize import Bounds, minimize
+from scipy.stats import multivariate_normal, norm, poisson
+from sklearn.mixture import GaussianMixture
+from statsmodels.base.model import GenericLikelihoodModel
+from tqdm import trange
 
 """
 Joint NB-BB HMM that accounts for tumor/normal genome proportions. Tumor genome proportion is weighted by mu in BB distribution.
@@ -280,14 +281,18 @@ class hmm_nophasing_v2(object):
 
     @staticmethod
     def compute_emission_probability_nb_betabinom_mix(X, base_nb_mean, log_mu, alphas, total_bb_RD, p_binom, taus, tumor_prop, **kwargs):
+        _, _, n_spots = X.shape
+        
         sample_lengths = kwargs["sample_length"]
-        log_mu_shift = kwargs["logmu_shift"]
+        logmu_shift = kwargs["logmu_shift"]
 
         # TODO HACK ask Cong.                                                                                                                                                                                      
         logmu_shift = np.tile(logmu_shift, (1, n_spots))
         
-        log_emission_rdr = calicostem.compute_emission_probability_nb(X, base_nb_mean, tumor_prop, log_mu, alphas)
-        log_emission_baf = calicostem.compute_emission_probability_bb_mix_weighted(X, base_nb_mean, total_bb_RD, pbinom, taus, tumor_prop, sample_lengths, log_mu, log_mu_shift)
+        log_emission_rdr = calicostem.compute_emission_probability_nb(X[:,0,:], base_nb_mean, tumor_prop, log_mu, alphas)
+
+        # TODO HACK types
+        log_emission_baf = calicostem.compute_emission_probability_bb_mix_weighted(X[:,1,:], base_nb_mean, total_bb_RD.astype(float), p_binom, taus, tumor_prop, sample_lengths.astype(float), log_mu, logmu_shift)
         
         return log_emission_rdr, log_emission_baf
         

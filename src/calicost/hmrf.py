@@ -815,7 +815,7 @@ def hmrfmix_reassignment_posterior_concatenate_emission_v1(
     if not dry_run:
         return np.concatenate(tmp_log_emission_rdr, axis=2), np.concatenate(tmp_log_emission_baf, axis=2)
     
-def hmrfmix_reassignment_posterior_concatenate_emission_v2(
+def hmrfmix_reassignment_posterior_concatenate_emission(
         single_X,
         single_base_nb_mean,
         single_total_bb_RD,
