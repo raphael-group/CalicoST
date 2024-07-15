@@ -193,7 +193,7 @@ class hmm_nophasing_v2(object):
         return log_emission_rdr, log_emission_baf
     
     @staticmethod
-    @line_profiler.profile
+    @profile
     def compute_emission_probability_nb_betabinom_mix_v2(X, base_nb_mean, log_mu, alphas, total_bb_RD, p_binom, taus, tumor_prop, **kwargs):
         """
         Attributes
