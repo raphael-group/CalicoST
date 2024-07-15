@@ -194,7 +194,7 @@ class hmm_nophasing_v2(object):
     
     @staticmethod
     @line_profiler.profile
-    def compute_emission_probability_nb_betabinom_mix(X, base_nb_mean, log_mu, alphas, total_bb_RD, p_binom, taus, tumor_prop, **kwargs):
+    def compute_emission_probability_nb_betabinom_mix_v2(X, base_nb_mean, log_mu, alphas, total_bb_RD, p_binom, taus, tumor_prop, **kwargs):
         """
         Attributes
         ----------
@@ -277,7 +277,20 @@ class hmm_nophasing_v2(object):
         log_emission_baf[idx] = scipy.stats.betabinom.logpmf(kk[idx], nn[idx], aa[idx], bb[idx])
         
         return log_emission_rdr, log_emission_baf
-    
+
+    @staticmethod
+    def compute_emission_probability_nb_betabinom_mix(X, base_nb_mean, log_mu, alphas, total_bb_RD, p_binom, taus, tumor_prop, **kwargs):
+        sample_lengths = kwargs["sample_length"]
+        log_mu_shift = kwargs["logmu_shift"]
+
+        # TODO HACK ask Cong.                                                                                                                                                                                      
+        logmu_shift = np.tile(logmu_shift, (1, n_spots))
+        
+        log_emission_rdr = calicostem.compute_emission_probability_nb(X, base_nb_mean, tumor_prop, log_mu, alphas)
+        log_emission_baf = calicostem.compute_emission_probability_bb_mix_weighted(X, base_nb_mean, total_bb_RD, pbinom, taus, tumor_prop, sample_lengths, log_mu, log_mu_shift)
+        
+        return log_emission_rdr, log_emission_baf
+        
     @staticmethod
     @njit 
     def forward_lattice(lengths, log_transmat, log_startprob, log_emission, log_sitewise_transmat):
