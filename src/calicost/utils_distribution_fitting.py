@@ -16,9 +16,10 @@ import statsmodels.api as sm
 from statsmodels.base.model import GenericLikelihoodModel
 import os
 
-os.environ["MKL_NUM_THREADS"] = "1"
-os.environ["OPENBLAS_NUM_THREADS"] = "1"
-os.environ["OMP_NUM_THREADS"] = "1"
+# DEPRECATE
+# os.environ["MKL_NUM_THREADS"] = "1"
+# os.environ["OPENBLAS_NUM_THREADS"] = "1"
+# os.environ["OMP_NUM_THREADS"] = "1"
 
 
 def convert_params(mean, std):
