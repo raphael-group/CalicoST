@@ -9,7 +9,7 @@ import anndata
 import scanpy as sc
 from statsmodels.tools.sm_exceptions import ValueWarning
 from calicost.utils_distribution_fitting import *
-
+from calicost.utils_profiling import profile
 
 def compute_adjacency_mat(coords, unit_xsquared=9, unit_ysquared=3):
     # pairwise distance

@@ -12,6 +12,7 @@ from statsmodels.base.model import GenericLikelihoodModel
 import copy
 from calicost.utils_distribution_fitting import *
 from calicost.utils_hmm import *
+from calicost.utils_profiling import profile
 import networkx as nx
 
 """
@@ -35,8 +36,9 @@ class hmm_nophasing_v2(object):
         """
         self.params = params
         self.t = t
-    #
+
     @staticmethod
+    @profile
     def compute_emission_probability_nb_betabinom(X, base_nb_mean, log_mu, alphas, total_bb_RD, p_binom, taus):
         """
         Attributes
@@ -88,8 +90,9 @@ class hmm_nophasing_v2(object):
                 if len(idx_nonzero_baf) > 0:
                     log_emission_baf[i, idx_nonzero_baf, s] = scipy.stats.betabinom.logpmf(X[idx_nonzero_baf,1,s], total_bb_RD[idx_nonzero_baf,s], p_binom[i, s] * taus[i, s], (1-p_binom[i, s]) * taus[i, s])
         return log_emission_rdr, log_emission_baf
-    #
+    
     @staticmethod
+    @profile
     def compute_emission_probability_nb_betabinom_mix(X, base_nb_mean, log_mu, alphas, total_bb_RD, p_binom, taus, tumor_prop, **kwargs):
         """
         Attributes
@@ -153,7 +156,7 @@ class hmm_nophasing_v2(object):
                     mix_p_B = (1 - p_binom[i, s]) * this_weighted_tp[idx_nonzero_baf] + 0.5 * (1 - this_weighted_tp[idx_nonzero_baf])
                     log_emission_baf[i, idx_nonzero_baf, s] += scipy.stats.betabinom.logpmf(X[idx_nonzero_baf,1,s], total_bb_RD[idx_nonzero_baf,s], mix_p_A * taus[i, s], mix_p_B * taus[i, s])
         return log_emission_rdr, log_emission_baf
-    #
+    
     @staticmethod
     @njit 
     def forward_lattice(lengths, log_transmat, log_startprob, log_emission, log_sitewise_transmat):
@@ -187,7 +190,7 @@ class hmm_nophasing_v2(object):
                     log_alpha[j, (cumlen + t)] = mylogsumexp(buf) + np.sum(log_emission[j, (cumlen + t), :])
             cumlen += le
         return log_alpha
-    #
+    
     @staticmethod
     @njit 
     def backward_lattice(lengths, log_transmat, log_startprob, log_emission, log_sitewise_transmat):
@@ -223,7 +226,7 @@ class hmm_nophasing_v2(object):
             cumlen += le
         return log_beta
 
-    #
+    
     def run_baum_welch_nb_bb(self, X, lengths, n_states, base_nb_mean, total_bb_RD, log_sitewise_transmat=None, tumor_prop=None, \
         fix_NB_dispersion=False, shared_NB_dispersion=False, fix_BB_dispersion=False, shared_BB_dispersion=False, \
         is_diag=False, init_log_mu=None, init_p_binom=None, init_alphas=None, init_taus=None, max_iter=100, tol=1e-4, **kwargs):

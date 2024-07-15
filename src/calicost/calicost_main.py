@@ -24,8 +24,9 @@ from calicost.utils_IO import *
 from calicost.find_integer_copynumber import *
 from calicost.parse_input import *
 from calicost.utils_plotting import *
+from calicost.utils_profiling import profile
 
-
+@profile
 def main(configuration_file):
     try:
         config = read_configuration_file(configuration_file)

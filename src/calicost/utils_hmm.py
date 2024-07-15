@@ -5,7 +5,7 @@ import scipy.special
 from tqdm import trange
 from sklearn.mixture import GaussianMixture
 from calicost.utils_distribution_fitting import *
-
+from calicost.utils_profiling import profile
 
 @njit
 def np_max_ax_squeeze(arr, axis=0):
@@ -368,7 +368,7 @@ def update_transition_sitewise(log_xi, is_diag=False):
         np.fill_diagonal(log_transmat, t)
     return log_transmat
 
-
+@profile
 def update_emission_params_nb_sitewise_uniqvalues(unique_values, mapping_matrices, log_gamma, base_nb_mean, alphas, \
     start_log_mu=None, fix_NB_dispersion=False, shared_NB_dispersion=False, min_log_rdr=-2, max_log_rdr=2, min_estep_weight=0.1):
     """
@@ -470,7 +470,7 @@ def update_emission_params_nb_sitewise_uniqvalues(unique_values, mapping_matrice
     new_log_mu[new_log_mu < min_log_rdr] = min_log_rdr
     return new_log_mu, new_alphas
 
-
+@profile
 def update_emission_params_nb_sitewise_uniqvalues_mix(unique_values, mapping_matrices, log_gamma, base_nb_mean, alphas, tumor_prop, \
     start_log_mu=None, fix_NB_dispersion=False, shared_NB_dispersion=False, min_log_rdr=-2, max_log_rdr=2):
     """
@@ -579,7 +579,7 @@ def update_emission_params_nb_sitewise_uniqvalues_mix(unique_values, mapping_mat
     new_log_mu[new_log_mu < min_log_rdr] = min_log_rdr
     return new_log_mu, new_alphas
 
-
+@profile
 def update_emission_params_bb_sitewise_uniqvalues(unique_values, mapping_matrices, log_gamma, total_bb_RD, taus, \
     start_p_binom=None, fix_BB_dispersion=False, shared_BB_dispersion=False, \
     percent_threshold=0.99, min_binom_prob=0.01, max_binom_prob=0.99):
@@ -685,7 +685,7 @@ def update_emission_params_bb_sitewise_uniqvalues(unique_values, mapping_matrice
     new_p_binom[new_p_binom > max_binom_prob] = max_binom_prob
     return new_p_binom, new_taus
 
-
+@profile
 def update_emission_params_bb_sitewise_uniqvalues_mix(unique_values, mapping_matrices, log_gamma, total_bb_RD, taus, tumor_prop, \
     start_p_binom=None, fix_BB_dispersion=False, shared_BB_dispersion=False, \
     percent_threshold=0.99, min_binom_prob=0.01, max_binom_prob=0.99):
@@ -865,7 +865,7 @@ def update_transition_nophasing(log_xi, is_diag=False):
         np.fill_diagonal(log_transmat, t)
     return log_transmat
 
-
+@profile
 def update_emission_params_nb_nophasing_uniqvalues(unique_values, mapping_matrices, log_gamma, alphas, \
     start_log_mu=None, fix_NB_dispersion=False, shared_NB_dispersion=False, min_log_rdr=-2, max_log_rdr=2):
     """
@@ -967,7 +967,7 @@ def update_emission_params_nb_nophasing_uniqvalues(unique_values, mapping_matric
     new_log_mu[new_log_mu < min_log_rdr] = min_log_rdr
     return new_log_mu, new_alphas
 
-
+@profile
 def update_emission_params_nb_nophasing_uniqvalues_mix(unique_values, mapping_matrices, log_gamma, alphas, tumor_prop, \
     start_log_mu=None, fix_NB_dispersion=False, shared_NB_dispersion=False, min_log_rdr=-2, max_log_rdr=2):
     """
@@ -1076,7 +1076,7 @@ def update_emission_params_nb_nophasing_uniqvalues_mix(unique_values, mapping_ma
     new_log_mu[new_log_mu < min_log_rdr] = min_log_rdr
     return new_log_mu, new_alphas
 
-
+@profile
 def update_emission_params_bb_nophasing_uniqvalues(unique_values, mapping_matrices, log_gamma, taus, \
     start_p_binom=None, fix_BB_dispersion=False, shared_BB_dispersion=False, \
     percent_threshold=0.99, min_binom_prob=0.01, max_binom_prob=0.99):
@@ -1183,7 +1183,7 @@ def update_emission_params_bb_nophasing_uniqvalues(unique_values, mapping_matric
     new_p_binom[new_p_binom > max_binom_prob] = max_binom_prob
     return new_p_binom, new_taus
 
-
+@profile
 def update_emission_params_bb_nophasing_uniqvalues_mix(unique_values, mapping_matrices, log_gamma, taus, tumor_prop, \
     start_p_binom=None, fix_BB_dispersion=False, shared_BB_dispersion=False, \
     percent_threshold=0.99, min_binom_prob=0.01, max_binom_prob=0.99):
