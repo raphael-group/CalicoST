@@ -25,6 +25,8 @@ Joint NB-BB HMM that accounts for tumor/normal genome proportions. Tumor genome 
 # whole inference
 ############################################################
 
+logger = logging.getLogger(__name__)
+
 class hmm_nophasing_v2(object):
     def __init__(self, params="stmp", t=1-1e-4):
         """
@@ -284,6 +286,10 @@ class hmm_nophasing_v2(object):
         return log_emission_rdr, log_emission_baf
 
     @staticmethod
+    def validate_model_param_shape(model_param_array):
+        assert model_param_array.shape in [(n_state, n_spots), (n_state, 1)], f"Expected {(n_state, n_spots)} or {(n_state, 1)}, found {model_param_array.shape}"
+        
+    @staticmethod
     @profile
     def compute_emission_probability_nb_betabinom_mix(X, base_nb_mean, log_mu, alphas, total_bb_RD, p_binom, taus, tumor_prop, **kwargs):
         n_obs, n_comp, n_spots = X.shape
@@ -291,14 +297,15 @@ class hmm_nophasing_v2(object):
         
         assert base_nb_mean.shape == (n_obs, n_spots), f"Expected {(n_obs, n_spots)}, found {base_nb_mean.shape}"
         assert tumor_prop.shape == (n_obs, n_spots), f"Expected {(n_obs, n_spots)}, found {tumor_prop.shape}"
-        assert log_mu.shape == (n_state, n_spots), f"Expected {(n_state, n_spots)}, found {log_mu.shape}"
-        assert alphas.shape == (n_state, n_spots), f"Expected {(n_state, n_spots)}, found {alphas.shape}"
         assert total_bb_RD.shape == (n_obs, n_spots), f"Expected {(n_obs, n_spots)}, found {total_bb_RD.shape}"
-        assert p_binom.shape == (n_state, n_spots), f"Expected {(n_state, n_spots)}, found {p_binom.shape}"
-        assert taus.shape == (n_state, n_spots), f"Expected {(n_state, n_spots)}, found {taus.shape}"
         assert tumor_prop.shape == (n_obs, n_spots), f"Expected {(n_obs, n_spots)}, found {tumor_prop.shape}"
 
-        logger.info(f"Evaluating emission for (n_state, n_obs, n_spots) = {n_state}, n_obs}, {n_spots}.")
+        validate_model_param_shape(log_mu)
+        validate_model_param_shape(alphas)
+        validate_model_param_shape(p_binom)
+        validate_model_param_shape(taus)
+                
+        logger.info(f"Evaluating emission for n_state, n_obs, n_spots = {n_state}, {n_obs}, {n_spots}.")
         
         log_emission_rdr = calicostem.compute_emission_probability_nb(X[:,0,:], base_nb_mean, tumor_prop, log_mu, alphas)
 
@@ -309,7 +316,7 @@ class hmm_nophasing_v2(object):
             n_clone = logmu_shift.shape[0]
 
             assert sample_length.shape == (n_clone,), f"Expected {(n_clone, )}, found {sample_length.shape}"
-            assert kwargs["logmu_shift"].shape == (n_clone, 1), f"Expected {(n_clone, 1)}, found {kwargs["logmu_shift"].shape}"
+            assert kwargs["logmu_shift"].shape == (n_clone, 1), f"Expected {(n_clone, 1)}, found {kwargs['logmu_shift'].shape}"
 
             logger.info(f"Evaluating tumor weighted emission for (n_clone) = {n_clone}.")
             
