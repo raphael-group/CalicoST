@@ -297,9 +297,24 @@ class hmm_nophasing_v2(object):
                 X[:,1,:], base_nb_mean, total_bb_RD.astype(float), p_binom, taus, tumor_prop, sample_length.astype(float), log_mu, logmu_shift
             )
         else:
-            log_emission_baf = calicostem.compute_emission_probability_bb_mix(
-                X[:,1,:], base_nb_mean, total_bb_RD.astype(float), p_binom, taus, tumor_prop,
-            )
+            # TODO BUG? check with Cong this is the desired behaviour.
+            tiled_p_binom = np.tile(p_binom, (1, n_spots))
+            tiled_taus = np.tile(taus, (1, n_spots))
+
+            # TODO HACK remove try/except clause after testing. 
+            try:
+                log_emission_baf = calicostem.compute_emission_probability_bb_mix(
+                    X[:,1,:], base_nb_mean, total_bb_RD.astype(float), tiled_p_binom, tiled_taus, tumor_prop,
+                )
+            except:
+                print(X[:,1,:].shape)
+                print(base_nb_mean.shape)
+                print(total_bb_RD.shape)
+                print(p_binom.shape)
+                print(taus.shape)
+                print(tumor_prop.shape)
+
+                raise RuntimeError("Failed on backend call.")
         
         return log_emission_rdr, log_emission_baf
         

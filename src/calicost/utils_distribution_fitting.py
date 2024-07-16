@@ -78,17 +78,21 @@ class Weighted_NegativeBinomial(GenericLikelihoodModel):
         neg_sum_llf = -llf.dot(self.weights)
         return neg_sum_llf
 
-    def fit(self, start_params=None, maxiter=10000, maxfun=5000, **kwds):
+    def fit(self, start_params=None, maxiter=10_000, maxfun=5_000, **kwds):
         self.exog_names.append('alpha')
+        
         if start_params is None:
             if hasattr(self, 'start_params'):
                 start_params = self.start_params
             else:
                 start_params = np.append(0.1 * np.ones(self.nparams), 0.01)
 
-        return super(Weighted_NegativeBinomial, self).fit(start_params=start_params,
-                                               maxiter=maxiter, maxfun=maxfun,
-                                               **kwds)
+        return super(Weighted_NegativeBinomial, self).fit(
+            start_params=start_params,
+            maxiter=maxiter,
+            maxfun=maxfun,
+            **kwds
+        )
 
 
 class Weighted_NegativeBinomial_mix(GenericLikelihoodModel):
@@ -164,7 +168,8 @@ class Weighted_BetaBinom(GenericLikelihoodModel):
                 
         return super(Weighted_BetaBinom, self).fit(
             start_params=start_params,
-            maxiter=maxiter, maxfun=maxfun,
+            maxiter=maxiter,
+            maxfun=maxfun,
             **kwds)
 
 
