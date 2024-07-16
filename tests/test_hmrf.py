@@ -8,7 +8,7 @@ from calicost.hmrf import (
     hmrfmix_reassignment_posterior_concatenate_emission_v1,
 )
 from scipy.sparse import csr_matrix
-from line_profiler import profile
+from calicost.utils_profiling import profile
 
 ITERATIONS = 1
 ROUNDS = 2
@@ -234,6 +234,7 @@ def test_hmrfmix_reassignment_posterior_concatenate_emission(benchmark, spatial_
         new_taus,
     ) = spatial_data
 
+    @profile
     def call():
         # See emacs +812 ../src/calicost/hmrf.py
         #     emacs +201 ../src/calicost/hmm_NB_BB_nophasing_v2.py
@@ -281,10 +282,42 @@ def test_hmrfmix_reassignment_posterior_concatenate_emission(benchmark, spatial_
         # print(mean)
         # print(np.nanmin(result), result[0, 0, :])
         # print(np.nanmin(exp), exp[0, 0, :])
-        
+
         # TODO SIC 0.0s -> NANs for RD == 0. etc.
         assert mean == 1.0
 
-        
+
+@profile
+def run_profile(iterations=1):
+    (
+        kwargs,
+        res,
+        single_base_nb_mean,
+        single_tumor_prop,
+        single_X,
+        single_total_bb_RD,
+        smooth_mat,
+        hmm,
+        new_log_mu,
+        new_alphas,
+        new_p_binom,
+        new_taus,
+    ) = get_spatial_data()
+
+    for _ in range(iterations):
+        result = hmrfmix_reassignment_posterior_concatenate_emission(
+            single_X,
+            single_base_nb_mean,
+            single_total_bb_RD,
+            single_tumor_prop,
+            new_log_mu,
+            new_alphas,
+            new_p_binom,
+            new_taus,
+            smooth_mat,
+            hmm,
+            **kwargs,
+        )
+
 if __name__ == "__main__":
-    
+    run_profile()

@@ -814,7 +814,8 @@ def hmrfmix_reassignment_posterior_concatenate_emission_v1(
 
     if not dry_run:
         return np.concatenate(tmp_log_emission_rdr, axis=2), np.concatenate(tmp_log_emission_baf, axis=2)
-    
+
+@profile
 def hmrfmix_reassignment_posterior_concatenate_emission(
         single_X,
         single_base_nb_mean,
@@ -1225,7 +1226,7 @@ def clonelabel_posterior_withinteger(single_X, single_base_nb_mean, single_total
     single_llf = np.zeros((N, n_clones))
     df_posterior = pd.DataFrame({k:np.zeros(N) for k in [f"post_BAF_clone_{cid}" for cid in clone_ids] + [f"post_RDR_clone_{cid}" for cid in clone_ids] + \
                                  [f"post_nodellf_clone_{cid}" for cid in clone_ids] + [f"post_combine_clone_{cid}" for cid in clone_ids] })
-    #
+    
     for i in trange(N):
         idx = smooth_mat[i,:].nonzero()[1]
         if not (single_tumor_prop is None):
@@ -1263,7 +1264,7 @@ def clonelabel_posterior_withinteger(single_X, single_base_nb_mean, single_total
                 w_edge[prev_assignment[j]] += adjacency_mat[i,j]
             else:
                 w_edge[prev_assignment[j] - 1] += adjacency_mat[i,j]
-        #
+        
         df_posterior.iloc[i,:n_clones] = np.exp( single_llf_baf[i,:] - scipy.special.logsumexp(single_llf_baf[i,:]) )
         df_posterior.iloc[i,n_clones:(2*n_clones)] = np.exp( single_llf_rdr[i,:] - scipy.special.logsumexp(single_llf_rdr[i,:]) )
         df_posterior.iloc[i,(2*n_clones):(3*n_clones)] = np.exp( single_llf[i,:] - scipy.special.logsumexp(single_llf[i,:]) )
