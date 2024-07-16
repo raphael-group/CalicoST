@@ -283,7 +283,24 @@ class hmm_nophasing_v2(object):
     def compute_emission_probability_nb_betabinom_mix(X, base_nb_mean, log_mu, alphas, total_bb_RD, p_binom, taus, tumor_prop, **kwargs):
         _, _, n_spots = X.shape
 
-        log_emission_rdr = calicostem.compute_emission_probability_nb(X[:,0,:], base_nb_mean, tumor_prop, log_mu, alphas)
+        # TODO BUG? check with Cong this is the desired behaviour.                                                                                                                                             
+        tiled_log_mu = np.tile(log_mu, (1, n_spots))
+        tiled_alphas = np.tile(alphas, (1, n_spots))
+
+        # TODO BUG? check with Cong this is the desired behaviour.                                                                                                                                                 
+        tiled_p_binom = np.tile(p_binom, (1, n_spots))
+        tiled_taus = np.tile(taus, (1, n_spots))
+        
+        try:
+            log_emission_rdr = calicostem.compute_emission_probability_nb(X[:,0,:], base_nb_mean, tumor_prop, tiled_log_mu, tiled_alphas)
+        except:
+            print(X[:,0,:].shape)
+            print(base_nb_mean.shape)
+            print(log_mu.shape)
+            print(alphas.shape)
+            print(tumor_prop.shape)
+            
+            raise RuntimeError("Failed on backend call.")
 
         if "sample_length" in kwargs or "logmu_shift" in kwargs:
             sample_length = kwargs["sample_length"]
@@ -297,10 +314,6 @@ class hmm_nophasing_v2(object):
                 X[:,1,:], base_nb_mean, total_bb_RD.astype(float), p_binom, taus, tumor_prop, sample_length.astype(float), log_mu, logmu_shift
             )
         else:
-            # TODO BUG? check with Cong this is the desired behaviour.
-            tiled_p_binom = np.tile(p_binom, (1, n_spots))
-            tiled_taus = np.tile(taus, (1, n_spots))
-
             # TODO HACK remove try/except clause after testing. 
             try:
                 log_emission_baf = calicostem.compute_emission_probability_bb_mix(

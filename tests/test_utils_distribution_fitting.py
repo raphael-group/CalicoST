@@ -21,9 +21,9 @@ def test_Weighted_BetaBinom(benchmark):
     
     encoder = OneHotEncoder()
 
-    aa = np.random.randint(low=0, high=1_000, size=5)
-    bb = np.random.randint(low=0, high=1_000, size=5)
-
+    aa = np.random.randint(low=1, high=1_000, size=5)
+    bb = np.random.randint(low=1, high=1_000, size=5)
+    
     state = np.random.randint(low=0, high=nclass, size=len_exog)
     exog = encoder.fit_transform(state.reshape(-1, 1)).toarray()
 

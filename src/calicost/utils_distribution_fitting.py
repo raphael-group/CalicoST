@@ -15,6 +15,7 @@ import statsmodels
 import statsmodels.api as sm
 from statsmodels.base.model import GenericLikelihoodModel
 from calicost.utils_profiling import profile
+import calicostem
 import os
 
 # DEPRECATE
@@ -73,10 +74,12 @@ class Weighted_NegativeBinomial(GenericLikelihoodModel):
     def nloglikeobs(self, params):
         nb_mean = np.exp(self.exog @ params[:-1]) * self.exposure
         nb_std = np.sqrt(nb_mean + params[-1] * nb_mean**2)
+        
         n, p = convert_params(nb_mean, nb_std)
+        
         llf = scipy.stats.nbinom.logpmf(self.endog, n, p)
-        neg_sum_llf = -llf.dot(self.weights)
-        return neg_sum_llf
+        
+        return -llf.dot(self.weights)
 
     def fit(self, start_params=None, maxiter=10_000, maxfun=5_000, **kwds):
         self.exog_names.append('alpha')
@@ -151,9 +154,11 @@ class Weighted_BetaBinom(GenericLikelihoodModel):
     @profile
     def nloglikeobs(self, params):
         a = (self.exog @ params[:-1]) * params[-1]
-        b = (1. - self.exog @ params[:-1]) * params[-1]
+        b = self.exog @ (1. - params[:-1]) * params[-1]
+        
         llf = scipy.stats.betabinom.logpmf(self.endog, self.exposure, a, b)
-
+        # llf = calicostem.bb(self.endog.astype(float), self.exposure.astype(float), a, b)
+        
         # NB negative sum log likelihood.
         return -llf.dot(self.weights)
 
