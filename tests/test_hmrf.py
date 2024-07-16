@@ -247,8 +247,7 @@ def test_hmrfmix_reassignment_posterior_concatenate_emission(benchmark, spatial_
             new_taus,
             smooth_mat,
             hmm,
-            kwargs["logmu_shift"],
-            kwargs["sample_length"],
+            **kwargs,
         )
 
     benchmark.group = "hmrfmix_reassignment_posterior_concatenate_emission"
