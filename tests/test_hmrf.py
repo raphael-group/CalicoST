@@ -311,14 +311,14 @@ def test_hmrfmix_reassignment_posterior_concatenate_emission_broadcast(benchmark
 
     new_log_mu = np.log(2.0 + 2.0 * np.random.uniform(size=1))
     new_log_mu = np.tile(new_log_mu, (n_states, 1))
-
+    
     new_alphas = 0.01 * np.ones_like(new_log_mu, dtype=float)
 
     new_p_binom = np.random.uniform(size=1)
     new_p_binom = np.tile(new_p_binom, (n_states, 1))
 
     new_taus = np.ones_like(new_p_binom)
-
+    
     @profile
     def call():
         # See emacs +812 ../src/calicost/hmrf.py
@@ -370,7 +370,6 @@ def test_hmrfmix_reassignment_posterior_concatenate_emission_broadcast(benchmark
 
         # TODO SIC 0.0s -> NANs for RD == 0. etc.
         assert mean == 1.0
-
 
 @profile
 def run_profile(iterations=1):

@@ -763,6 +763,12 @@ def hmrfmix_pipeline(outdir, prefix, single_X, lengths, single_base_nb_mean, sin
             log_persample_weights[:, sidx] = np.where(this_persample_weight > 0, np.log(this_persample_weight), -50)
             log_persample_weights[:, sidx] = log_persample_weights[:, sidx] - scipy.special.logsumexp(log_persample_weights[:, sidx])
 
+def get_model_params_with_broadcast(model_param_array, spot, n_spots):
+    if model_param_array.shape[1] == n_spots:
+        return  model_param_array[:, spot:spot+1]
+    else:
+        return	model_param_array[:, 0:1]
+            
 @profile
 def hmrfmix_reassignment_posterior_concatenate_emission_v1(
     single_X,
@@ -791,16 +797,16 @@ def hmrfmix_reassignment_posterior_concatenate_emission_v1(
 
         # NB single_tumor_prop.shape == (n_spots,)
         idx = idx[~np.isnan(single_tumor_prop[idx])]
-        
+
         # TODO BUG? clone is not used.
         this_tmp_log_emission_rdr, this_tmp_log_emission_baf = hmmclass.compute_emission_probability_nb_betabinom_mix_v1(
             np.sum(single_X[:,:,idx], axis=2, keepdims=True),
             np.sum(single_base_nb_mean[:,idx], axis=1, keepdims=True),
-            new_log_mu[:, i:i+1],
-            new_alphas[:, i:i+1],
+            get_model_params_with_broadcast(new_log_mu, i, N),
+            get_model_params_with_broadcast(new_alphas, i, N),
             np.sum(single_total_bb_RD[:,idx], axis=1, keepdims=True),
-            new_p_binom[:, i:i+1],
-            new_taus[:, i:i+1],
+            get_model_params_with_broadcast(new_p_binom, i, N),
+            get_model_params_with_broadcast(new_taus, i, N),
             np.ones((n_obs, 1)) * np.mean(single_tumor_prop[idx]),
             **{"logmu_shift": logmu_shift, "sample_length": sample_length}
         )
