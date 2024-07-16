@@ -902,15 +902,19 @@ def hmrfmix_reassignment_posterior_concatenate(
     n_clones = np.max(prev_assignment) + 1
     n_states = res["new_p_binom"].shape[0]
     single_llf = np.zeros((N, n_clones))
-    new_assignment = copy.copy(prev_assignment)
-    
-    lambd = np.sum(single_base_nb_mean, axis=1) / np.sum(single_base_nb_mean)
+    posterior = np.zeros((N, n_clones))
 
-    if np.sum(single_base_nb_mean) > 0:
+    new_assignment = copy.copy(prev_assignment)
+
+    single_base_nb_mean_sum = np.sum(single_base_nb_mean)
+    lambd = np.sum(single_base_nb_mean, axis=1) / single_base_nb_mean_sum
+
+    if single_base_nb_mean_sum > 0:
         logmu_shift = []
 
         for c in range(n_clones):
             this_pred_cnv = np.argmax(res["log_gamma"][:, (c*n_obs):(c*n_obs+n_obs)], axis=0)%n_states
+            
             logmu_shift.append(
                 scipy.special.logsumexp(res["new_log_mu"][this_pred_cnv,:] + np.log(lambd).reshape(-1,1), axis=0)
             )
@@ -920,8 +924,6 @@ def hmrfmix_reassignment_posterior_concatenate(
     else:
         kwargs = {}
     
-    posterior = np.zeros((N, n_clones))
-
     # TODO BUG? c dependence of kwargs? 
     tmp_log_emission_rdr, tmp_log_emission_baf = hmrfmix_reassignment_posterior_concatenate_emission(
         single_X,
