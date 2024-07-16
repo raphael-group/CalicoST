@@ -281,5 +281,5 @@ def test_hmrfmix_reassignment_posterior_concatenate_emission(benchmark, spatial_
         print(np.nanmin(result), result[0, 0, :])
         print(np.nanmin(exp), exp[0, 0, :])
 
-        # TODO SIC Rust NaNs matched to 0.0s
-        assert mean == 1.0 # 0.9998
+        # TODO SIC 0.0s -> NANs for RD == 0. etc.
+        assert mean == 1.0
