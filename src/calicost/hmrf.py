@@ -923,7 +923,7 @@ def hmrfmix_reassignment_posterior_concatenate(
     posterior = np.zeros((N, n_clones))
 
     # TODO BUG? c dependence of kwargs? 
-    tmp_log_emission_rdr, tmp_log_emission_baf = hmrfmix_reassignment_posterior_concatenate_emission_v1(
+    tmp_log_emission_rdr, tmp_log_emission_baf = hmrfmix_reassignment_posterior_concatenate_emission(
         single_X,
         single_base_nb_mean,
         single_total_bb_RD,
@@ -953,18 +953,24 @@ def hmrfmix_reassignment_posterior_concatenate(
             #     np.sum(single_total_bb_RD[:,idx], axis=1, keepdims=True),
             #     res["new_p_binom"],
             #     res["new_taus"],
-            #     np.ones((n_obs,1)) * np.mean(single_tumor_prop[idx]),
+            #     np.ones((n_obs, 1)) * np.mean(single_tumor_prop[idx]),
             #     **kwargs
             # )
 
             if np.sum(single_base_nb_mean[:,i:(i+1)] > 0) > 0 and np.sum(single_total_bb_RD[:,i:(i+1)] > 0) > 0:
                 ratio_nonzeros = 1.0 * np.sum(single_total_bb_RD[:,i:(i+1)] > 0) / np.sum(single_base_nb_mean[:,i:(i+1)] > 0)
 
-                single_llf[i,c] = ratio_nonzeros * np.sum( scipy.special.logsumexp(tmp_log_emission_rdr[:, :, i] + res["log_gamma"][:, (c*n_obs):(c*n_obs+n_obs)], axis=0) ) + \
-                    np.sum( scipy.special.logsumexp(tmp_log_emission_baf[:, :, i] + res["log_gamma"][:, (c*n_obs):(c*n_obs+n_obs)], axis=0) )
+                single_llf[i,c] = ratio_nonzeros * np.sum(
+                    scipy.special.logsumexp(tmp_log_emission_rdr[:, :, i] + res["log_gamma"][:, (c*n_obs):(c*n_obs+n_obs)], axis=0)
+                ) + np.sum(
+                        scipy.special.logsumexp(tmp_log_emission_baf[:, :, i] + res["log_gamma"][:, (c*n_obs):(c*n_obs+n_obs)], axis=0)
+                    )
             else:
-                single_llf[i,c] = np.sum( scipy.special.logsumexp(tmp_log_emission_rdr[:, :, i] + res["log_gamma"][:, (c*n_obs):(c*n_obs+n_obs)], axis=0) ) + \
-                    np.sum( scipy.special.logsumexp(tmp_log_emission_baf[:, :, i] + res["log_gamma"][:, (c*n_obs):(c*n_obs+n_obs)], axis=0) )
+                single_llf[i,c] = np.sum(
+                    scipy.special.logsumexp(tmp_log_emission_rdr[:, :, i] + res["log_gamma"][:, (c*n_obs):(c*n_obs+n_obs)], axis=0)
+                ) + np.sum(
+                    scipy.special.logsumexp(tmp_log_emission_baf[:, :, i] + res["log_gamma"][:, (c*n_obs):(c*n_obs+n_obs)], axis=0)
+                )
                 
         w_node = single_llf[i,:]
         w_node += log_persample_weights[:,sample_ids[i]]
