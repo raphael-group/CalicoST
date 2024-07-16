@@ -304,8 +304,10 @@ class hmm_nophasing_v2(object):
         validate_model_param_shape(alphas)
         validate_model_param_shape(p_binom)
         validate_model_param_shape(taus)
-                
-        logger.info(f"Evaluating emission for n_state, n_obs, n_spots = {n_state}, {n_obs}, {n_spots}.")
+
+        # TODO
+        if X.size > 40_000:
+            logger.info(f"Evaluating emission for n_state, n_obs, n_spots = {n_state}, {n_obs}, {n_spots}.")
         
         log_emission_rdr = calicostem.compute_emission_probability_nb(X[:,0,:], base_nb_mean, tumor_prop, log_mu, alphas)
 
@@ -318,7 +320,8 @@ class hmm_nophasing_v2(object):
             assert sample_length.shape == (n_clone,), f"Expected {(n_clone, )}, found {sample_length.shape}"
             assert kwargs["logmu_shift"].shape == (n_clone, 1), f"Expected {(n_clone, 1)}, found {kwargs['logmu_shift'].shape}"
 
-            logger.info(f"Evaluating tumor weighted emission for (n_clone) = {n_clone}.")
+            if X.size > 40_000:
+                logger.info(f"Evaluating tumor weighted emission for n_clone={n_clone}.")
             
             # TODO HACK types
             log_emission_baf = calicostem.compute_emission_probability_bb_mix_weighted(
