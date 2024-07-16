@@ -38,5 +38,7 @@ def test_Weighted_BetaBinom(benchmark):
         return bb.fit()
 
     result = benchmark(call)
+
+    assert np.allclose(result.params.sum(), 252.8241320464291)
     
-    print(result.params)
+    print(result.params.sum())
