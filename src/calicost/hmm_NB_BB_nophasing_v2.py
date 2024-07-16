@@ -163,19 +163,23 @@ class hmm_nophasing_v2(object):
         n_comp = X.shape[1]
         n_spots = X.shape[2]
         n_states = log_mu.shape[0]
+        
         # initialize log_emission
         log_emission_rdr = np.zeros((n_states, n_obs, n_spots))
         log_emission_baf = np.zeros((n_states, n_obs, n_spots))
+
         for i in np.arange(n_states):
             for s in np.arange(n_spots):
                 # expression from NB distribution
                 idx_nonzero_rdr = np.where(base_nb_mean[:,s] > 0)[0]
+                
                 if len(idx_nonzero_rdr) > 0:
                     # nb_mean = base_nb_mean[idx_nonzero_rdr,s] * (tumor_prop[s] * np.exp(log_mu[i, s]) + 1 - tumor_prop[s])
                     nb_mean = base_nb_mean[idx_nonzero_rdr,s] * (tumor_prop[idx_nonzero_rdr,s] * np.exp(log_mu[i, s]) + 1 - tumor_prop[idx_nonzero_rdr,s])
                     nb_std = np.sqrt(nb_mean + alphas[i, s] * nb_mean**2)
                     n, p = convert_params(nb_mean, nb_std)
                     log_emission_rdr[i, idx_nonzero_rdr, s] = scipy.stats.nbinom.logpmf(X[idx_nonzero_rdr, 0, s], n, p)
+                    
                 # AF from BetaBinom distribution
                 if ("logmu_shift" in kwargs) and ("sample_length" in kwargs):
                     this_weighted_tp = []
@@ -291,16 +295,7 @@ class hmm_nophasing_v2(object):
         tiled_p_binom = np.tile(p_binom, (1, n_spots))
         tiled_taus = np.tile(taus, (1, n_spots))
         
-        try:
-            log_emission_rdr = calicostem.compute_emission_probability_nb(X[:,0,:], base_nb_mean, tumor_prop, tiled_log_mu, tiled_alphas)
-        except:
-            print(X[:,0,:].shape)
-            print(base_nb_mean.shape)
-            print(log_mu.shape)
-            print(alphas.shape)
-            print(tumor_prop.shape)
-            
-            raise RuntimeError("Failed on backend call.")
+        log_emission_rdr = calicostem.compute_emission_probability_nb(X[:,0,:], base_nb_mean, tumor_prop, tiled_log_mu, tiled_alphas)
 
         if "sample_length" in kwargs or "logmu_shift" in kwargs:
             sample_length = kwargs["sample_length"]
@@ -314,20 +309,9 @@ class hmm_nophasing_v2(object):
                 X[:,1,:], base_nb_mean, total_bb_RD.astype(float), tiled_p_binom, tiled_taus, tumor_prop, sample_length.astype(float), tiled_log_mu, tiled_logmu_shift
             )
         else:
-            # TODO HACK remove try/except clause after testing. 
-            try:
-                log_emission_baf = calicostem.compute_emission_probability_bb_mix(
-                    X[:,1,:], base_nb_mean, total_bb_RD.astype(float), tiled_p_binom, tiled_taus, tumor_prop,
-                )
-            except:
-                print(X[:,1,:].shape)
-                print(base_nb_mean.shape)
-                print(total_bb_RD.shape)
-                print(p_binom.shape)
-                print(taus.shape)
-                print(tumor_prop.shape)
-
-                raise RuntimeError("Failed on backend call.")
+            log_emission_baf = calicostem.compute_emission_probability_bb_mix(
+                X[:,1,:], base_nb_mean, total_bb_RD.astype(float), tiled_p_binom, tiled_taus, tumor_prop,
+            )
         
         return log_emission_rdr, log_emission_baf
         

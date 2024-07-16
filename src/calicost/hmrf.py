@@ -933,7 +933,6 @@ def hmrfmix_reassignment_posterior_concatenate(
         res["new_taus"],
         adjacency_mat,
         hmmclass,
-        dry_run=False,
         **kwargs
     )
 
@@ -982,6 +981,7 @@ def hmrfmix_reassignment_posterior_concatenate(
 
     # compute total log likelihood log P(X | Z) + log P(Z)
     total_llf = np.sum(single_llf[np.arange(N), new_assignment])
+    
     for i in range(N):
         total_llf += np.sum( spatial_weight * np.sum(new_assignment[adjacency_mat[i,:].nonzero()[1]] == new_assignment[i]) )
     if return_posterior:

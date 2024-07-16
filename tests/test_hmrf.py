@@ -8,6 +8,7 @@ from calicost.hmrf import (
     hmrfmix_reassignment_posterior_concatenate_emission_v1,
 )
 from scipy.sparse import csr_matrix
+from line_profiler import profile
 
 ITERATIONS = 1
 ROUNDS = 2
@@ -88,7 +89,7 @@ def get_spatial_data():
 
     # TODO HACK
     # see https://github.com/raphael-group/CalicoST/blob/4696325d5ca103d0d72ea2d471c60d1d753b097b/src/calicost/hmrf.py#L765
-    n_states = 4
+    n_states = 7
 
     (
         res,
@@ -283,3 +284,7 @@ def test_hmrfmix_reassignment_posterior_concatenate_emission(benchmark, spatial_
         
         # TODO SIC 0.0s -> NANs for RD == 0. etc.
         assert mean == 1.0
+
+        
+if __name__ == "__main__":
+    
