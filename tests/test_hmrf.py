@@ -4,13 +4,14 @@ import numpy as np
 import pytest
 from calicost.hmm_NB_BB_nophasing_v2 import hmm_nophasing_v2
 from calicost.hmrf import (
+    hmrfmix_reassignment_posterior_concatenate_emission,
     hmrfmix_reassignment_posterior_concatenate_emission_v1,
-    hmrfmix_reassignment_posterior_concatenate_emission)
-from calicost.utils_tumor import get_tumor_weight
+)
 from scipy.sparse import csr_matrix
 
 ITERATIONS = 1
 ROUNDS = 2
+
 
 def get_raw_spatial_data():
     # TODO HACK
@@ -166,6 +167,7 @@ def test_get_spatial_data(spatial_data):
     assert new_p_binom.shape == new_p_binom.shape
     assert new_taus == new_taus.shape
 
+
 def test_hmrfmix_reassignment_posterior_concatenate_emission_v1(
     benchmark, spatial_data
 ):
@@ -209,9 +211,8 @@ def test_hmrfmix_reassignment_posterior_concatenate_emission_v1(
     benchmark.group = "hmrfmix_reassignment_posterior_concatenate_emission"
     benchmark(call)
 
-def test_hmrfmix_reassignment_posterior_concatenate_emission(
-    benchmark, spatial_data
-):
+
+def test_hmrfmix_reassignment_posterior_concatenate_emission(benchmark, spatial_data):
     """
     pytest -s test_hmrf.py::test_hmrfmix_reassignment_posterior_concatenate_emission_v2
 
@@ -270,7 +271,9 @@ def test_hmrfmix_reassignment_posterior_concatenate_emission(
         kwargs["sample_length"],
     )
 
-    for result, exp in zip((tmp_log_emission_rdr, tmp_log_emission_baf), (exp_rdr, exp_baf)):
+    for result, exp in zip(
+        (tmp_log_emission_rdr, tmp_log_emission_baf), (exp_rdr, exp_baf)
+    ):
         good = np.isclose(result, exp, atol=1.0e-6, equal_nan=True)
         mean = np.mean(good)
 
@@ -278,8 +281,6 @@ def test_hmrfmix_reassignment_posterior_concatenate_emission(
         print(mean)
         print(np.nanmin(result), result[0, 0, :])
         print(np.nanmin(exp), exp[0, 0, :])
-        
+
         # TODO SIC Rust NaNs matched to 0.0s
         assert mean >= 0.9998
-
-    
