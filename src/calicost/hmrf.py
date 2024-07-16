@@ -829,8 +829,7 @@ def hmrfmix_reassignment_posterior_concatenate_emission(
         **kwargs,
     ):
     """
-    Aggregate the observables according to the adjacency matrix and
-    calculate emission.
+    Aggregate the observables according to the adjacency matrix and calculate emission.
     """
     n_obs, _, n_spots = single_X.shape
 

@@ -276,10 +276,10 @@ def test_hmrfmix_reassignment_posterior_concatenate_emission(benchmark, spatial_
         good = np.isclose(result, exp, atol=1.0e-6, equal_nan=True)
         mean = np.mean(good)
 
-        print()
-        print(mean)
-        print(np.nanmin(result), result[0, 0, :])
-        print(np.nanmin(exp), exp[0, 0, :])
-
+        # print()
+        # print(mean)
+        # print(np.nanmin(result), result[0, 0, :])
+        # print(np.nanmin(exp), exp[0, 0, :])
+        
         # TODO SIC 0.0s -> NANs for RD == 0. etc.
         assert mean == 1.0
