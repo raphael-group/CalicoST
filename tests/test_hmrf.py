@@ -270,7 +270,6 @@ def test_hmrfmix_reassignment_posterior_concatenate_emission(
         kwargs["sample_length"],
     )
 
-
     for result, exp in zip((tmp_log_emission_rdr, tmp_log_emission_baf), (exp_rdr, exp_baf)):
         good = np.isclose(result, exp, atol=1.0e-6, equal_nan=True)
         mean = np.mean(good)
@@ -280,7 +279,7 @@ def test_hmrfmix_reassignment_posterior_concatenate_emission(
         print(np.nanmin(result), result[0, 0, :])
         print(np.nanmin(exp), exp[0, 0, :])
         
-        # NB TODO Rust NaNs matched to 0.0s
+        # TODO SIC Rust NaNs matched to 0.0s
         assert mean >= 0.9998
 
     
