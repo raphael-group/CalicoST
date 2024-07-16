@@ -15,8 +15,9 @@ from sklearn.preprocessing import OneHotEncoder
 
 
 def test_Weighted_BetaBinom(benchmark):
-    nclass = 5
-    len_exog = 1_000
+    np.random.seed(314)
+    
+    nclass, len_exog = 5, 1_000
     
     encoder = OneHotEncoder()
 
