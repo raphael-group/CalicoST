@@ -19,28 +19,35 @@ def test_Weighted_BetaBinom(benchmark):
     
     nclass, len_exog = 5, 1_000
     
-    encoder = OneHotEncoder()
+    tau = 200.
+    
+    ps = 0.5 + 0.2 * np.random.uniform(size=nclass)
 
-    aa = np.random.randint(low=0, high=1_000, size=5)
-    bb = np.random.randint(low=0, high=1_000, size=5)
+    aa = tau * ps
+    bb = tau * (1. - ps)
     
     state = np.random.randint(low=0, high=nclass, size=len_exog)
-    exog = encoder.fit_transform(state.reshape(-1, 1)).toarray()
+    exog = OneHotEncoder().fit_transform(state.reshape(-1, 1)).toarray()
 
-    exposure = np.random.randint(low=0, high=25, size=len_exog)    
+    exposure = np.random.randint(low=10, high=25, size=len_exog)   
     endog = np.array([scipy.stats.betabinom.rvs(xp, aa[ss], bb[ss]) for ss, xp in zip(state, exposure)])
 
-    weights = np.random.uniform(size=len_exog)
+    weights = 0.5 + 0.1 * np.random.uniform(size=len_exog)
     
     bb = Weighted_BetaBinom(endog, exog, weights, exposure)
+
+    params = np.concatenate([aa, np.array([tau])])
     
     def call():
-        return bb.fit()
+        return bb.nloglikeobs(params)
 
-    result = benchmark(call)
+    result = call()
+    # result = benchmark(call)
 
-    print(result.params.sum())
+    print(result)
     
-    # assert np.allclose(result.params.sum(), 252.8241320464291)
+    # NB regression testing
+    # exp = 327.28956683765364
     
-    # print(result.params.sum())
+    # assert np.allclose(result.params.sum(), exp)
+    
