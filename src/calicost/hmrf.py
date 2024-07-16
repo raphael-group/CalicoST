@@ -911,7 +911,9 @@ def hmrfmix_reassignment_posterior_concatenate(
 
         for c in range(n_clones):
             this_pred_cnv = np.argmax(res["log_gamma"][:, (c*n_obs):(c*n_obs+n_obs)], axis=0)%n_states
-            logmu_shift.append( scipy.special.logsumexp(res["new_log_mu"][this_pred_cnv,:] + np.log(lambd).reshape(-1,1), axis=0) )
+            logmu_shift.append(
+                scipy.special.logsumexp(res["new_log_mu"][this_pred_cnv,:] + np.log(lambd).reshape(-1,1), axis=0)
+            )
 
         logmu_shift = np.vstack(logmu_shift)
         kwargs = {"logmu_shift": logmu_shift, "sample_length": np.ones(n_clones,dtype=int) * n_obs}
@@ -942,20 +944,18 @@ def hmrfmix_reassignment_posterior_concatenate(
         # idx = idx[~np.isnan(single_tumor_prop[idx])]
 
         for c in range(n_clones):
-            """
             # TODO BUG? c dependence of kwargs? 
-            tmp_log_emission_rdr, tmp_log_emission_baf = hmmclass.compute_emission_probability_nb_betabinom_mix(
-                np.sum(single_X[:,:,idx], axis=2, keepdims=True),
-                np.sum(single_base_nb_mean[:,idx], axis=1, keepdims=True),
-                res["new_log_mu"],
-                res["new_alphas"],
-                np.sum(single_total_bb_RD[:,idx], axis=1, keepdims=True),
-                res["new_p_binom"],
-                res["new_taus"],
-                np.ones((n_obs,1)) * np.mean(single_tumor_prop[idx]),
-                **kwargs
-            )
-            """
+            # tmp_log_emission_rdr, tmp_log_emission_baf = hmmclass.compute_emission_probability_nb_betabinom_mix(
+            #     np.sum(single_X[:,:,idx], axis=2, keepdims=True),
+            #     np.sum(single_base_nb_mean[:,idx], axis=1, keepdims=True),
+            #     res["new_log_mu"],
+            #     res["new_alphas"],
+            #     np.sum(single_total_bb_RD[:,idx], axis=1, keepdims=True),
+            #     res["new_p_binom"],
+            #     res["new_taus"],
+            #     np.ones((n_obs,1)) * np.mean(single_tumor_prop[idx]),
+            #     **kwargs
+            # )
 
             if np.sum(single_base_nb_mean[:,i:(i+1)] > 0) > 0 and np.sum(single_total_bb_RD[:,i:(i+1)] > 0) > 0:
                 ratio_nonzeros = 1.0 * np.sum(single_total_bb_RD[:,i:(i+1)] > 0) / np.sum(single_base_nb_mean[:,i:(i+1)] > 0)
