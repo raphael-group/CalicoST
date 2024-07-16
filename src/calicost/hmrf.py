@@ -826,8 +826,7 @@ def hmrfmix_reassignment_posterior_concatenate_emission(
         new_taus,
         smooth_mat,
         hmmclass,
-        logmu_shift,
-        sample_length
+        **kwargs,
     ):
     """
     Aggregate the observables according to the adjacency matrix and
@@ -869,6 +868,7 @@ def hmrfmix_reassignment_posterior_concatenate_emission(
     assert smooth_tumor_prop.shape == (n_obs, n_spots)
     
     # TODO BUG? clone_kwargs?
+    #      **{"logmu_shift": logmu_shift, "sample_length": sample_length}
     return hmmclass.compute_emission_probability_nb_betabinom_mix(
         smooth_X,
         smooth_baseline,
@@ -878,7 +878,7 @@ def hmrfmix_reassignment_posterior_concatenate_emission(
         new_p_binom,
         new_taus,
         smooth_tumor_prop,
-        **{"logmu_shift": logmu_shift, "sample_length": sample_length},
+        **kwargs,
     )
 
 @profile
@@ -934,9 +934,8 @@ def hmrfmix_reassignment_posterior_concatenate(
         res["new_taus"],
         adjacency_mat,
         hmmclass,
-        kwargs["logmu_shift"],
-        kwargs["sample_length"],
         dry_run=False,
+        **kwargs
     )
 
     for i in trange(N):

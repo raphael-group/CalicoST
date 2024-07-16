@@ -282,17 +282,24 @@ class hmm_nophasing_v2(object):
     @staticmethod
     def compute_emission_probability_nb_betabinom_mix(X, base_nb_mean, log_mu, alphas, total_bb_RD, p_binom, taus, tumor_prop, **kwargs):
         _, _, n_spots = X.shape
-        
-        sample_lengths = kwargs["sample_length"]
-        logmu_shift = kwargs["logmu_shift"]
 
-        # TODO HACK ask Cong.                                                                                                                                                                                      
-        logmu_shift = np.tile(logmu_shift, (1, n_spots))
-        
         log_emission_rdr = calicostem.compute_emission_probability_nb(X[:,0,:], base_nb_mean, tumor_prop, log_mu, alphas)
 
-        # TODO HACK types
-        log_emission_baf = calicostem.compute_emission_probability_bb_mix_weighted(X[:,1,:], base_nb_mean, total_bb_RD.astype(float), p_binom, taus, tumor_prop, sample_lengths.astype(float), log_mu, logmu_shift)
+        if "sample_length" in kwargs or "logmu_shift" in kwargs:
+            sample_length = kwargs["sample_length"]
+            logmu_shift = kwargs["logmu_shift"]
+
+            # TODO HACK ask Cong.                                                                                                                                                                                  
+            logmu_shift = np.tile(logmu_shift, (1, n_spots))
+        
+            # TODO HACK types
+            log_emission_baf = calicostem.compute_emission_probability_bb_mix_weighted(
+                X[:,1,:], base_nb_mean, total_bb_RD.astype(float), p_binom, taus, tumor_prop, sample_length.astype(float), log_mu, logmu_shift
+            )
+        else:
+            log_emission_baf = calicostem.compute_emission_probability_bb_mix(
+                X[:,1,:], base_nb_mean, total_bb_RD.astype(float), p_binom, taus, tumor_prop,
+            )
         
         return log_emission_rdr, log_emission_baf
         
