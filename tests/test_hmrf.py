@@ -163,9 +163,9 @@ def test_get_spatial_data(spatial_data):
     n_clones = len(kwargs["sample_length"])
 
     assert new_log_mu.shape == (n_states, n_spots)
-    assert new_log_mu.shape == new_alphas.shape
-    assert new_p_binom.shape == new_p_binom.shape
-    assert new_taus == new_taus.shape
+    assert new_alphas.shape == new_log_mu.shape
+    assert new_p_binom.shape == new_log_mu.shape
+    assert new_taus.shape == new_log_mu.shape
 
 
 def test_hmrfmix_reassignment_posterior_concatenate_emission_v1(
@@ -282,4 +282,4 @@ def test_hmrfmix_reassignment_posterior_concatenate_emission(benchmark, spatial_
         print(np.nanmin(exp), exp[0, 0, :])
 
         # TODO SIC Rust NaNs matched to 0.0s
-        assert mean >= 0.9998
+        assert mean == 1.0 # 0.9998
