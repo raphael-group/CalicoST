@@ -289,27 +289,15 @@ class hmm_nophasing_v2(object):
         n_obs, n_comp, n_spots = X.shape
         n_state = log_mu.shape[0]
         
-        assert base_nb_mean.shape == (n_obs, n_spots)
-        assert tumor_prop.shape == (n_obs, n_spots)
-        assert log_mu.shape == (n_state, n_spots)
-        assert alphas.shape == (n_state, n_spots)
-        assert total_bb_RD.shape == (n_obs, n_spots)
-        assert p_binom.shape == (n_state, n_spots)
-        assert taus.shape == (n_state, n_spots)
-        assert tumor_prop.shape == (n_obs, n_spots)
-        
-        # print(X.shape)
-        # print(base_nb_mean.shape)
-        # print(tumor_prop.shape)
-        # print(log_mu.shape)
-        # print(alphas.shape)
-        # print(total_bb_RD.shape)
-        # print(p_binom.shape)
-        # print(taus.shape)
-        # print(tumor_prop.shape)
-        # print(kwargs["sample_length"].shape)
-        # print(kwargs["logmu_shift"].shape)
-        
+        assert base_nb_mean.shape == (n_obs, n_spots), f"Expected {(n_obs, n_spots)}, found {base_nb_mean.shape}"
+        assert tumor_prop.shape == (n_obs, n_spots), f"Expected {(n_obs, n_spots)}, found {tumor_prop.shape}"
+        assert log_mu.shape == (n_state, n_spots), f"Expected {(n_state, n_spots)}, found {log_mu.shape}"
+        assert alphas.shape == (n_state, n_spots), f"Expected {(n_state, n_spots)}, found {alphas.shape}"
+        assert total_bb_RD.shape == (n_obs, n_spots), f"Expected {(n_obs, n_spots)}, found {total_bb_RD.shape}"
+        assert p_binom.shape == (n_state, n_spots), f"Expected {(n_state, n_spots)}, found {p_binom.shape}"
+        assert taus.shape == (n_state, n_spots), f"Expected {(n_state, n_spots)}, found {taus.shape}"
+        assert tumor_prop.shape == (n_obs, n_spots), f"Expected {(n_obs, n_spots)}, found {tumor_prop.shape}"
+                
         log_emission_rdr = calicostem.compute_emission_probability_nb(X[:,0,:], base_nb_mean, tumor_prop, log_mu, alphas)
 
         if "sample_length" in kwargs or "logmu_shift" in kwargs:
@@ -318,17 +306,15 @@ class hmm_nophasing_v2(object):
 
             n_clone = logmu_shift.shape[0]
 
-            assert sample_length.shape == (n_clone,)
-            assert kwargs["logmu_shift"].shape == (n_clone, 1)
+            assert sample_length.shape == (n_clone,), f"Expected {(n_clone, )}, found {sample_length.shape}"
+            assert kwargs["logmu_shift"].shape == (n_clone, 1), f"Expected {(n_clone, 1)}, found {kwargs["logmu_shift"].shape}"
             
-            # TODO HACK ask Cong.
-            # tiled_logmu_shift = np.tile(logmu_shift, (1, n_spots))
-        
             # TODO HACK types
             log_emission_baf = calicostem.compute_emission_probability_bb_mix_weighted(
-                X[:,1,:], base_nb_mean, total_bb_RD.astype(float), p_binom, taus, tumor_prop, sample_length.astype(float), log_mu, tiled_logmu_shift
+                X[:,1,:], base_nb_mean, total_bb_RD.astype(float), p_binom, taus, tumor_prop, sample_length.astype(float), log_mu, logmu_shift
             )
         else:
+            # TODO HACK types
             log_emission_baf = calicostem.compute_emission_probability_bb_mix(
                 X[:,1,:], base_nb_mean, total_bb_RD.astype(float), p_binom, taus, tumor_prop,
             )
