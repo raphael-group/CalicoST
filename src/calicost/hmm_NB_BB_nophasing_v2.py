@@ -286,17 +286,29 @@ class hmm_nophasing_v2(object):
     @staticmethod
     @profile
     def compute_emission_probability_nb_betabinom_mix(X, base_nb_mean, log_mu, alphas, total_bb_RD, p_binom, taus, tumor_prop, **kwargs):
-        _, _, n_spots = X.shape
-
-        # TODO HACK BUG? check with Cong this is the desired behaviour.                                                                                                                                           
-        # tiled_log_mu = np.tile(log_mu, (1, n_spots))
-        # tiled_alphas = np.tile(alphas, (1, n_spots))
-
-        # TODO HACK BUG? check with Cong this is the desired behaviour.                                                                                                                                          
-        # tiled_p_binom = np.tile(p_binom, (1, n_spots))
-        # tiled_taus = np.tile(taus, (1, n_spots))
-
-
+        n_obs, n_comp, n_spots = X.shape
+        n_state = log_mu.shape[0]
+        
+        assert base_nb_mean.shape == (n_obs, n_spots)
+        assert tumor_prop.shape == (n_obs, n_spots)
+        assert log_mu.shape == (n_state, n_spots)
+        assert alphas.shape == (n_state, n_spots)
+        assert total_bb_RD.shape == (n_obs, n_spots)
+        assert p_binom.shape == (n_state, n_spots)
+        assert taus.shape == (n_state, n_spots)
+        assert tumor_prop.shape == (n_obs, n_spots)
+        
+        # print(X.shape)
+        # print(base_nb_mean.shape)
+        # print(tumor_prop.shape)
+        # print(log_mu.shape)
+        # print(alphas.shape)
+        # print(total_bb_RD.shape)
+        # print(p_binom.shape)
+        # print(taus.shape)
+        # print(tumor_prop.shape)
+        # print(kwargs["sample_length"].shape)
+        # print(kwargs["logmu_shift"].shape)
         
         log_emission_rdr = calicostem.compute_emission_probability_nb(X[:,0,:], base_nb_mean, tumor_prop, log_mu, alphas)
 
@@ -304,8 +316,13 @@ class hmm_nophasing_v2(object):
             sample_length = kwargs["sample_length"]
             logmu_shift = kwargs["logmu_shift"]
 
+            n_clone = logmu_shift.shape[0]
+
+            assert sample_length.shape == (n_clone,)
+            assert kwargs["logmu_shift"].shape == (n_clone, 1)
+            
             # TODO HACK ask Cong.
-            tiled_logmu_shift = np.tile(logmu_shift, (1, n_spots))
+            # tiled_logmu_shift = np.tile(logmu_shift, (1, n_spots))
         
             # TODO HACK types
             log_emission_baf = calicostem.compute_emission_probability_bb_mix_weighted(
