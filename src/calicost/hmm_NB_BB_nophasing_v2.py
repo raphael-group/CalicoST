@@ -284,10 +284,6 @@ class hmm_nophasing_v2(object):
         log_emission_baf[idx] = scipy.stats.betabinom.logpmf(kk[idx], nn[idx], aa[idx], bb[idx])
         
         return log_emission_rdr, log_emission_baf
-
-    @staticmethod
-    def validate_model_param_shape(model_param_array):
-        assert model_param_array.shape in [(n_state, n_spots), (n_state, 1)], f"Expected {(n_state, n_spots)} or {(n_state, 1)}, found {model_param_array.shape}"
         
     @staticmethod
     @profile
@@ -300,6 +296,10 @@ class hmm_nophasing_v2(object):
         assert total_bb_RD.shape == (n_obs, n_spots), f"Expected {(n_obs, n_spots)}, found {total_bb_RD.shape}"
         assert tumor_prop.shape == (n_obs, n_spots), f"Expected {(n_obs, n_spots)}, found {tumor_prop.shape}"
 
+        # TODO
+        def validate_model_param_shape(model_param_array):
+            assert model_param_array.shape in [(n_state, n_spots), (n_state, 1)], f"Expected {(n_state, n_spots)} or {(n_state, 1)}, found {model_param_array.shape}"
+        
         validate_model_param_shape(log_mu)
         validate_model_param_shape(alphas)
         validate_model_param_shape(p_binom)

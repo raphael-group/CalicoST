@@ -286,6 +286,91 @@ def test_hmrfmix_reassignment_posterior_concatenate_emission(benchmark, spatial_
         # TODO SIC 0.0s -> NANs for RD == 0. etc.
         assert mean == 1.0
 
+def test_hmrfmix_reassignment_posterior_concatenate_emission_broadcast(benchmark, spatial_data):
+    """
+    pytest -s test_hmrf.py::test_hmrfmix_reassignment_posterior_concatenate_emission_v2
+
+    Tests the new vectorized version of the HMRF emission calc, with broadcasting over spots.
+    """
+    (
+        kwargs,
+        res,
+        single_base_nb_mean,
+        single_tumor_prop,
+        single_X,
+        single_total_bb_RD,
+        smooth_mat,
+        hmm,
+        _,
+        _,
+        _,
+        _,
+    ) = spatial_data
+
+    n_states = 7
+
+    new_log_mu = np.log(2.0 + 2.0 * np.random.uniform(size=1))
+    new_log_mu = np.tile(new_log_mu, (n_states, 1))
+
+    new_alphas = 0.01 * np.ones_like(new_log_mu, dtype=float)
+
+    new_p_binom = np.random.uniform(size=1)
+    new_p_binom = np.tile(new_p_binom, (n_states, 1))
+
+    new_taus = np.ones_like(new_p_binom)
+
+    @profile
+    def call():
+        # See emacs +812 ../src/calicost/hmrf.py
+        #     emacs +201 ../src/calicost/hmm_NB_BB_nophasing_v2.py
+        return hmrfmix_reassignment_posterior_concatenate_emission(
+            single_X,
+            single_base_nb_mean,
+            single_total_bb_RD,
+            single_tumor_prop,
+            new_log_mu,
+            new_alphas,
+            new_p_binom,
+            new_taus,
+            smooth_mat,
+            hmm,
+            **kwargs,
+        )
+
+    benchmark.group = "hmrfmix_reassignment_posterior_concatenate_emission"
+    tmp_log_emission_rdr, tmp_log_emission_baf = benchmark(call)
+
+    # See emacs +764 ../src/calicost/hmrf.py
+    #     emacs +201 ../src/calicost/hmm_NB_BB_nophasing_v2.py
+    exp_rdr, exp_baf = hmrfmix_reassignment_posterior_concatenate_emission_v1(
+        single_X,
+        single_base_nb_mean,
+        single_total_bb_RD,
+        single_tumor_prop,
+        new_log_mu,
+        new_alphas,
+        new_p_binom,
+        new_taus,
+        smooth_mat,
+        hmm,
+        kwargs["logmu_shift"],
+        kwargs["sample_length"],
+    )
+
+    for result, exp in zip(
+        (tmp_log_emission_rdr, tmp_log_emission_baf), (exp_rdr, exp_baf)
+    ):
+        good = np.isclose(result, exp, atol=1.0e-6, equal_nan=True)
+        mean = np.mean(good)
+
+        # print()
+        # print(mean)
+        # print(np.nanmin(result), result[0, 0, :])
+        # print(np.nanmin(exp), exp[0, 0, :])
+
+        # TODO SIC 0.0s -> NANs for RD == 0. etc.
+        assert mean == 1.0
+
 
 @profile
 def run_profile(iterations=1):
