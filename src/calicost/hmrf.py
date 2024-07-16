@@ -916,7 +916,7 @@ def hmrfmix_reassignment_posterior_concatenate(
             )
 
         logmu_shift = np.vstack(logmu_shift)
-        kwargs = {"logmu_shift": logmu_shift, "sample_length": np.ones(n_clones,dtype=int) * n_obs}
+        kwargs = {"logmu_shift": logmu_shift, "sample_length": np.ones(n_clones, dtype=int) * n_obs}
     else:
         kwargs = {}
     

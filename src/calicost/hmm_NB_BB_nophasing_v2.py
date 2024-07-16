@@ -295,6 +295,8 @@ class hmm_nophasing_v2(object):
         # TODO HACK BUG? check with Cong this is the desired behaviour.                                                                                                                                          
         # tiled_p_binom = np.tile(p_binom, (1, n_spots))
         # tiled_taus = np.tile(taus, (1, n_spots))
+
+
         
         log_emission_rdr = calicostem.compute_emission_probability_nb(X[:,0,:], base_nb_mean, tumor_prop, log_mu, alphas)
 
