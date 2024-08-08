@@ -35,9 +35,18 @@ def main(configuration_file):
     for k in sorted(list(config.keys())):
         print(f"\t{k} : {config[k]}")
 
+    # Assuming the B counts are calculated by the cellsnp-lite and Eagle pipeline
+    # If assuming each spot contains a mixture of normal/tumor cells, the tumor proportion should be provided in the config file.
+    # load data
+    ## If the data is loaded for the first time: infer phasing using phase-switch HMM (hmm_NB_BB_phaseswitch.py and phasing.py) -> output initial_phase.npz, matrices in parsed_inputs folder
+    ## If the data is already loaded: load the matrices from parsed_inputs folder
     lengths, single_X, single_base_nb_mean, single_total_bb_RD, log_sitewise_transmat, df_bininfo, df_gene_snp, \
         barcodes, coords, single_tumor_prop, sample_list, sample_ids, adjacency_mat, smooth_mat, exp_counts = run_parse_n_load(config)
     
+    """
+    Initial clustering spots using only BAF values.
+    """
+    # setting transcript count to 0, and baseline so that emission probability calculation will ignore them.
     copy_single_X_rdr = copy.copy(single_X[:,0,:])
     copy_single_base_nb_mean = copy.copy(single_base_nb_mean)
     single_X[:,0,:] = 0
@@ -64,6 +73,8 @@ def main(configuration_file):
             np.savez(f"{outdir}/{prefix}_nstates{config['n_states']}_sp.npz", **allres)
 
         # run HMRF + HMM
+        # store the results of each iteration of HMRF in a npz file outdir/prefix_nstates{config['n_states']}_sp.npz
+        # if a specific iteration is computed, hmrf will directly load the results from the file
         if config["tumorprop_file"] is None:
             hmrf_concatenate_pipeline(outdir, prefix, single_X, lengths, single_base_nb_mean, single_total_bb_RD, initial_clone_index, n_states=config["n_states"], \
                 log_sitewise_transmat=log_sitewise_transmat, smooth_mat=smooth_mat, adjacency_mat=adjacency_mat, sample_ids=sample_ids, max_iter_outer=config["max_iter_outer"], nodepotential=config["nodepotential"], \
@@ -88,6 +99,8 @@ def main(configuration_file):
         else:
             X, base_nb_mean, total_bb_RD, tumor_prop = merge_pseudobulk_by_index_mix(single_X, single_base_nb_mean, single_total_bb_RD, [np.where(res["new_assignment"]==c)[0] for c in np.sort(np.unique(res["new_assignment"]))], single_tumor_prop, threshold=config["tumorprop_threshold"])
             tumor_prop = np.repeat(tumor_prop, X.shape[0]).reshape(-1,1)
+        # merge "similar" clones from the initial number of clones.
+        # "similar" defined by Neyman Pearson statistics/ Likelihood ratios P(clone A counts | BAF parameters for clone A) / P(clone A counts | BAF parameters for clone B)
         merging_groups, merged_res = similarity_components_rdrbaf_neymanpearson(X, base_nb_mean, total_bb_RD, res, threshold=config["np_threshold"], minlength=config["np_eventminlen"], params="sp", tumor_prop=tumor_prop, hmmclass=hmm_nophasing_v2)
         print(f"BAF clone merging after comparing similarity: {merging_groups}")
         #
@@ -99,7 +112,7 @@ def main(configuration_file):
         n_baf_clones = len(merging_groups)
         np.savez(f"{outdir}/mergedallspots_nstates{config['n_states']}_sp.npz", **merged_res)
 
-        # adjust phasing
+        # load merged results
         n_obs = single_X.shape[0]
         merged_res = dict(np.load(f"{outdir}/mergedallspots_nstates{config['n_states']}_sp.npz", allow_pickle=True))
         merged_baf_assignment = copy.copy(merged_res["new_assignment"])
@@ -109,8 +122,12 @@ def main(configuration_file):
         merged_baf_profiles = np.array([ np.where(pred[c,:] < config["n_states"], merged_res["new_p_binom"][pred[c,:]%config["n_states"], 0], 1-merged_res["new_p_binom"][pred[c,:]%config["n_states"], 0]) \
                                         for c in range(n_baf_clones) ])
         
+        """
+        Refined clustering using BAF and RDR values.
+        """
         # adding RDR information
         if not config["bafonly"]:
+            # Only used when assuming each spot is pure normal or tumor and if we don't know which spots are normal spots.
             # select normal spots
             if (config["normalidx_file"] is None) and (config["tumorprop_file"] is None):
                 EPS_BAF = 0.05
@@ -129,19 +146,24 @@ def main(configuration_file):
                 # single_base_nb_mean has already been added in loading data step.
                 if not config["tumorprop_file"] is None:
                     logger.warning(f"Mixed sources of information for normal spots! Using {config['normalidx_file']}")
+            
+            # If tumor purity is provided, we can use it to select normal spots.
             else:
                 for prop_threshold in np.arange(0.05, 0.6, 0.05):
                     normal_candidate = (single_tumor_prop < prop_threshold)
                     if np.sum(copy_single_X_rdr[:, (normal_candidate==True)]) > single_X.shape[0] * 200:
                         break
-            # filter bins based on normal
+            # To avoid allele-specific expression that are not relevant to CNA, filter bins where normal pseudobulk has large |BAF - 0.5|
             index_normal = np.where(normal_candidate)[0]
             lengths, single_X, single_base_nb_mean, single_total_bb_RD, log_sitewise_transmat, df_gene_snp = bin_selection_basedon_normal(df_gene_snp, \
                 single_X, single_base_nb_mean, single_total_bb_RD, config['nu'], config['logphase_shift'], index_normal, config['geneticmap_file'])
             assert df_bininfo.shape[0] == copy_single_X_rdr.shape[0]
             df_bininfo = genesnp_to_bininfo(df_gene_snp)
             copy_single_X_rdr = copy.copy(single_X[:,0,:])
-            # filter out high-UMI DE genes, which may bias RDR estimates
+
+            # If a gene has way higher expression than adjacent genes, its transcript count will dominate RDR values
+            # To avoid the domination, filter out high-UMI DE genes, which may bias RDR estimates
+            # Assume the remaining genes will still carry the CNA info.
             copy_single_X_rdr, _ = filter_de_genes_tri(exp_counts, df_bininfo, normal_candidate, sample_list=sample_list, sample_ids=sample_ids)
             MIN_NORMAL_COUNT_PERBIN = 20
             bidx_inconfident = np.where( np.sum(copy_single_X_rdr[:, (normal_candidate==True)], axis=1) < MIN_NORMAL_COUNT_PERBIN )[0]
@@ -166,6 +188,7 @@ def main(configuration_file):
                 if np.sum(single_total_bb_RD[:, idx_spots]) < single_X.shape[0] * 20: # put a minimum B allele read count on pseudobulk to split clones
                     continue
                 # initialize clone
+                # write the initialization in a npz file outdir/prefix_nstates{config['n_states']}_smp.npz
                 if config["tumorprop_file"] is None:
                     initial_clone_index = rectangle_initialize_initial_clone(coords[idx_spots], config['n_clones_rdr'], random_state=r_hmrf_initialization)
                 else:
