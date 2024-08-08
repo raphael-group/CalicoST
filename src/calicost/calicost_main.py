@@ -298,6 +298,7 @@ def main(configuration_file):
                 log_persample_weights[:, sidx] = np.where(this_persample_weight > 0, np.log(this_persample_weight), -50)
                 log_persample_weights[:, sidx] = log_persample_weights[:, sidx] - scipy.special.logsumexp(log_persample_weights[:, sidx])
             # final re-assignment across all clones using estimated RDR + BAF
+            # The following step may not be needed because of other improvements. And it may cause mistakes in some cases.
             if config["tumorprop_file"] is None:
                 if config["nodepotential"] == "max":
                     pred = np.vstack([ np.argmax(res_combine["log_gamma"][:,:,c], axis=0) for c in range(res_combine["log_gamma"].shape[2]) ]).T

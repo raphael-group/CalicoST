@@ -27,11 +27,20 @@ from statsmodels.tools.sm_exceptions import ValueWarning
 ############################################################
 
 def hmrf_reassignment_posterior(single_X, single_base_nb_mean, single_total_bb_RD, res, smooth_mat, adjacency_mat, prev_assignment, sample_ids, log_persample_weights, spatial_weight, hmmclass=hmm_sitewise, return_posterior=False):
+    """
+    Choosing clones by Iterated Conditional Modes (Forward-backward version):
+    for which the emission probability is given by the posterior probability of all HMM states at each bin.
+    Input format assumption: the RDR/BAF vectors are not shared across clones <- after clone refinement with RDR+BAF signals.
+
+    HMRF likelihood: node potential where each node is a spot. And edge potential.
+    Node potential: likelihood of the data given HMM states of each clone.
+    Edge potential: Potts model.
+    """
     N = single_X.shape[2]
     n_obs = single_X.shape[0]
     n_clones = res["new_log_mu"].shape[1]
     n_states = res["new_p_binom"].shape[0]
-    single_llf = np.zeros((N, n_clones))
+    single_llf = np.zeros((N, n_clones)) # node potential
     new_assignment = copy.copy(prev_assignment)
     #
     posterior = np.zeros((N, n_clones))
@@ -72,6 +81,12 @@ def hmrf_reassignment_posterior(single_X, single_base_nb_mean, single_total_bb_R
 
 
 def aggr_hmrf_reassignment(single_X, single_base_nb_mean, single_total_bb_RD, res, pred, smooth_mat, adjacency_mat, prev_assignment, sample_ids, log_persample_weights, spatial_weight, hmmclass=hmm_sitewise, return_posterior=False):
+    """
+    Choosing clones by Iterated Conditional Modes (Viterbi version):
+    for which the emission probability of each spot is a single of HMM state sequence.
+    Input format assumption: the RDR/BAF vectors are not shared across clones <- after clone refinement with RDR+BAF signals.
+
+    """
     N = single_X.shape[2]
     n_obs = single_X.shape[0]
     n_clones = res["new_log_mu"].shape[1]
@@ -116,6 +131,9 @@ def aggr_hmrf_reassignment(single_X, single_base_nb_mean, single_total_bb_RD, re
 
 
 def hmrf_reassignment_posterior_concatenate(single_X, single_base_nb_mean, single_total_bb_RD, res, smooth_mat, adjacency_mat, prev_assignment, sample_ids, log_persample_weights, spatial_weight, hmmclass=hmm_sitewise, return_posterior=False):
+    """
+    Input format assumption: the RDR/BAF vector is shared across all clones <- using only BAF signals, or running for each initial clone
+    """
     N = single_X.shape[2]
     n_obs = single_X.shape[0]
     n_clones = np.max(prev_assignment) + 1
