@@ -324,7 +324,7 @@ class hmm_nophasing(object):
         n_spots = X.shape[2]
         assert n_comp == 2
 
-        logger.info("Initialize NB logmean shift, BetaBinom prob and dispersion param inverse.")
+        logger.info("Initialize Baum-Welch NB logmean shift, BetaBinom prob and dispersion param inverse.")
 
         log_mu = (
             np.vstack([np.linspace(-0.1, 0.1, n_states) for r in range(n_spots)]).T
@@ -507,6 +507,8 @@ class hmm_nophasing(object):
             alphas = new_alphas
             p_binom = new_p_binom
             taus = new_taus
+
+        logger.info("Computed Baum-Welch (v2).")
 
         return (
             new_log_mu,
