@@ -1,46 +1,42 @@
-import sys
-import numpy as np
-import scipy
-import pandas as pd
-from pathlib import Path
-from sklearn.metrics import adjusted_rand_score
-from sklearn.cluster import KMeans
-import scanpy as sc
-import anndata
-import logging
-
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s - %(levelname)s - %(message)s",
-    datefmt="%Y-%m-%d %H:%M:%S",
-)
-logger = logging.getLogger()
 import copy
-from pathlib import Path
 import functools
+import logging
 import subprocess
-from arg_parse import *
-from hmm_NB_BB_phaseswitch import *
-from utils_distribution_fitting import *
-from utils_hmrf import *
-from hmrf import *
-from phasing import *
-from utils_IO import *
-from find_integer_copynumber import *
-from parse_input import *
-from utils_plotting import *
+import sys
+from pathlib import Path
 
+import anndata
+import matplotlib.patches as mpatches
+import mkl
+import numpy as np
+import pandas as pd
+import scanpy as sc
+import scipy
+import seaborn
 from matplotlib import pyplot as plt
 from matplotlib.lines import Line2D
-import matplotlib.patches as mpatches
-import seaborn
+from sklearn.cluster import KMeans
+from sklearn.metrics import adjusted_rand_score
+
+from arg_parse import *
+from find_integer_copynumber import *
+from hmm_NB_BB_phaseswitch import *
+from hmrf import *
+from parse_input import *
+from phasing import *
+from utils_distribution_fitting import *
+from utils_hmrf import *
+from utils_IO import *
+from utils_plotting import *
+
+# DEPRECATE
+# mkl.set_num_threads(1)
+
+logger = logging.getLogger(__name__)
+
+logger.error("MKL_NUM_THREADS set to unity here.")
 
 plt.rcParams.update({"font.size": 14})
-
-import mkl
-
-mkl.set_num_threads(1)
-
 
 def main(configuration_file):
     try:
