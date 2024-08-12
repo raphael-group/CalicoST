@@ -1,50 +1,91 @@
-import sys
-import numpy as np
-import scipy
-import pandas as pd
-from pathlib import Path
-from sklearn.metrics import adjusted_rand_score
-from sklearn.cluster import KMeans
-import scanpy as sc
-import anndata
-import logging
-
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s - %(levelname)s - %(message)s",
-    datefmt="%Y-%m-%d %H:%M:%S",
-)
-logger = logging.getLogger()
 import copy
-from pathlib import Path
 import functools
+import logging
 import subprocess
+import sys
+import datetime
+from pathlib import Path
+
+import anndata
+import numpy as np
+import pandas as pd
+import scanpy as sc
+import scipy
+from sklearn.cluster import KMeans
+from sklearn.metrics import adjusted_rand_score
+
 from calicost.arg_parse import *
+from calicost.find_integer_copynumber import *
 from calicost.hmm_NB_BB_phaseswitch import *
+from calicost.hmrf import *
+from calicost.parse_input import *
+from calicost.phasing import *
 from calicost.utils_distribution_fitting import *
 from calicost.utils_hmrf import *
-from calicost.hmrf import *
-from calicost.phasing import *
 from calicost.utils_IO import *
-from calicost.find_integer_copynumber import *
-from calicost.parse_input import *
 from calicost.utils_plotting import *
 
+"""
+from calicost.hmm_NB_BB_nophasing_v2 import hmm_nophasing_v2
+from calicost.arg_parse import run_parse_n_load, genesnp_to_bininfo
+from calicost.find_integer_copynumber import (hill_climbing_integer_copynumber_fixdiploid,
+                                              hill_climbing_integer_copynumber_oneclone)
+from calicost.hmm_NB_BB_phaseswitch import (combine_similar_states_across_clones,
+                                            similarity_components_rdrbaf_neymanpearson)
+from calicost.hmrf import (aggr_hmrf_reassignment, aggr_hmrfmix_reassignment,
+                           hmrf_concatenate_pipeline, hmrf_reassignment_posterior,
+                           hmrfmix_concatenate_pipeline, hmrfmix_reassignment_posterior,
+                           merge_by_minspots)
+from calicost.phasing import pipeline_baum_welch
+from calicost.utils_hmrf import (load_hmrf_last_iteration, rectangle_initialize_initial_clone,
+                                 rectangle_initialize_initial_clone_mix, reorder_results)
+from calicost.utils_IO import bin_selection_basedon_normal, expand_df_cnv, filter_de_genes_tri
+from calicost.utils_plotting import (argparse, merge_pseudobulk_by_index,
+                                     merge_pseudobulk_by_index_mix, plot_acn_from_df,
+                                     plot_acn_from_df_anotherscheme, plot_clones_in_space,
+                                     plot_individual_spots_in_space, plot_rdr_baf, plt,
+                                    read_configuration_file, read_joint_configuration_file)
+"""
+
+logger = logging.getLogger("calicost")
+logger.setLevel(logging.INFO)
+
+handler = logging.StreamHandler(sys.stdout)
+fhandler = logging.FileHandler('calicost.log', mode="w")
+
+formatter = logging.Formatter("%(asctime)s - %(process)d - %(levelname)s - %(name)s:%(lineno)d - %(message)s")
+
+handler.setFormatter(formatter)
+fhandler.setFormatter(formatter)
+
+logger.addHandler(handler)
+logger.addHandler(fhandler)
 
 def main(configuration_file):
+    start = datetime.datetime.now()
+
     try:
         config = read_configuration_file(configuration_file)
     except:
         config = read_joint_configuration_file(configuration_file)
-    print("Configurations:")
-    for k in sorted(list(config.keys())):
-        print(f"\t{k} : {config[k]}")
 
-    # Assuming the B counts are calculated by the cellsnp-lite and Eagle pipeline
-    # If assuming each spot contains a mixture of normal/tumor cells, the tumor proportion should be provided in the config file.
-    # load data
-    ## If the data is loaded for the first time: infer phasing using phase-switch HMM (hmm_NB_BB_phaseswitch.py and phasing.py) -> output initial_phase.npz, matrices in parsed_inputs folder
-    ## If the data is already loaded: load the matrices from parsed_inputs folder
+    logger.info("Configuration settings:")
+
+    for k in sorted(list(config.keys())):
+        logger.info(f"\t{k} : {config[k]}")
+
+    # NB assuming the B-allele counts are calculated by the cellsnp-lite & Eagle pipeline.  If assuming each spot contains
+    #    a mixture of normal/tumor cells, the tumor proportion path should be provided in the config file.
+    # 
+    # NB load data: 
+    #    - If the data is loaded for the first time: infer phasing using phase-switch HMM 
+    #      (hmm_NB_BB_phaseswitch.py & phasing.py) with output initial_phase.npz, matrices
+    #      in /parsed_inputs
+    # 
+    #    - If the data is already loaded: load the matrices from parsed_inputs folder
+
+    logger.info(f"Running parse and load.")
+
     (
         lengths,
         single_X,
@@ -63,25 +104,32 @@ def main(configuration_file):
         exp_counts,
     ) = run_parse_n_load(config)
 
-    """
-    Initial clustering spots using only BAF values.
-    """
-    # setting transcript count to 0, and baseline so that emission probability calculation will ignore them.
+    logger.info(f"****  Estimating initial clones using BAF only  ****")
+
+    # NB setting transcript & baseline count to 0 so the emission probability will be ignored.
     copy_single_X_rdr = copy.copy(single_X[:, 0, :])
     copy_single_base_nb_mean = copy.copy(single_base_nb_mean)
+
     single_X[:, 0, :] = 0
     single_base_nb_mean[:, :] = 0
 
-    # run HMRF
     for r_hmrf_initialization in range(
         config["num_hmrf_initialization_start"], config["num_hmrf_initialization_end"]
     ):
+        logger.info(f"Processing HMRF random realization {num_hmrf_initialization_start:d}")
+
         outdir = f"{config['output_dir']}/clone{config['n_clones']}_rectangle{r_hmrf_initialization}_w{config['spatial_weight']:.1f}"
+        outdir = Path(outdir)
+
         if config["tumorprop_file"] is None:
+            logger.info(f"Initializing clones ignoring tumor proportion.")
+
             initial_clone_index = rectangle_initialize_initial_clone(
                 coords, config["n_clones"], random_state=r_hmrf_initialization
             )
         else:
+            logger.info(f"Initializing clones based on tumor proportion: {config["tumorprop_file"]}")
+
             initial_clone_index = rectangle_initialize_initial_clone_mix(
                 coords,
                 config["n_clones"],
@@ -90,27 +138,30 @@ def main(configuration_file):
                 random_state=r_hmrf_initialization,
             )
 
-        # create directory
-        p = subprocess.Popen(
-            f"mkdir -p {outdir}",
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            shell=True,
-        )
-        out, err = p.communicate()
-        # save clone initialization into npz file
-        prefix = "allspots"
-        if not Path(f"{outdir}/{prefix}_nstates{config['n_states']}_sp.npz").exists():
+        # NB save clone initialization to npz file
+        file_name = Path(f"allspots_nstates{config['n_states']}_sp.npz")
+        file_path = outdir / file_name
+
+        if not file_path.exists():
+            logger.info(f"Creating output dir: {str(outdir)}")
+
+            # TODO exist_ok 
+            outdir.mkdir(parents=True, exist_ok=True)
+
             initial_assignment = np.zeros(single_X.shape[2], dtype=int)
+
             for c, idx in enumerate(initial_clone_index):
                 initial_assignment[idx] = c
-            allres = {"num_iterations": 0, "round-1_assignment": initial_assignment}
-            np.savez(f"{outdir}/{prefix}_nstates{config['n_states']}_sp.npz", **allres)
 
-        # run HMRF + HMM
-        # store the results of each iteration of HMRF in a npz file outdir/prefix_nstates{config['n_states']}_sp.npz
-        # if a specific iteration is computed, hmrf will directly load the results from the file
+            np.savez(str(file_path), **{"num_iterations": 0, "round-1_assignment": initial_assignment})
+
+        # ----  HMRF + HMM  ----
+        # 
+        # NB stores the results of each HMRF iteration in a .npz @ ./outdir/prefix_nstates{config['n_states']}_sp.npz
+        #    if a specific iteration is already computed, hmrf will load the results directly from the file.
         if config["tumorprop_file"] is None:
+            logger.info("Solving HMRF concatenate pipeline without tumor proportion.")
+
             hmrf_concatenate_pipeline(
                 outdir,
                 prefix,
@@ -140,6 +191,8 @@ def main(configuration_file):
                 spatial_weight=config["spatial_weight"],
             )
         else:
+            logger.info("Solving HMRF concatenate pipeline with tumor proportion.")
+
             hmrfmix_concatenate_pipeline(
                 outdir,
                 prefix,
@@ -171,11 +224,13 @@ def main(configuration_file):
                 tumorprop_threshold=config["tumorprop_threshold"],
             )
 
-        # merge by thresholding BAF profile similarity
+        logger.info("Loading last HMRF iteration & merging clones based on BAF profile similarity threshold.")
+
+        n_obs = single_X.shape[0]
         res = load_hmrf_last_iteration(
             f"{outdir}/{prefix}_nstates{config['n_states']}_sp.npz"
         )
-        n_obs = single_X.shape[0]
+
         if config["tumorprop_file"] is None:
             X, base_nb_mean, total_bb_RD = merge_pseudobulk_by_index(
                 single_X,
@@ -200,8 +255,12 @@ def main(configuration_file):
                 threshold=config["tumorprop_threshold"],
             )
             tumor_prop = np.repeat(tumor_prop, X.shape[0]).reshape(-1, 1)
-        # merge "similar" clones from the initial number of clones.
-        # "similar" defined by Neyman Pearson statistics/ Likelihood ratios P(clone A counts | BAF parameters for clone A) / P(clone A counts | BAF parameters for clone B)
+            
+        logger.info("Merged pseudo-bulk based on clone index.")
+
+        # NB ratio == P(clone A counts | BAF parameters for clone A) / P(clone A counts | BAF parameters for clone B)
+        logger.info("Merging similar initial clones based on Neyman-Pearson Likelihood ratio.")
+
         merging_groups, merged_res = similarity_components_rdrbaf_neymanpearson(
             X,
             base_nb_mean,
@@ -213,8 +272,10 @@ def main(configuration_file):
             tumor_prop=tumor_prop,
             hmmclass=hmm_nophasing_v2,
         )
-        print(f"BAF clone merging after comparing similarity: {merging_groups}")
-        #
+
+        logger.info(f"BAF clone merging after comparing similarity: {merging_groups}")
+        logger.info(f"Merging similar initial clones based on min. spot threshold of {config["min_spots_per_clone"]}.")
+
         if config["tumorprop_file"] is None:
             merging_groups, merged_res = merge_by_minspots(
                 merged_res["new_assignment"],
@@ -233,13 +294,20 @@ def main(configuration_file):
                 single_tumor_prop=single_tumor_prop,
                 threshold=config["tumorprop_threshold"],
             )
-        print(f"BAF clone merging after requiring minimum # spots: {merging_groups}")
+
+        logger.info(f"BAF clone merging after requiring minimum # spots: {merging_groups}")
+
         n_baf_clones = len(merging_groups)
+
+        file_path = f"{outdir}/mergedallspots_nstates{config['n_states']}_sp.npz"
+
+        logger.info(f"Writing merged initial clones to {file_path}")
+
         np.savez(
-            f"{outdir}/mergedallspots_nstates{config['n_states']}_sp.npz", **merged_res
+            file_path, **merged_res
         )
 
-        # load merged results
+        # NB load merged results
         n_obs = single_X.shape[0]
         merged_res = dict(
             np.load(
@@ -247,12 +315,16 @@ def main(configuration_file):
                 allow_pickle=True,
             )
         )
+
         merged_baf_assignment = copy.copy(merged_res["new_assignment"])
         n_baf_clones = len(np.unique(merged_baf_assignment))
+
+        # TODO comment. 
         pred = np.argmax(merged_res["log_gamma"], axis=0)
         pred = np.array(
             [pred[(c * n_obs) : (c * n_obs + n_obs)] for c in range(n_baf_clones)]
         )
+
         merged_baf_profiles = np.array(
             [
                 np.where(
@@ -264,18 +336,23 @@ def main(configuration_file):
             ]
         )
 
-        """
-        Refined clustering using BAF and RDR values.
-        """
-        # adding RDR information
+        logger.info("Preparing refinement of initial, merged clones using BAF & RDR  ****")
+        
         if not config["bafonly"]:
-            # Only used when assuming each spot is pure normal or tumor and if we don't know which spots are normal spots.
-            # select normal spots
+            # NB this block only used when assuming each spot is pure normal or pure tumor,
+            #    and if we don't know which spots are normal spots.
+            # 
+            # NB select normal spots
+
+            logger.info("Identifying normal spots.")
+
             if (config["normalidx_file"] is None) and (
                 config["tumorprop_file"] is None
             ):
+                # TODO hardcode
                 EPS_BAF = 0.05
                 PERCENT_NORMAL = 40
+
                 vec_stds = np.std(np.log1p(copy_single_X_rdr @ smooth_mat), axis=0)
                 id_nearnormal_clone = np.argmin(
                     np.sum(
@@ -283,6 +360,7 @@ def main(configuration_file):
                         axis=1,
                     )
                 )
+
                 while True:
                     stdthreshold = np.percentile(
                         vec_stds[merged_res["new_assignment"] == id_nearnormal_clone],
@@ -298,18 +376,19 @@ def main(configuration_file):
                     ):
                         break
                     PERCENT_NORMAL += 10
+
                 pd.Series(barcodes[normal_candidate == True].index).to_csv(
                     f"{outdir}/normal_candidate_barcodes.txt", header=False, index=False
                 )
 
             elif not config["normalidx_file"] is None:
-                # single_base_nb_mean has already been added in loading data step.
+                # NB single_base_nb_mean has been initialized in loading data step (run_parse_n_load - TBC).
                 if not config["tumorprop_file"] is None:
                     logger.warning(
-                        f"Mixed sources of information for normal spots! Using {config['normalidx_file']}"
+                        f"Mixed sources of information for normal spots!  Using {config['normalidx_file']}"
                     )
 
-            # If tumor purity is provided, we can use it to select normal spots.
+            # NB if tumor purity is provided, we can use it to select normal spots.
             else:
                 for prop_threshold in np.arange(0.05, 0.6, 0.05):
                     normal_candidate = single_tumor_prop < prop_threshold
@@ -318,8 +397,13 @@ def main(configuration_file):
                         > single_X.shape[0] * 200
                     ):
                         break
-            # To avoid allele-specific expression that are not relevant to CNA, filter bins where normal pseudobulk has large |BAF - 0.5|
+
+            # NB avoid allele-specific expression that is not relevant to CNA by filtering bins where normal
+            #    pseudobulk has large |BAF - 0.5|
             index_normal = np.where(normal_candidate)[0]
+
+            logger.info("Filtering genomic bins for allele-specific expression based on normal spots.")
+
             (
                 lengths,
                 single_X,
@@ -337,13 +421,18 @@ def main(configuration_file):
                 index_normal,
                 config["geneticmap_file"],
             )
+            
             assert df_bininfo.shape[0] == copy_single_X_rdr.shape[0]
+
             df_bininfo = genesnp_to_bininfo(df_gene_snp)
             copy_single_X_rdr = copy.copy(single_X[:, 0, :])
 
-            # If a gene has way higher expression than adjacent genes, its transcript count will dominate RDR values
-            # To avoid the domination, filter out high-UMI DE genes, which may bias RDR estimates
-            # Assume the remaining genes will still carry the CNA info.
+            # NB if a gene has much higher expression than adjacent genes, its transcripts will dominate RDR.
+            #    To avoid this, filter out (high-UMI) DE genes, which may bias estimates, assuming the remaining
+            #    genes will still carry the CNA info.
+
+            logger.info("Filtering genes with expression outliers.")
+
             copy_single_X_rdr, _ = filter_de_genes_tri(
                 exp_counts,
                 df_bininfo,
@@ -351,7 +440,10 @@ def main(configuration_file):
                 sample_list=sample_list,
                 sample_ids=sample_ids,
             )
+
+            # TODO hardcode
             MIN_NORMAL_COUNT_PERBIN = 20
+
             bidx_inconfident = np.where(
                 np.sum(copy_single_X_rdr[:, (normal_candidate == True)], axis=1)
                 < MIN_NORMAL_COUNT_PERBIN
@@ -361,19 +453,21 @@ def main(configuration_file):
             )
             rdr_normal[bidx_inconfident] = 0
             rdr_normal = rdr_normal / np.sum(rdr_normal)
-            copy_single_X_rdr[bidx_inconfident, :] = (
-                0  # avoid ill-defined distributions if normal has 0 count in that bin.
-            )
+
+            # NB avoid ill-defined distributions if normal has 0 counts in bin.
+            copy_single_X_rdr[bidx_inconfident, :] = 0
+
             copy_single_base_nb_mean = rdr_normal.reshape(-1, 1) @ np.sum(
                 copy_single_X_rdr, axis=0
             ).reshape(1, -1)
 
-            # adding back RDR signal
+            # NB restore RDR data.
             single_X[:, 0, :] = copy_single_X_rdr
             single_base_nb_mean = copy_single_base_nb_mean
             n_obs = single_X.shape[0]
 
-            # save binned data
+            logger.info(f"Writing {outdir}/binned_data.npz")
+
             np.savez(
                 f"{outdir}/binned_data.npz",
                 lengths=lengths,
@@ -386,16 +480,19 @@ def main(configuration_file):
                 ),
             )
 
-            # run HMRF on each clone individually to further split BAF clone by RDR+BAF signal
+            logger.info(f"****  Refining initial, merged clones (N={n_baf_clones}) using BAF & RDR  ****")
+
             for bafc in range(n_baf_clones):
+                logger.info(f"Refining BAF clone {bafc}.")    
+
                 prefix = f"clone{bafc}"
                 idx_spots = np.where(merged_baf_assignment == bafc)[0]
-                if (
-                    np.sum(single_total_bb_RD[:, idx_spots]) < single_X.shape[0] * 20
-                ):  # put a minimum B allele read count on pseudobulk to split clones
+
+                # NB put a minimum B allele read count on pseudobulk to split clones
+                if np.sum(single_total_bb_RD[:, idx_spots]) < single_X.shape[0] * 20:
                     continue
-                # initialize clone
-                # write the initialization in a npz file outdir/prefix_nstates{config['n_states']}_smp.npz
+
+                # NB initialize sub-clones within initial, merged BAF clone.
                 if config["tumorprop_file"] is None:
                     initial_clone_index = rectangle_initialize_initial_clone(
                         coords[idx_spots],
@@ -410,24 +507,27 @@ def main(configuration_file):
                         threshold=config["tumorprop_threshold"],
                         random_state=r_hmrf_initialization,
                     )
-                if not Path(
-                    f"{outdir}/{prefix}_nstates{config['n_states']}_smp.npz"
-                ).exists():
+
+                # NB write the initialization to .npz @ ./outdir/prefix_nstates{config['n_states']}_smp.npz
+                file_path = Path(f"{outdir}/{prefix}_nstates{config['n_states']}_smp.npz")
+
+                if not file_path.exists():
                     initial_assignment = np.zeros(len(idx_spots), dtype=int)
+
                     for c, idx in enumerate(initial_clone_index):
                         initial_assignment[idx] = c
+
                     allres = {
                         "barcodes": barcodes[idx_spots],
                         "num_iterations": 0,
                         "round-1_assignment": initial_assignment,
                     }
-                    np.savez(
-                        f"{outdir}/{prefix}_nstates{config['n_states']}_smp.npz",
-                        **allres,
-                    )
+                    
+                    np.savez(str(file_path), **allres)
 
-                # HMRF + HMM using RDR information
+                # HMRF + HMM with RDR
                 copy_slice_sample_ids = copy.copy(sample_ids[idx_spots])
+
                 if config["tumorprop_file"] is None:
                     hmrf_concatenate_pipeline(
                         outdir,
@@ -489,9 +589,11 @@ def main(configuration_file):
                         tumorprop_threshold=config["tumorprop_threshold"],
                     )
 
-            ##### combine results across clones #####
+            logger.info(f"Combining results across clones.")
+
             res_combine = {"prev_assignment": np.zeros(single_X.shape[2], dtype=int)}
             offset_clone = 0
+
             for bafc in range(n_baf_clones):
                 prefix = f"clone{bafc}"
                 allres = dict(
@@ -515,7 +617,9 @@ def main(configuration_file):
                     "prev_assignment": allres[f"round{r-1}_assignment"],
                     "new_assignment": allres[f"round{r}_assignment"],
                 }
+
                 idx_spots = np.where(barcodes.isin(allres["barcodes"]))[0]
+
                 if len(np.unique(res["new_assignment"])) == 1:
                     n_merged_clones = 1
                     c = res["new_assignment"][0]
@@ -559,6 +663,9 @@ def main(configuration_file):
                             )
                         )
                         tumor_prop = np.repeat(tumor_prop, X.shape[0]).reshape(-1, 1)
+
+                    logger.info(f"Merging BAF+RDR clones based on Neyman-Pearson Likelihood ratio.")
+
                     merging_groups, merged_res = (
                         similarity_components_rdrbaf_neymanpearson(
                             X,
@@ -572,8 +679,9 @@ def main(configuration_file):
                             hmmclass=hmm_nophasing_v2,
                         )
                     )
-                    print(f"part {bafc} merging_groups: {merging_groups}")
-                    #
+
+                    logger.info(f"BAF+RDR clone {bafc}: merging_groups={merging_groups}")
+                    
                     if config["tumorprop_file"] is None:
                         merging_groups, merged_res = merge_by_minspots(
                             merged_res["new_assignment"],
@@ -594,12 +702,16 @@ def main(configuration_file):
                             single_tumor_prop=single_tumor_prop[idx_spots],
                             threshold=config["tumorprop_threshold"],
                         )
-                    print(
-                        f"part {bafc} merging after requiring minimum # spots: {merging_groups}"
+                    
+                    # TODO what is merging_groups
+                    logger.info(
+                        f"BAF+RDR clone {bafc} merging after requiring minimum # spots: {merging_groups}"
                     )
-                    # compute posterior using the newly merged pseudobulk
+
+                    # NB compute posterior using the newly merged pseudobulk
                     n_merged_clones = len(merging_groups)
                     tmp = copy.copy(merged_res["new_assignment"])
+
                     if config["tumorprop_file"] is None:
                         X, base_nb_mean, total_bb_RD = merge_pseudobulk_by_index(
                             single_X[:, :, idx_spots],
@@ -625,7 +737,9 @@ def main(configuration_file):
                                 threshold=config["tumorprop_threshold"],
                             )
                         )
-                    #
+                    
+                    logger.info(f"Running Baum-Welch with refined & merged BAF+RDR clones.")
+
                     merged_res = pipeline_baum_welch(
                         None,
                         np.vstack(
@@ -660,6 +774,9 @@ def main(configuration_file):
                         sample_length=np.ones(X.shape[2], dtype=int) * X.shape[0],
                     )
                     merged_res["new_assignment"] = copy.copy(tmp)
+
+                    logger.info("Combining similar states across clones.")
+
                     merged_res = combine_similar_states_across_clones(
                         X,
                         base_nb_mean,
@@ -689,8 +806,8 @@ def main(configuration_file):
                             for c in range(n_merged_clones)
                         ]
                     ).T
-                #
-                # add to res_combine
+                
+                # NB add to res_combine
                 if len(res_combine) == 1:
                     res_combine.update(
                         {
@@ -739,13 +856,17 @@ def main(configuration_file):
                     merged_res["new_assignment"] + offset_clone
                 )
                 offset_clone += n_merged_clones
-            # temp: make dispersions the same across all clones
+
+            # NB temp: make dispersions the same across all clones
             res_combine["new_alphas"][:, :] = np.max(res_combine["new_alphas"])
             res_combine["new_taus"][:, :] = np.min(res_combine["new_taus"])
-            # end temp
+            # NB end temp
+
             n_final_clones = len(np.unique(res_combine["prev_assignment"]))
-            # per-sample weights across clones
+
+            # NB per-sample weights across clones
             log_persample_weights = np.zeros((n_final_clones, len(sample_list)))
+
             for sidx in range(len(sample_list)):
                 index = np.where(sample_ids == sidx)[0]
                 this_persample_weight = np.bincount(
@@ -757,8 +878,10 @@ def main(configuration_file):
                 log_persample_weights[:, sidx] = log_persample_weights[
                     :, sidx
                 ] - scipy.special.logsumexp(log_persample_weights[:, sidx])
-            # final re-assignment across all clones using estimated RDR + BAF
-            # The following step may not be needed because of other improvements. And it may cause mistakes in some cases.
+
+            # NB final re-assignment across all clones using estimated RDR + BAF
+            #    The following step may not be needed because of other improvements
+            #    and it may cause errors in some cases.
             if config["tumorprop_file"] is None:
                 if config["nodepotential"] == "max":
                     pred = np.vstack(
@@ -767,6 +890,9 @@ def main(configuration_file):
                             for c in range(res_combine["log_gamma"].shape[2])
                         ]
                     ).T
+
+                    logger.info("Aggregating HMRF reassignment with Viterbi.")
+
                     new_assignment, single_llf, total_llf, posterior = (
                         aggr_hmrf_reassignment(
                             single_X,
@@ -785,6 +911,8 @@ def main(configuration_file):
                         )
                     )
                 elif config["nodepotential"] == "weighted_sum":
+                    logger.info("Reassigning HMRF posterior.")
+
                     new_assignment, single_llf, total_llf, posterior = (
                         hmrf_reassignment_posterior(
                             single_X,
@@ -809,6 +937,9 @@ def main(configuration_file):
                             for c in range(res_combine["log_gamma"].shape[2])
                         ]
                     ).T
+
+                    logger.info("Aggregating HMRF mix reassignment with Viterbi.")
+
                     new_assignment, single_llf, total_llf, posterior = (
                         aggr_hmrfmix_reassignment(
                             single_X,
@@ -828,6 +959,8 @@ def main(configuration_file):
                         )
                     )
                 elif config["nodepotential"] == "weighted_sum":
+                    logger.info("Reassigning HMRF mix posterior.")
+
                     new_assignment, single_llf, total_llf, posterior = (
                         hmrfmix_reassignment_posterior(
                             single_X,
@@ -847,18 +980,25 @@ def main(configuration_file):
                     )
             res_combine["total_llf"] = total_llf
             res_combine["new_assignment"] = new_assignment
-            # re-order clones such that normal clones are always clone 0
+
+            # NB re-order clones such that normal clones are always clone 0
             res_combine, posterior = reorder_results(
                 res_combine, posterior, single_tumor_prop
             )
-            # save results
+            
+            logger.info(f"Writing {outdir}/rdrbaf_final_nstates{config['n_states']}_smp.npz")
+
             np.savez(
                 f"{outdir}/rdrbaf_final_nstates{config['n_states']}_smp.npz",
                 **res_combine,
             )
+            
+            logger.info(f"Writing {outdir}/posterior_clone_probability.npy")
+
             np.save(f"{outdir}/posterior_clone_probability.npy", posterior)
 
-            ##### infer integer copy #####
+            logger.info("Inferring integer copy numbers")
+
             res_combine = dict(
                 np.load(
                     f"{outdir}/rdrbaf_final_nstates{config['n_states']}_smp.npz",
@@ -867,11 +1007,13 @@ def main(configuration_file):
             )
             final_clone_ids = np.sort(np.unique(res_combine["new_assignment"]))
             nonempty_clone_ids = copy.copy(final_clone_ids)
+
             # add clone 0 as normal clone if it doesn't appear in final_clone_ids
             if not (0 in final_clone_ids):
                 final_clone_ids = np.append(0, final_clone_ids)
             # chr position
             medfix = ["", "_diploid", "_triploid", "_tetraploid"]
+
             for o, max_medploidy in enumerate([None, 2, 3, 4]):
                 # A/B copy number per bin
                 allele_specific_copy = []
@@ -955,10 +1097,10 @@ def main(configuration_file):
                                 finding_distate_failed = True
                                 continue
 
-                    print(
+                    logger.info(
                         f"max med ploidy = {max_medploidy}, clone {s}, integer copy inference loss = {_}"
                     )
-                    #
+                    
                     allele_specific_copy.append(
                         pd.DataFrame(
                             best_integer_copies[
@@ -977,7 +1119,7 @@ def main(configuration_file):
                             columns=np.arange(n_obs),
                         )
                     )
-                    #
+                    
                     state_cnv.append(
                         pd.DataFrame(
                             res_combine["new_log_mu"][:, s].reshape(-1, 1),
@@ -985,6 +1127,7 @@ def main(configuration_file):
                             index=np.arange(config["n_states"]),
                         )
                     )
+
                     state_cnv.append(
                         pd.DataFrame(
                             res_combine["new_p_binom"][:, s].reshape(-1, 1),
@@ -1006,7 +1149,7 @@ def main(configuration_file):
                             index=np.arange(config["n_states"]),
                         )
                     )
-                    #
+                    # DEPRECATE
                     # tmpdf = get_genelevel_cnv_oneclone(best_integer_copies[res_combine["pred_cnv"][:,s], 0], best_integer_copies[res_combine["pred_cnv"][:,s], 1], x_gene_list)
                     # tmpdf.columns = [f"clone{s} A", f"clone{s} B"]
                     bin_Acopy_mappers = {
@@ -1042,13 +1185,15 @@ def main(configuration_file):
                         )
                 if len(state_cnv) == 0:
                     continue
-                # output gene-level copy number
+
+                # NB output gene-level copy number
                 df_genelevel_cnv.to_csv(
                     f"{outdir}/cnv{medfix[o]}_genelevel.tsv",
                     header=True,
                     index=True,
                     sep="\t",
                 )
+
                 # output segment-level copy number
                 allele_specific_copy = pd.concat(allele_specific_copy)
                 df_seglevel_cnv = pd.DataFrame(
@@ -1091,22 +1236,21 @@ def main(configuration_file):
                 #     smooth_mat, adjacency_mat, res_combine["new_assignment"], sample_ids, base_nb_mean, log_persample_weights, config["spatial_weight"], hmmclass=hmm_nophasing_v2)
                 # df_posterior.to_pickle(f"{outdir}/posterior{medfix[o]}.pkl")
 
-            ##### output clone label #####
             df_clone_label = pd.DataFrame(
                 {"clone_label": res_combine["new_assignment"]}, index=barcodes
             )
             if not config["tumorprop_file"] is None:
                 df_clone_label["tumor_proportion"] = single_tumor_prop
+
+            logger.info(f"Writing clone labels to {outdir}/clone_labels.tsv")
+
             df_clone_label.to_csv(
                 f"{outdir}/clone_labels.tsv", header=True, index=True, sep="\t"
             )
 
-            ##### plotting #####
-            # make a directory for plots
-            p = subprocess.Popen(f"mkdir -p {outdir}/plots", shell=True)
-            out, err = p.communicate()
+            Path(f"{outdir}/plots").mkdir(parents=True, exist_ok=True)
 
-            # plot RDR and BAF
+            # NB plot RDR and BAF.
             cn_file = f"{outdir}/cnv_diploid_seglevel.tsv"
             fig = plot_rdr_baf(
                 configuration_file,
@@ -1125,7 +1269,8 @@ def main(configuration_file):
                 transparent=True,
                 bbox_inches="tight",
             )
-            # plot allele-specific copy number
+
+            # NB plot allele-specific copy number
             for o, max_medploidy in enumerate([None, 2, 3, 4]):
                 cn_file = f"{outdir}/cnv{medfix[o]}_seglevel.tsv"
                 if not Path(cn_file).exists():
