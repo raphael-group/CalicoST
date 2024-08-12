@@ -116,7 +116,7 @@ def main(configuration_file):
     for r_hmrf_initialization in range(
         config["num_hmrf_initialization_start"], config["num_hmrf_initialization_end"]
     ):
-        logger.info(f"Processing HMRF random realization {num_hmrf_initialization_start:d}")
+        logger.info(f"Processing HMRF random realization {r_hmrf_initialization}")
 
         outdir = f"{config['output_dir']}/clone{config['n_clones']}_rectangle{r_hmrf_initialization}_w{config['spatial_weight']:.1f}"
         outdir = Path(outdir)
@@ -139,7 +139,9 @@ def main(configuration_file):
             )
 
         # NB save clone initialization to npz file
-        file_name = Path(f"allspots_nstates{config['n_states']}_sp.npz")
+        prefix = "allspots"
+        
+        file_name = Path(f"{prefix}_nstates{config['n_states']}_sp.npz")
         file_path = outdir / file_name
 
         if not file_path.exists():
