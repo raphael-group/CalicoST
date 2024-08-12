@@ -1,21 +1,23 @@
-import logging
-import numpy as np
-from numba import njit
-from scipy.stats import norm, multivariate_normal, poisson
-import scipy.special
-from scipy.optimize import minimize
-from scipy.optimize import Bounds
-from sklearn.mixture import GaussianMixture
-from tqdm import trange
-import statsmodels.api as sm
-from statsmodels.base.model import GenericLikelihoodModel
 import copy
-from calicost.utils_hmm import *
-from calicost.utils_distribution_fitting import *
+import logging
+
+import networkx as nx
+import numpy as np
+import scipy.special
+import statsmodels.api as sm
+from numba import njit
+from scipy.optimize import Bounds, minimize
+from scipy.stats import multivariate_normal, norm, poisson
+from sklearn.mixture import GaussianMixture
+from statsmodels.base.model import GenericLikelihoodModel
+from tqdm import trange
+
 from calicost.hmm_NB_BB_nophasing import *
 from calicost.hmm_NB_BB_nophasing_v2 import *
-import networkx as nx
+from calicost.utils_distribution_fitting import *
+from calicost.utils_hmm import *
 
+logger = logging.getLogger(__name__)
 
 ############################################################
 # whole inference
@@ -36,7 +38,6 @@ class hmm_sitewise(object):
         self.params = params
         self.t = t
 
-    #
     @staticmethod
     def compute_emission_probability_nb_betabinom(
         X, base_nb_mean, log_mu, alphas, total_bb_RD, p_binom, taus
@@ -70,6 +71,8 @@ class hmm_sitewise(object):
         log_emission : array, shape (2*n_states, n_obs, n_spots)
             Log emission probability for each gene each spot (or sample) under each state. There is a common bag of states across all spots.
         """
+        logger.info("Computing emission probability for negative binomial & beta binomial (sitewise).")
+
         n_obs = X.shape[0]
         n_comp = X.shape[1]
         n_spots = X.shape[2]
@@ -110,9 +113,11 @@ class hmm_sitewise(object):
                             p_binom[i, s] * taus[i, s],
                         )
                     )
+
+        logger.info("Computed emission probability for negative binomial & beta binomial (sitewise).")
+
         return log_emission_rdr, log_emission_baf
 
-    #
     @staticmethod
     def compute_emission_probability_nb_betabinom_mix(
         X,
@@ -154,6 +159,8 @@ class hmm_sitewise(object):
         log_emission : array, shape (2*n_states, n_obs, n_spots)
             Log emission probability for each gene each spot (or sample) under each state. There is a common bag of states across all spots.
         """
+        logger.info("Computing emission probability for *mixed* negative binomial & beta binomial (sitewise).")
+
         n_obs = X.shape[0]
         n_comp = X.shape[1]
         n_spots = X.shape[2]
@@ -204,9 +211,11 @@ class hmm_sitewise(object):
                         mix_p_B * taus[i, s],
                         mix_p_A * taus[i, s],
                     )
+
+        logger.info("Computed emission probability for *mixed* negative binomial & beta binomial (sitewise).")
+
         return log_emission_rdr, log_emission_baf
 
-    #
     @staticmethod
     @njit
     def forward_lattice(
@@ -274,7 +283,6 @@ class hmm_sitewise(object):
             cumlen += le
         return log_alpha
 
-    #
     @staticmethod
     @njit
     def backward_lattice(
@@ -338,7 +346,6 @@ class hmm_sitewise(object):
             cumlen += le
         return log_beta
 
-    #
     def run_baum_welch_nb_bb(
         self,
         X,
@@ -374,7 +381,9 @@ class hmm_sitewise(object):
         n_comp = X.shape[1]
         n_spots = X.shape[2]
         assert n_comp == 2
-        # initialize NB logmean shift and BetaBinom prob
+
+        logger.info("Initialize Baum Welch NB logmean shift, BetaBinom prob and dispersion param inverse (sitewise).")
+
         log_mu = (
             np.vstack([np.linspace(-0.1, 0.1, n_states) for r in range(n_spots)]).T
             if init_log_mu is None
@@ -385,12 +394,14 @@ class hmm_sitewise(object):
             if init_p_binom is None
             else init_p_binom
         )
-        # initialize (inverse of) dispersion param in NB and BetaBinom
+
+        # NB initialize (inverse of) dispersion param in NB and BetaBinom
         alphas = (
             0.1 * np.ones((n_states, n_spots)) if init_alphas is None else init_alphas
         )
         taus = 30 * np.ones((n_states, n_spots)) if init_taus is None else init_taus
-        # initialize start probability and emission probability
+
+        # NB initialize start probability and emission probability
         log_startprob = np.log(np.ones(n_states) / n_states)
         if n_states > 1:
             transmat = np.ones((n_states, n_states)) * (1 - self.t) / (n_states - 1)
@@ -398,16 +409,19 @@ class hmm_sitewise(object):
             log_transmat = np.log(transmat)
         else:
             log_transmat = np.zeros((1, 1))
-        # a trick to speed up BetaBinom optimization: taking only unique values of (B allele count, total SNP covering read count)
+
+        # NB a trick to speed up BetaBinom optimization: taking only unique values of 
+        #   (B allele count, total SNP covering read count)
         unique_values_nb, mapping_matrices_nb = construct_unique_matrix(
             X[:, 0, :], base_nb_mean
         )
         unique_values_bb, mapping_matrices_bb = construct_unique_matrix(
             X[:, 1, :], total_bb_RD
         )
-        # EM algorithm
-        for r in trange(max_iter):
-            # E step
+
+        for r in trange(max_iter, desc="EM algorithm (sitewise)"):
+            logger.info(f"Calculating E-step (sitewise) for iteration {r} of {max_iter}.")
+
             if tumor_prop is None:
                 log_emission_rdr, log_emission_baf = (
                     hmm_sitewise.compute_emission_probability_nb_betabinom(
@@ -429,6 +443,7 @@ class hmm_sitewise(object):
                     )
                 )
                 log_emission = log_emission_rdr + log_emission_baf
+
             log_alpha = hmm_sitewise.forward_lattice(
                 lengths,
                 log_transmat,
@@ -436,6 +451,7 @@ class hmm_sitewise(object):
                 log_emission,
                 log_sitewise_transmat,
             )
+
             log_beta = hmm_sitewise.backward_lattice(
                 lengths,
                 log_transmat,
@@ -443,11 +459,15 @@ class hmm_sitewise(object):
                 log_emission,
                 log_sitewise_transmat,
             )
+
             log_gamma = compute_posterior_obs(log_alpha, log_beta)
+
             log_xi = compute_posterior_transition_sitewise(
                 log_alpha, log_beta, log_transmat, log_emission
             )
-            # M step
+
+            logger.info(f"Calculating M-step (sitewise) for iteration {r} of {max_iter}.")
+
             if "s" in self.params:
                 new_log_startprob = update_startprob_sitewise(lengths, log_gamma)
                 new_log_startprob = new_log_startprob.flatten()
@@ -522,13 +542,14 @@ class hmm_sitewise(object):
                 new_p_binom = p_binom
                 new_taus = taus
             # check convergence
-            print(
+            logger.info(
+                "EM convergence metrics (sitewise)",
                 np.mean(np.abs(np.exp(new_log_startprob) - np.exp(log_startprob))),
                 np.mean(np.abs(np.exp(new_log_transmat) - np.exp(log_transmat))),
                 np.mean(np.abs(new_log_mu - log_mu)),
                 np.mean(np.abs(new_p_binom - p_binom)),
             )
-            print(np.hstack([new_log_mu, new_p_binom]))
+            logger.info((np.hstack([new_log_mu, new_p_binom]))
             if (
                 np.mean(np.abs(np.exp(new_log_transmat) - np.exp(log_transmat))) < tol
                 and np.mean(np.abs(new_log_mu - log_mu)) < tol
@@ -541,6 +562,9 @@ class hmm_sitewise(object):
             alphas = new_alphas
             p_binom = new_p_binom
             taus = new_taus
+
+        logger.info("Computed Baum-Welch (sitewise).")
+
         return (
             new_log_mu,
             new_alphas,
