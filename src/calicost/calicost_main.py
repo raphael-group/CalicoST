@@ -128,7 +128,7 @@ def main(configuration_file):
                 coords, config["n_clones"], random_state=r_hmrf_initialization
             )
         else:
-            logger.info(f"Initializing clones based on tumor proportion: {config["tumorprop_file"]}")
+            logger.info(f"Initializing clones based on tumor proportion: {config['tumorprop_file']}")
 
             initial_clone_index = rectangle_initialize_initial_clone_mix(
                 coords,
@@ -274,7 +274,7 @@ def main(configuration_file):
         )
 
         logger.info(f"BAF clone merging after comparing similarity: {merging_groups}")
-        logger.info(f"Merging similar initial clones based on min. spot threshold of {config["min_spots_per_clone"]}.")
+        logger.info(f"Merging similar initial clones based on min. spot threshold of {config['min_spots_per_clone']}.")
 
         if config["tumorprop_file"] is None:
             merging_groups, merged_res = merge_by_minspots(
