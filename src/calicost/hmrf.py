@@ -1862,9 +1862,12 @@ def hmrfmix_concatenate_pipeline(
     spatial_weight=1.0 / 6,
     tumorprop_threshold=0.5,
 ):
+    logger.info("Solving hmrfix_concatenate_pipeline.")
+
     n_obs, _, n_spots = single_X.shape
     n_clones = len(initial_clone_index)
-    # spot adjacency matric
+
+    # NB checking inputs
     assert not (coords is None and adjacency_mat is None)
     if adjacency_mat is None:
         adjacency_mat = compute_adjacency_mat(coords, unit_xsquared, unit_ysquared)
@@ -1877,7 +1880,9 @@ def hmrfmix_concatenate_pipeline(
         tmp_map_index = {unique_sample_ids[i]: i for i in range(len(unique_sample_ids))}
         sample_ids = np.array([tmp_map_index[x] for x in sample_ids])
     log_persample_weights = np.ones((n_clones, n_samples)) * (-np.log(n_clones))
-    # pseudobulk
+
+    logger.info("Merging pseudobulk by clone index")
+
     X, base_nb_mean, total_bb_RD, tumor_prop = merge_pseudobulk_by_index_mix(
         single_X,
         single_base_nb_mean,
@@ -1886,10 +1891,13 @@ def hmrfmix_concatenate_pipeline(
         single_tumor_prop,
         threshold=tumorprop_threshold,
     )
-    # baseline proportion of UMI counts
+
+    # NB baseline proportion of UMI counts
     lambd = np.sum(single_base_nb_mean, axis=1) / np.sum(single_base_nb_mean)
-    # initialize HMM parameters by GMM
+    
     if (init_log_mu is None) or (init_p_binom is None):
+        logger.info("Initializing HMM parameters by GMM")
+
         init_log_mu, init_p_binom = initialization_by_gmm(
             n_states,
             np.vstack([X[:, 0, :].flatten("F"), X[:, 1, :].flatten("F")]).T.reshape(
@@ -1902,7 +1910,10 @@ def hmrfmix_concatenate_pipeline(
             in_log_space=False,
             only_minor=False,
         )
-    # initialization parameters for HMM
+    else:
+        logger.info("Using provided HMM initialization parameters")
+
+    # NB initialization parameters for HMM
     if ("m" in params) and ("p" in params):
         last_log_mu = init_log_mu
         last_p_binom = init_p_binom
@@ -1918,14 +1929,26 @@ def hmrfmix_concatenate_pipeline(
     for c, idx in enumerate(initial_clone_index):
         last_assignment[idx] = c
 
-    # HMM
+    logger.info(f"Computing HMM for {max_iter_outer} iterations.")
+
     for r in range(max_iter_outer):
-        # assuming file f"{outdir}/{prefix}_nstates{n_states}_{params}.npz" exists. When r == 0, f"{outdir}/{prefix}_nstates{n_states}_{params}.npz" should contain two keys: "num_iterations" and f"round_-1_assignment" for clone initialization
+        """
+        NB assuming file f"{outdir}/{prefix}_nstates{n_states}_{params}.npz" exists.
+           When r == 0, f"{outdir}/{prefix}_nstates{n_states}_{params}.npz" should
+           contain two keys: "num_iterations" and f"round_-1_assignment" for clone
+           initialization
+        """
+        logger.info(f"Loading {outdir}/{prefix}_nstates{n_states}_{params}.npz")
+
         allres = np.load(
             f"{outdir}/{prefix}_nstates{n_states}_{params}.npz", allow_pickle=True
         )
         allres = dict(allres)
+
+        # TODO reads in existing iteration results if required.
         if allres["num_iterations"] > r:
+            logger.info(f"Loading pre-computed HMM results for iteration {r}.")
+
             res = {
                 "new_log_mu": allres[f"round{r}_new_log_mu"],
                 "new_alphas": allres[f"round{r}_new_alphas"],
@@ -1943,8 +1966,12 @@ def hmrfmix_concatenate_pipeline(
         else:
             sample_length = np.ones(X.shape[2], dtype=int) * X.shape[0]
             remain_kwargs = {"sample_length": sample_length, "lambd": lambd}
+
             if f"round{r-1}_log_gamma" in allres:
                 remain_kwargs["log_gamma"] = allres[f"round{r-1}_log_gamma"]
+
+            logger.info(f"Computing HMM iteration {r}.")
+
             res = pipeline_baum_welch(
                 None,
                 np.vstack([X[:, 0, :].flatten("F"), X[:, 1, :].flatten("F")]).T.reshape(
@@ -1973,9 +2000,13 @@ def hmrfmix_concatenate_pipeline(
                 tol=tol,
                 **remain_kwargs,
             )
+
             pred = np.argmax(res["log_gamma"], axis=0)
-            # clone assignmment
+            
+            # NB HMRF clone assignmment
             if nodepotential == "max":
+                logger.info("Assigning HMRF clone with nodepotential=max & aggr_hmrfix_reassignment_concatenate.")
+
                 new_assignment, single_llf, total_llf = (
                     aggr_hmrfmix_reassignment_concatenate(
                         single_X,
@@ -1994,6 +2025,8 @@ def hmrfmix_concatenate_pipeline(
                     )
                 )
             elif nodepotential == "weighted_sum":
+                logger.info("Assigning HMRF clone with nodepotential=weighted_sum & hmrfix_reassignment_posterior_concatenate.")
+
                 new_assignment, single_llf, total_llf = (
                     hmrfmix_reassignment_posterior_concatenate(
                         single_X,
@@ -2011,8 +2044,9 @@ def hmrfmix_concatenate_pipeline(
                     )
                 )
             else:
-                raise Exception("Unknown mode for nodepotential!")
-            # handle the case when one clone has zero spots
+                raise ValueError("Unknown mode for nodepotential!")
+
+            # NB handle the case when one clone has zero spots
             if len(np.unique(new_assignment)) < X.shape[2]:
                 res["assignment_before_reindex"] = new_assignment
                 remaining_clones = np.sort(np.unique(new_assignment))
@@ -2036,9 +2070,13 @@ def hmrfmix_concatenate_pipeline(
                 else:
                     allres[f"round{r}_{k}"] = v
             allres["num_iterations"] = r + 1
+
+            logger.info(f"Writing HMM iteration {r} to {outdir}/{prefix}_nstates{n_states}_{params}.npz")
+
             np.savez(f"{outdir}/{prefix}_nstates{n_states}_{params}.npz", **allres)
-        #
-        # regroup to pseudobulk
+        
+        logger.info(f"Regrouping to pseudobulk for iteration {r}.")
+
         clone_index = [
             np.where(res["new_assignment"] == c)[0]
             for c in np.sort(np.unique(res["new_assignment"]))
@@ -2051,9 +2089,9 @@ def hmrfmix_concatenate_pipeline(
             single_tumor_prop,
             threshold=tumorprop_threshold,
         )
-        #
+        
         if "mp" in params:
-            print(
+            logger.info(
                 "outer iteration {}: difference between parameters = {}, {}".format(
                     r,
                     np.mean(np.abs(last_log_mu - res["new_log_mu"])),
@@ -2061,18 +2099,19 @@ def hmrfmix_concatenate_pipeline(
                 )
             )
         elif "m" in params:
-            print(
+            logger.info(
                 "outer iteration {}: difference between NB parameters = {}".format(
                     r, np.mean(np.abs(last_log_mu - res["new_log_mu"]))
                 )
             )
         elif "p" in params:
-            print(
+            logger.info(
                 "outer iteration {}: difference between BetaBinom parameters = {}".format(
                     r, np.mean(np.abs(last_p_binom - res["new_p_binom"]))
                 )
             )
-        print(
+            
+        logger.info(
             "outer iteration {}: ARI between assignment = {}".format(
                 r, adjusted_rand_score(last_assignment, res["new_assignment"])
             )

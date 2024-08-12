@@ -1395,6 +1395,10 @@ def main(configuration_file):
                     bbox_inches="tight",
                 )
 
+    end = datetime.datetime.now()
+    runtime = end - start
+
+    logging.info(f"Complete in {runtime} [seconds].")
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
