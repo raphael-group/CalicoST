@@ -57,10 +57,12 @@ def hmrf_reassignment_posterior(
     n_states = res["new_p_binom"].shape[0]
     single_llf = np.zeros((N, n_clones))  # node potential
     new_assignment = copy.copy(prev_assignment)
-    #
+    
     posterior = np.zeros((N, n_clones))
 
-    for i in trange(N):
+    logger.info("Computing hmrf_reassignment_posterior")
+    
+    for i in trange(N, desc="hmrf_reassignment_posterior"):
         idx = smooth_mat[i, :].nonzero()[1]
         for c in range(n_clones):
             tmp_log_emission_rdr, tmp_log_emission_baf = (
@@ -164,10 +166,10 @@ def aggr_hmrf_reassignment(
     n_states = res["new_p_binom"].shape[0]
     single_llf = np.zeros((N, n_clones))
     new_assignment = copy.copy(prev_assignment)
-    #
+    
     posterior = np.zeros((N, n_clones))
 
-    for i in trange(N):
+    for i in trange(N, desc="aggr_hmrf_reassignment"):
         idx = smooth_mat[i, :].nonzero()[1]
         # idx = np.append(idx, np.array([i]))
         for c in range(n_clones):
@@ -252,10 +254,10 @@ def hmrf_reassignment_posterior_concatenate(
     n_states = res["new_p_binom"].shape[0]
     single_llf = np.zeros((N, n_clones))
     new_assignment = copy.copy(prev_assignment)
-    #
+    
     posterior = np.zeros((N, n_clones))
 
-    for i in trange(N):
+    for i in trange(N, desc="hmrf_reassignment_posterior_concatenate"):
         idx = smooth_mat[i, :].nonzero()[1]
         tmp_log_emission_rdr, tmp_log_emission_baf = (
             hmmclass.compute_emission_probability_nb_betabinom(
@@ -398,10 +400,10 @@ def aggr_hmrf_reassignment_concatenate(
     n_states = res["new_p_binom"].shape[0]
     single_llf = np.zeros((N, n_clones))
     new_assignment = copy.copy(prev_assignment)
-    #
+    
     posterior = np.zeros((N, n_clones))
 
-    for i in trange(N):
+    for i in trange(N, desc="aggr_hmrf_reassignment_concatenate"):
         idx = smooth_mat[i, :].nonzero()[1]
         # idx = np.append(idx, np.array([i]))
         tmp_log_emission_rdr, tmp_log_emission_baf = (
@@ -472,6 +474,8 @@ def merge_by_minspots(
     single_tumor_prop=None,
     threshold=0.5,
 ):
+    logger.info("Merging by min. spots.")
+    
     n_clones = len(np.unique(assignment))
     if n_clones == 1:
         merged_groups = [[assignment[0]]]
@@ -554,6 +558,9 @@ def merge_by_minspots(
             for c in merging_groups
         ]
     )
+    
+    logger.info("Merged by min. spots.")
+    
     return merging_groups, merged_res
 
 
@@ -591,6 +598,8 @@ def hmrf_pipeline(
     unit_ysquared=3,
     spatial_weight=1.0,
 ):
+    logger.info("Solving hmrf_pipeline.")
+    
     n_obs, _, n_spots = single_X.shape
     n_clones = len(initial_clone_index)
     # spot adjacency matric
@@ -637,7 +646,7 @@ def hmrf_pipeline(
     last_assignment = np.zeros(single_X.shape[2], dtype=int)
     for c, idx in enumerate(initial_clone_index):
         last_assignment[idx] = c
-    # HMM
+
     for r in range(max_iter_outer):
         if not Path(f"{outdir}/round{r}_nstates{n_states}_{params}.npz").exists():
             ##### initialize with the parameters of last iteration #####

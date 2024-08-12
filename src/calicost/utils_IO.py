@@ -1,27 +1,30 @@
-import sys
-import numpy as np
-import scipy
 import copy
-import pandas as pd
+import logging
+import sys
 from pathlib import Path
+
+import anndata
+import numpy as np
+import pandas as pd
+import scanpy as sc
+import scipy
+from sklearn.cluster import KMeans
+from sklearn.kernel_ridge import KernelRidge
 from sklearn.metrics import adjusted_rand_score
 from sklearn.neighbors import LocalOutlierFactor
-from sklearn.kernel_ridge import KernelRidge
-from sklearn.cluster import KMeans
-import scanpy as sc
-import anndata
-import logging
-
+"""
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s - %(levelname)s - %(message)s",
     datefmt="%Y-%m-%d %H:%M:%S",
 )
-logger = logging.getLogger()
+"""
+logger = logging.getLogger(__name__)
 
-from calicost.utils_phase_switch import *
-from calicost.utils_distribution_fitting import *
 import subprocess
+
+from calicost.utils_distribution_fitting import *
+from calicost.utils_phase_switch import *
 
 
 def load_data(
@@ -42,6 +45,8 @@ def load_data(
         logging.error(
             f"{spaceranger_dir} directory doesn't have a filtered_feature_bc_matrix.h5 or filtered_feature_bc_matrix.h5ad file!"
         )
+
+        raise RuntimeError()
 
     adata.layers["count"] = adata.X.A.astype(int)
     cell_snp_Aallele = scipy.sparse.load_npz(f"{snp_dir}/cell_snp_Aallele.npz")
@@ -247,6 +252,7 @@ def load_joint_data(
             logging.error(
                 f"{df_meta['spaceranger_dir'].iloc[i]} directory doesn't have a filtered_feature_bc_matrix.h5 or filtered_feature_bc_matrix.h5ad file!"
             )
+            raise RuntimeError()
 
         adatatmp.layers["count"] = adatatmp.X.A
         # reorder anndata spots to have the same order as df_this_barcode
