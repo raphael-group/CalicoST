@@ -602,8 +602,10 @@ def hmrf_pipeline(
     
     n_obs, _, n_spots = single_X.shape
     n_clones = len(initial_clone_index)
-    # spot adjacency matric
+    
+    # NB checking input
     assert not (coords is None and adjacency_mat is None)
+    
     if adjacency_mat is None:
         adjacency_mat = compute_adjacency_mat(coords, unit_xsquared, unit_ysquared)
     if sample_ids is None:
@@ -615,12 +617,16 @@ def hmrf_pipeline(
         tmp_map_index = {unique_sample_ids[i]: i for i in range(len(unique_sample_ids))}
         sample_ids = np.array([tmp_map_index[x] for x in sample_ids])
     log_persample_weights = np.ones((n_clones, n_samples)) * np.log(n_clones)
-    # pseudobulk
+
+    logger.info("Merging pseudobulk by clone index")
+    
     X, base_nb_mean, total_bb_RD = merge_pseudobulk_by_index(
         single_X, single_base_nb_mean, single_total_bb_RD, initial_clone_index
     )
-    # initialize HMM parameters by GMM
+
     if (init_log_mu is None) or (init_p_binom is None):
+        logger.info("Initializing HMM parameters by GMM")
+        
         init_log_mu, init_p_binom = initialization_by_gmm(
             n_states,
             X,
@@ -631,7 +637,10 @@ def hmrf_pipeline(
             in_log_space=False,
             only_minor=False,
         )
-    # initialization parameters for HMM
+    else:
+        logger.info("Using provided HMM initialization parameters")
+        
+    # NB initialization parameters for HMM
     if ("m" in params) and ("p" in params):
         last_log_mu = init_log_mu
         last_p_binom = init_p_binom
@@ -647,9 +656,13 @@ def hmrf_pipeline(
     for c, idx in enumerate(initial_clone_index):
         last_assignment[idx] = c
 
+    logger.info(f"Computing HMM for {max_iter_outer} iterations.")
+        
     for r in range(max_iter_outer):
+        # NB initialize with the parameters of last iteration
         if not Path(f"{outdir}/round{r}_nstates{n_states}_{params}.npz").exists():
-            ##### initialize with the parameters of last iteration #####
+            logger.info(f"Computing HMM iteration {r}.")
+            
             res = pipeline_baum_welch(
                 None,
                 X,
@@ -674,9 +687,13 @@ def hmrf_pipeline(
                 max_iter=max_iter,
                 tol=tol,
             )
+            
             pred = np.argmax(res["log_gamma"], axis=0)
+            
             # clone assignmment
             if nodepotential == "max":
+                logger.info("Assigning HMRF clone with nodepotential=max & aggr_hmrfix_reassignment.")
+                
                 new_assignment, single_llf, total_llf = aggr_hmrf_reassignment(
                     single_X,
                     single_base_nb_mean,
@@ -692,6 +709,8 @@ def hmrf_pipeline(
                     hmmclass=hmmclass,
                 )
             elif nodepotential == "weighted_sum":
+                logger.info("Assigning HMRF clone with nodepotential=weighted_sum & hmrfix_reassignment_posterior.")
+                
                 new_assignment, single_llf, total_llf = hmrf_reassignment_posterior(
                     single_X,
                     single_base_nb_mean,
@@ -706,36 +725,42 @@ def hmrf_pipeline(
                     hmmclass=hmmclass,
                 )
             else:
-                raise Exception("Unknown mode for nodepotential!")
-            # handle the case when one clone has zero spots
+                raise ValueError("Unknown mode for nodepotential!")
+            
+            # NB handle the case when one clone has zero spots
             if len(np.unique(new_assignment)) < X.shape[2]:
                 res["assignment_before_reindex"] = new_assignment
                 remaining_clones = np.sort(np.unique(new_assignment))
                 re_indexing = {c: i for i, c in enumerate(remaining_clones)}
                 new_assignment = np.array([re_indexing[x] for x in new_assignment])
-            #
+            
             res["prev_assignment"] = last_assignment
             res["new_assignment"] = new_assignment
             res["total_llf"] = total_llf
 
-            # save results
+            logger.info(f"Writing HMM iteration {r} to {outdir}/round{r}_nstates{n_states}_{params}.npz")
+            
             np.savez(f"{outdir}/round{r}_nstates{n_states}_{params}.npz", **res)
 
         else:
+            logger.info(f"Loading pre-computed HMM results for iteration {r}.")
+            logger.info(f"Loading {outdir}/round{r}_nstates{n_states}_{params}.npz")
+            
             res = np.load(f"{outdir}/round{r}_nstates{n_states}_{params}.npz")
 
-        # regroup to pseudobulk
+        logger.info(f"Regrouping to pseudobulk for iteration {r}.")
+
         clone_index = [
             np.where(res["new_assignment"] == c)[0]
             for c in np.sort(np.unique(res["new_assignment"]))
         ]
+        
         X, base_nb_mean, total_bb_RD = merge_pseudobulk_by_index(
             single_X, single_base_nb_mean, single_total_bb_RD, clone_index
         )
 
-        # update last parameter
         if "mp" in params:
-            print(
+            logger.info(
                 "outer iteration {}: total_llf = {}, difference between parameters = {}, {}".format(
                     r,
                     res["total_llf"],
@@ -744,7 +769,7 @@ def hmrf_pipeline(
                 )
             )
         elif "m" in params:
-            print(
+            logger.info(
                 "outer iteration {}: total_llf = {}, difference between NB parameters = {}".format(
                     r,
                     res["total_llf"],
@@ -752,29 +777,33 @@ def hmrf_pipeline(
                 )
             )
         elif "p" in params:
-            print(
+            logger.info(
                 "outer iteration {}: total_llf = {}, difference between BetaBinom parameters = {}".format(
                     r,
                     res["total_llf"],
                     np.mean(np.abs(last_p_binom - res["new_p_binom"])),
                 )
             )
-        print(
+            
+        logger.info(
             "outer iteration {}: ARI between assignment = {}".format(
                 r, adjusted_rand_score(last_assignment, res["new_assignment"])
             )
         )
+        
         if (
             adjusted_rand_score(last_assignment, res["new_assignment"]) > 0.99
             or len(np.unique(res["new_assignment"])) == 1
         ):
             break
+        
         last_log_mu = res["new_log_mu"]
         last_p_binom = res["new_p_binom"]
         last_alphas = res["new_alphas"]
         last_taus = res["new_taus"]
         last_assignment = res["new_assignment"]
         log_persample_weights = np.ones((X.shape[2], n_samples)) * (-np.log(X.shape[2]))
+        
         for sidx in range(n_samples):
             index = np.where(sample_ids == sidx)[0]
             this_persample_weight = np.bincount(
