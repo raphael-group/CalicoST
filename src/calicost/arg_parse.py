@@ -41,7 +41,8 @@ def load_default_config():
         "min_avgumi_per_clone": 10,
         "maxspots_pooling": 7,
         "tumorprop_threshold": 0.5,
-        "max_iter_outer": 20,
+        "max_iter_outer_initial" : 20,
+        "max_iter_outer": 10,
         "nodepotential": "weighted_sum",  # max or weighted_sum
         "initialization_method": "rectangle",  # rectangle or datadrive
         "num_hmrf_initialization_start": 0,
@@ -96,6 +97,7 @@ def load_default_config():
         "min_avgumi_per_clone": "int",
         "maxspots_pooling": "int",
         "tumorprop_threshold": "float",
+        "max_iter_outer_initial" : "int",
         "max_iter_outer": "int",
         "nodepotential": "str",
         "initialization_method": "str",
@@ -155,6 +157,7 @@ def load_default_config():
             "min_avgumi_per_clone",
             "maxspots_pooling",
             "tumorprop_threshold",
+            "max_iter_outer_initial",
             "max_iter_outer",
             "nodepotential",
             "initialization_method",

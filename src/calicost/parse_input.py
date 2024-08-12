@@ -185,7 +185,7 @@ def parse_visium(config):
             config["shared_NB_dispersion"],
             config["fix_BB_dispersion"],
             config["shared_BB_dispersion"],
-            30,
+            config["max_iter"],
             1e-3,
             threshold=config["tumorprop_threshold"],
         )
