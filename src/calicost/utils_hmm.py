@@ -1,11 +1,15 @@
-import numpy as np
-from numba import njit
 import copy
+import logging
+
+import numpy as np
 import scipy.special
-from tqdm import trange
+from numba import njit
 from sklearn.mixture import GaussianMixture
+from tqdm import trange
+
 from calicost.utils_distribution_fitting import *
 
+logger = logging.getLogger(__name__)
 
 @njit
 def np_max_ax_squeeze(arr, axis=0):
@@ -462,9 +466,12 @@ def update_emission_params_nb_sitewise_uniqvalues(
     base_nb_mean : array, shape (n_observations, n_spots)
         Mean expression under diploid state.
     """
+    logger.info("Computing emission params for Negative Binomial (sitewise, unique).")
+
     n_spots = len(unique_values)
     n_states = int(log_gamma.shape[0] / 2)
     gamma = np.exp(log_gamma)
+
     # initialization
     new_log_mu = (
         copy.copy(start_log_mu)
@@ -472,6 +479,7 @@ def update_emission_params_nb_sitewise_uniqvalues(
         else np.zeros((n_states, n_spots))
     )
     new_alphas = copy.copy(alphas)
+
     # expression signal by NB distribution
     if fix_NB_dispersion:
         new_log_mu = np.zeros((n_states, n_spots))
@@ -617,6 +625,9 @@ def update_emission_params_nb_sitewise_uniqvalues(
                         new_alphas[:, :] = res2.params[-1]
     new_log_mu[new_log_mu > max_log_rdr] = max_log_rdr
     new_log_mu[new_log_mu < min_log_rdr] = min_log_rdr
+
+    logger.info("Computed emission params for Negative Binomial (sitewise, unique).")
+
     return new_log_mu, new_alphas
 
 
@@ -645,6 +656,8 @@ def update_emission_params_nb_sitewise_uniqvalues_mix(
     base_nb_mean : array, shape (n_observations, n_spots)
         Mean expression under diploid state.
     """
+    logger.info("Computing emission params for Negative Binomial Mix (sitewise, unique).")
+
     n_spots = len(unique_values)
     n_states = int(log_gamma.shape[0] / 2)
     gamma = np.exp(log_gamma)
@@ -822,6 +835,9 @@ def update_emission_params_nb_sitewise_uniqvalues_mix(
                         new_alphas[:, :] = res2.params[-1]
     new_log_mu[new_log_mu > max_log_rdr] = max_log_rdr
     new_log_mu[new_log_mu < min_log_rdr] = min_log_rdr
+
+    logger.info("Computed emission params for Negative Binomial Mix (sitewise, unique).")
+
     return new_log_mu, new_alphas
 
 
@@ -850,6 +866,8 @@ def update_emission_params_bb_sitewise_uniqvalues(
     total_bb_RD : array, shape (n_observations, n_spots)
         SNP-covering reads for both REF and ALT across genes along genome.
     """
+    logger.info("Computing emission params for Beta Binomial (sitewise, unique).")
+
     n_spots = len(unique_values)
     n_states = int(log_gamma.shape[0] / 2)
     gamma = np.exp(log_gamma)
@@ -1042,6 +1060,9 @@ def update_emission_params_bb_sitewise_uniqvalues(
                         new_taus[:, :] = res2.params[-1]
     new_p_binom[new_p_binom < min_binom_prob] = min_binom_prob
     new_p_binom[new_p_binom > max_binom_prob] = max_binom_prob
+
+    logger.info("Computed emission params for Beta Binomial (sitewise, unique).")
+
     return new_p_binom, new_taus
 
 
@@ -1071,6 +1092,8 @@ def update_emission_params_bb_sitewise_uniqvalues_mix(
     total_bb_RD : array, shape (n_observations, n_spots)
         SNP-covering reads for both REF and ALT across genes along genome.
     """
+    logger.info("Computing emission params for Beta Binomial Mix (sitewise, unique).")
+
     n_spots = len(unique_values)
     n_states = int(log_gamma.shape[0] / 2)
     gamma = np.exp(log_gamma)
@@ -1293,6 +1316,9 @@ def update_emission_params_bb_sitewise_uniqvalues_mix(
                         new_taus[:, :] = res2.params[-1]
     new_p_binom[new_p_binom < min_binom_prob] = min_binom_prob
     new_p_binom[new_p_binom > max_binom_prob] = max_binom_prob
+
+    logger.info("Computed emission params for Beta Binomial Mix (sitewise, unique).")
+
     return new_p_binom, new_taus
 
 
@@ -1381,6 +1407,9 @@ def update_emission_params_nb_nophasing_uniqvalues(
     base_nb_mean : array, shape (n_observations, n_spots)
         Mean expression under diploid state.
     """
+
+    logger.info("Computing emission params for Negative Binomial (no phasing, unique).")
+
     n_spots = len(unique_values)
     n_states = log_gamma.shape[0]
     gamma = np.exp(log_gamma)
@@ -1532,6 +1561,9 @@ def update_emission_params_nb_nophasing_uniqvalues(
                         new_alphas[:, :] = res2.params[-1]
     new_log_mu[new_log_mu > max_log_rdr] = max_log_rdr
     new_log_mu[new_log_mu < min_log_rdr] = min_log_rdr
+
+    logger.info("Computed emission params for Negative Binomial (no phasing, unique).")
+
     return new_log_mu, new_alphas
 
 
@@ -1559,6 +1591,8 @@ def update_emission_params_nb_nophasing_uniqvalues_mix(
     base_nb_mean : array, shape (n_observations, n_spots)
         Mean expression under diploid state.
     """
+    logger.info("Computing emission params for Negative Binomial Mix (no phasing, unique).")
+
     n_spots = len(unique_values)
     n_states = log_gamma.shape[0]
     gamma = np.exp(log_gamma)
@@ -1733,6 +1767,9 @@ def update_emission_params_nb_nophasing_uniqvalues_mix(
                         new_alphas[:, :] = res2.params[-1]
     new_log_mu[new_log_mu > max_log_rdr] = max_log_rdr
     new_log_mu[new_log_mu < min_log_rdr] = min_log_rdr
+
+    logger.info("Computed emission params for Negative Binomial Mix (no phasing, unique).")
+
     return new_log_mu, new_alphas
 
 
@@ -1760,6 +1797,8 @@ def update_emission_params_bb_nophasing_uniqvalues(
     total_bb_RD : array, shape (n_observations, n_spots)
         SNP-covering reads for both REF and ALT across genes along genome.
     """
+    logger.info("Computing emission params for Beta Binomial (no phasing, unique).")
+
     n_spots = len(unique_values)
     n_states = log_gamma.shape[0]
     gamma = np.exp(log_gamma)
@@ -1912,6 +1951,9 @@ def update_emission_params_bb_nophasing_uniqvalues(
 
     new_p_binom[new_p_binom < min_binom_prob] = min_binom_prob
     new_p_binom[new_p_binom > max_binom_prob] = max_binom_prob
+
+    logger.info("Computed emission params for Beta Binomial (no phasing, unique).")
+
     return new_p_binom, new_taus
 
 
@@ -1940,6 +1982,8 @@ def update_emission_params_bb_nophasing_uniqvalues_mix(
     total_bb_RD : array, shape (n_observations, n_spots)
         SNP-covering reads for both REF and ALT across genes along genome.
     """
+    logger.info("Computing emission params for Beta Binomial Mix (no phasing, unique).")
+
     n_spots = len(unique_values)
     n_states = log_gamma.shape[0]
     gamma = np.exp(log_gamma)
@@ -2121,4 +2165,7 @@ def update_emission_params_bb_nophasing_uniqvalues_mix(
                         new_taus[:, :] = res2.params[-1]
     new_p_binom[new_p_binom < min_binom_prob] = min_binom_prob
     new_p_binom[new_p_binom > max_binom_prob] = max_binom_prob
+
+    logger.info("Computed emission params for Beta Binomial Mix (no phasing, unique).")
+
     return new_p_binom, new_taus
