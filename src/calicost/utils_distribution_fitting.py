@@ -1,25 +1,31 @@
 import functools
 import inspect
 import logging
+import os
+import time
 
 import numpy as np
 import scipy
-from scipy import linalg, special
-from scipy.special import logsumexp, loggamma
 import scipy.integrate
 import scipy.stats
-from numba import jit, njit
-from sklearn import cluster
-from sklearn.utils import check_random_state
 import statsmodels
 import statsmodels.api as sm
+from numba import jit, njit
+from scipy import linalg, special
+from scipy.special import loggamma, logsumexp
+from sklearn import cluster
+from sklearn.utils import check_random_state
 from statsmodels.base.model import GenericLikelihoodModel
-import os
 
-os.environ["MKL_NUM_THREADS"] = "1"
-os.environ["OPENBLAS_NUM_THREADS"] = "1"
-os.environ["OMP_NUM_THREADS"] = "1"
+logger = logging.getLogger(__name__)
 
+num_threads = "2"
+
+logger.info(f"Setting number of threads for MKL/BLAS/LAPACK/OMP to {num_threads}.")
+
+os.environ["MKL_NUM_THREADS"] = num_threads
+os.environ["OPENBLAS_NUM_THREADS"] = num_threads
+os.environ["OMP_NUM_THREADS"] = num_threads
 
 def convert_params(mean, std):
     """
@@ -29,6 +35,7 @@ def convert_params(mean, std):
     """
     p = mean / std**2
     n = mean * p / (1.0 - p)
+
     return n, p
 
 
@@ -51,34 +58,55 @@ class Weighted_NegativeBinomial(GenericLikelihoodModel):
     exposure : array, (n_samples,)
         Multiplication constant outside the exponential term. In scRNA-seq or SRT data, this term is the total UMI count per cell/spot.
     """
-
     def __init__(self, endog, exog, weights, exposure, seed=0, **kwds):
         super(Weighted_NegativeBinomial, self).__init__(endog, exog, **kwds)
+
+        logger.info(f"Initializing Weighted_NegativeBinomial model for endog.shape = {endog.shape}.")
+
         self.weights = weights
         self.exposure = exposure
         self.seed = seed
 
-    #
     def nloglikeobs(self, params):
         nb_mean = np.exp(self.exog @ params[:-1]) * self.exposure
         nb_std = np.sqrt(nb_mean + params[-1] * nb_mean**2)
+        
         n, p = convert_params(nb_mean, nb_std)
-        llf = scipy.stats.nbinom.logpmf(self.endog, n, p)
-        neg_sum_llf = -llf.dot(self.weights)
-        return neg_sum_llf
 
-    #
+        return -scipy.stats.nbinom.logpmf(self.endog, n, p).dot(self.weights)
+
     def fit(self, start_params=None, maxiter=10000, maxfun=5000, **kwds):
         self.exog_names.append("alpha")
+
         if start_params is None:
             if hasattr(self, "start_params"):
                 start_params = self.start_params
             else:
                 start_params = np.append(0.1 * np.ones(self.nparams), 0.01)
 
-        return super(Weighted_NegativeBinomial, self).fit(
-            start_params=start_params, maxiter=maxiter, maxfun=maxfun, **kwds
+        logger.info(f"Starting Weighted_NegativeBinomial optimization with start_params = {start_params}.")
+
+        start = time.time()
+
+        # NB see https://www.statsmodels.org/dev/dev/generated/statsmodels.base.model.LikelihoodModelResults.html
+        result = super(Weighted_NegativeBinomial, self).fit(
+            start_params=start_params,
+            maxiter=maxiter,
+            maxfun=maxfun,
+            disp=False,
+            skip_hessian=True,
+            callback=None,
+            full_output=True,
+            retall=False,
+            **kwds
         )
+
+        # NB specific to nm (Nelder-Mead) optimization.
+        niter = result.mle_retvals["iterations"]
+
+        logger.info(f"Finished Weighted_NegativeBinomial optimization in {time.time() - start:.2f} seconds, with {niter} iterations.")
+
+        return result
 
 
 class Weighted_NegativeBinomial_mix(GenericLikelihoodModel):
