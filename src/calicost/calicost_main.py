@@ -51,15 +51,15 @@ logger = logging.getLogger("calicost")
 logger.setLevel(logging.INFO)
 
 handler = logging.StreamHandler(sys.stdout)
-fhandler = logging.FileHandler('calicost.log', mode="w")
+# fhandler = logging.FileHandler('calicost.log', mode="w")
 
 formatter = logging.Formatter("%(asctime)s - %(process)d - %(levelname)s - %(name)s:%(lineno)d - %(message)s")
 
 handler.setFormatter(formatter)
-fhandler.setFormatter(formatter)
+# fhandler.setFormatter(formatter)
 
 logger.addHandler(handler)
-logger.addHandler(fhandler)
+# logger.addHandler(fhandler)
 
 def main(configuration_file):
     start = datetime.datetime.now()
