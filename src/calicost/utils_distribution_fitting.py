@@ -1,21 +1,21 @@
 import functools
 import inspect
 import logging
-import os
-import time
 
 import numpy as np
 import scipy
+from scipy import linalg, special
+from scipy.special import logsumexp, loggamma
 import scipy.integrate
 import scipy.stats
-import statsmodels
-import statsmodels.api as sm
 from numba import jit, njit
-from scipy import linalg, special
-from scipy.special import loggamma, logsumexp
 from sklearn import cluster
 from sklearn.utils import check_random_state
+import statsmodels
+import statsmodels.api as sm
 from statsmodels.base.model import GenericLikelihoodModel
+import os
+
 
 logger = logging.getLogger(__name__)
 
