@@ -1,12 +1,9 @@
-import copy
-import logging
-
 import numpy as np
-import scipy.special
 from numba import njit
-from sklearn.mixture import GaussianMixture
+import copy
+import scipy.special
 from tqdm import trange
-
+from sklearn.mixture import GaussianMixture
 from calicost.utils_distribution_fitting import *
 
 logger = logging.getLogger(__name__)
