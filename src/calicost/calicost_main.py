@@ -1,51 +1,28 @@
-import copy
-import functools
-import logging
-import subprocess
 import sys
-import datetime
-from pathlib import Path
-
-import anndata
 import numpy as np
-import pandas as pd
-import scanpy as sc
 import scipy
-from sklearn.cluster import KMeans
+import pandas as pd
+from pathlib import Path
 from sklearn.metrics import adjusted_rand_score
+from sklearn.cluster import KMeans
+import scanpy as sc
+import anndata
+import logging
 
+import copy
+from pathlib import Path
+import functools
+import subprocess
 from calicost.arg_parse import *
-from calicost.find_integer_copynumber import *
 from calicost.hmm_NB_BB_phaseswitch import *
-from calicost.hmrf import *
-from calicost.parse_input import *
-from calicost.phasing import *
 from calicost.utils_distribution_fitting import *
 from calicost.utils_hmrf import *
+from calicost.hmrf import *
+from calicost.phasing import *
 from calicost.utils_IO import *
+from calicost.find_integer_copynumber import *
+from calicost.parse_input import *
 from calicost.utils_plotting import *
-
-"""
-from calicost.hmm_NB_BB_nophasing_v2 import hmm_nophasing_v2
-from calicost.arg_parse import run_parse_n_load, genesnp_to_bininfo
-from calicost.find_integer_copynumber import (hill_climbing_integer_copynumber_fixdiploid,
-                                              hill_climbing_integer_copynumber_oneclone)
-from calicost.hmm_NB_BB_phaseswitch import (combine_similar_states_across_clones,
-                                            similarity_components_rdrbaf_neymanpearson)
-from calicost.hmrf import (aggr_hmrf_reassignment, aggr_hmrfmix_reassignment,
-                           hmrf_concatenate_pipeline, hmrf_reassignment_posterior,
-                           hmrfmix_concatenate_pipeline, hmrfmix_reassignment_posterior,
-                           merge_by_minspots)
-from calicost.phasing import pipeline_baum_welch
-from calicost.utils_hmrf import (load_hmrf_last_iteration, rectangle_initialize_initial_clone,
-                                 rectangle_initialize_initial_clone_mix, reorder_results)
-from calicost.utils_IO import bin_selection_basedon_normal, expand_df_cnv, filter_de_genes_tri
-from calicost.utils_plotting import (argparse, merge_pseudobulk_by_index,
-                                     merge_pseudobulk_by_index_mix, plot_acn_from_df,
-                                     plot_acn_from_df_anotherscheme, plot_clones_in_space,
-                                     plot_individual_spots_in_space, plot_rdr_baf, plt,
-                                    read_configuration_file, read_joint_configuration_file)
-"""
 
 logger = logging.getLogger("calicost")
 logger.setLevel(logging.INFO)
@@ -53,13 +30,16 @@ logger.setLevel(logging.INFO)
 handler = logging.StreamHandler(sys.stdout)
 # fhandler = logging.FileHandler('calicost.log', mode="w")
 
-formatter = logging.Formatter("%(asctime)s - %(process)d - %(levelname)s - %(name)s:%(lineno)d - %(message)s")
+formatter = logging.Formatter(
+    "%(asctime)s - %(process)d - %(levelname)s - %(name)s:%(lineno)d - %(message)s"
+)
 
 handler.setFormatter(formatter)
 # fhandler.setFormatter(formatter)
 
 logger.addHandler(handler)
 # logger.addHandler(fhandler)
+
 
 def main(configuration_file):
     start = datetime.datetime.now()
@@ -76,12 +56,12 @@ def main(configuration_file):
 
     # NB assuming the B-allele counts are calculated by the cellsnp-lite & Eagle pipeline.  If assuming each spot contains
     #    a mixture of normal/tumor cells, the tumor proportion path should be provided in the config file.
-    # 
-    # NB load data: 
-    #    - If the data is loaded for the first time: infer phasing using phase-switch HMM 
+    #
+    # NB load data:
+    #    - If the data is loaded for the first time: infer phasing using phase-switch HMM
     #      (hmm_NB_BB_phaseswitch.py & phasing.py) with output initial_phase.npz, matrices
     #      in /parsed_inputs
-    # 
+    #
     #    - If the data is already loaded: load the matrices from parsed_inputs folder
 
     logger.info(f"Running parse and load.")
@@ -128,7 +108,9 @@ def main(configuration_file):
                 coords, config["n_clones"], random_state=r_hmrf_initialization
             )
         else:
-            logger.info(f"Initializing clones based on tumor proportion: {config['tumorprop_file']}")
+            logger.info(
+                f"Initializing clones based on tumor proportion: {config['tumorprop_file']}"
+            )
 
             initial_clone_index = rectangle_initialize_initial_clone_mix(
                 coords,
@@ -140,14 +122,14 @@ def main(configuration_file):
 
         # NB save clone initialization to npz file
         prefix = "allspots"
-        
+
         file_name = Path(f"{prefix}_nstates{config['n_states']}_sp.npz")
         file_path = outdir / file_name
 
         if not file_path.exists():
             logger.info(f"Creating output dir: {str(outdir)}")
 
-            # TODO exist_ok 
+            # TODO exist_ok
             outdir.mkdir(parents=True, exist_ok=True)
 
             initial_assignment = np.zeros(single_X.shape[2], dtype=int)
@@ -155,10 +137,13 @@ def main(configuration_file):
             for c, idx in enumerate(initial_clone_index):
                 initial_assignment[idx] = c
 
-            np.savez(str(file_path), **{"num_iterations": 0, "round-1_assignment": initial_assignment})
+            np.savez(
+                str(file_path),
+                **{"num_iterations": 0, "round-1_assignment": initial_assignment},
+            )
 
         # ----  HMRF + HMM  ----
-        # 
+        #
         # NB stores the results of each HMRF iteration in a .npz @ ./outdir/prefix_nstates{config['n_states']}_sp.npz
         #    if a specific iteration is already computed, hmrf will load the results directly from the file.
         if config["tumorprop_file"] is None:
@@ -226,7 +211,9 @@ def main(configuration_file):
                 tumorprop_threshold=config["tumorprop_threshold"],
             )
 
-        logger.info("Loading last HMRF iteration & merging clones based on BAF profile similarity threshold.")
+        logger.info(
+            "Loading last HMRF iteration & merging clones based on BAF profile similarity threshold."
+        )
 
         n_obs = single_X.shape[0]
         res = load_hmrf_last_iteration(
@@ -257,11 +244,13 @@ def main(configuration_file):
                 threshold=config["tumorprop_threshold"],
             )
             tumor_prop = np.repeat(tumor_prop, X.shape[0]).reshape(-1, 1)
-            
+
         logger.info("Merged pseudo-bulk based on clone index.")
 
         # NB ratio == P(clone A counts | BAF parameters for clone A) / P(clone A counts | BAF parameters for clone B)
-        logger.info("Merging similar initial clones based on Neyman-Pearson Likelihood ratio.")
+        logger.info(
+            "Merging similar initial clones based on Neyman-Pearson Likelihood ratio."
+        )
 
         merging_groups, merged_res = similarity_components_rdrbaf_neymanpearson(
             X,
@@ -276,7 +265,9 @@ def main(configuration_file):
         )
 
         logger.info(f"BAF clone merging after comparing similarity: {merging_groups}")
-        logger.info(f"Merging similar initial clones based on min. spot threshold of {config['min_spots_per_clone']}.")
+        logger.info(
+            f"Merging similar initial clones based on min. spot threshold of {config['min_spots_per_clone']}."
+        )
 
         if config["tumorprop_file"] is None:
             merging_groups, merged_res = merge_by_minspots(
@@ -297,7 +288,9 @@ def main(configuration_file):
                 threshold=config["tumorprop_threshold"],
             )
 
-        logger.info(f"BAF clone merging after requiring minimum # spots: {merging_groups}")
+        logger.info(
+            f"BAF clone merging after requiring minimum # spots: {merging_groups}"
+        )
 
         n_baf_clones = len(merging_groups)
 
@@ -305,9 +298,7 @@ def main(configuration_file):
 
         logger.info(f"Writing merged initial clones to {file_path}")
 
-        np.savez(
-            file_path, **merged_res
-        )
+        np.savez(file_path, **merged_res)
 
         # NB load merged results
         n_obs = single_X.shape[0]
@@ -321,7 +312,7 @@ def main(configuration_file):
         merged_baf_assignment = copy.copy(merged_res["new_assignment"])
         n_baf_clones = len(np.unique(merged_baf_assignment))
 
-        # TODO comment. 
+        # TODO comment.
         pred = np.argmax(merged_res["log_gamma"], axis=0)
         pred = np.array(
             [pred[(c * n_obs) : (c * n_obs + n_obs)] for c in range(n_baf_clones)]
@@ -338,12 +329,14 @@ def main(configuration_file):
             ]
         )
 
-        logger.info("Preparing refinement of initial, merged clones using BAF & RDR  ****")
-        
+        logger.info(
+            "Preparing refinement of initial, merged clones using BAF & RDR  ****"
+        )
+
         if not config["bafonly"]:
             # NB this block only used when assuming each spot is pure normal or pure tumor,
             #    and if we don't know which spots are normal spots.
-            # 
+            #
             # NB select normal spots
 
             logger.info("Identifying normal spots.")
@@ -404,7 +397,9 @@ def main(configuration_file):
             #    pseudobulk has large |BAF - 0.5|
             index_normal = np.where(normal_candidate)[0]
 
-            logger.info("Filtering genomic bins for allele-specific expression based on normal spots.")
+            logger.info(
+                "Filtering genomic bins for allele-specific expression based on normal spots."
+            )
 
             (
                 lengths,
@@ -423,7 +418,7 @@ def main(configuration_file):
                 index_normal,
                 config["geneticmap_file"],
             )
-            
+
             assert df_bininfo.shape[0] == copy_single_X_rdr.shape[0]
 
             df_bininfo = genesnp_to_bininfo(df_gene_snp)
@@ -482,10 +477,12 @@ def main(configuration_file):
                 ),
             )
 
-            logger.info(f"****  Refining initial, merged clones (N={n_baf_clones}) using BAF & RDR  ****")
+            logger.info(
+                f"****  Refining initial, merged clones (N={n_baf_clones}) using BAF & RDR  ****"
+            )
 
             for bafc in range(n_baf_clones):
-                logger.info(f"Refining BAF clone {bafc}.")    
+                logger.info(f"Refining BAF clone {bafc}.")
 
                 prefix = f"clone{bafc}"
                 idx_spots = np.where(merged_baf_assignment == bafc)[0]
@@ -511,7 +508,9 @@ def main(configuration_file):
                     )
 
                 # NB write the initialization to .npz @ ./outdir/prefix_nstates{config['n_states']}_smp.npz
-                file_path = Path(f"{outdir}/{prefix}_nstates{config['n_states']}_smp.npz")
+                file_path = Path(
+                    f"{outdir}/{prefix}_nstates{config['n_states']}_smp.npz"
+                )
 
                 if not file_path.exists():
                     initial_assignment = np.zeros(len(idx_spots), dtype=int)
@@ -519,13 +518,14 @@ def main(configuration_file):
                     for c, idx in enumerate(initial_clone_index):
                         initial_assignment[idx] = c
 
-                    allres = {
-                        "barcodes": barcodes[idx_spots],
-                        "num_iterations": 0,
-                        "round-1_assignment": initial_assignment,
-                    }
-                    
-                    np.savez(str(file_path), **allres)
+                    np.savez(
+                        str(file_path),
+                        **{
+                            "barcodes": barcodes[idx_spots],
+                            "num_iterations": 0,
+                            "round-1_assignment": initial_assignment,
+                        },
+                    )
 
                 # HMRF + HMM with RDR
                 copy_slice_sample_ids = copy.copy(sample_ids[idx_spots])
@@ -666,7 +666,9 @@ def main(configuration_file):
                         )
                         tumor_prop = np.repeat(tumor_prop, X.shape[0]).reshape(-1, 1)
 
-                    logger.info(f"Merging BAF+RDR clones based on Neyman-Pearson Likelihood ratio.")
+                    logger.info(
+                        f"Merging BAF+RDR clones based on Neyman-Pearson Likelihood ratio."
+                    )
 
                     merging_groups, merged_res = (
                         similarity_components_rdrbaf_neymanpearson(
@@ -682,8 +684,10 @@ def main(configuration_file):
                         )
                     )
 
-                    logger.info(f"BAF+RDR clone {bafc}: merging_groups={merging_groups}")
-                    
+                    logger.info(
+                        f"BAF+RDR clone {bafc}: merging_groups={merging_groups}"
+                    )
+
                     if config["tumorprop_file"] is None:
                         merging_groups, merged_res = merge_by_minspots(
                             merged_res["new_assignment"],
@@ -704,7 +708,7 @@ def main(configuration_file):
                             single_tumor_prop=single_tumor_prop[idx_spots],
                             threshold=config["tumorprop_threshold"],
                         )
-                    
+
                     # TODO what is merging_groups
                     logger.info(
                         f"BAF+RDR clone {bafc} merging after requiring minimum # spots: {merging_groups}"
@@ -739,8 +743,10 @@ def main(configuration_file):
                                 threshold=config["tumorprop_threshold"],
                             )
                         )
-                    
-                    logger.info(f"Running Baum-Welch with refined & merged BAF+RDR clones.")
+
+                    logger.info(
+                        f"Running Baum-Welch with refined & merged BAF+RDR clones."
+                    )
 
                     merged_res = pipeline_baum_welch(
                         None,
@@ -808,7 +814,7 @@ def main(configuration_file):
                             for c in range(n_merged_clones)
                         ]
                     ).T
-                
+
                 # NB add to res_combine
                 if len(res_combine) == 1:
                     res_combine.update(
@@ -987,14 +993,16 @@ def main(configuration_file):
             res_combine, posterior = reorder_results(
                 res_combine, posterior, single_tumor_prop
             )
-            
-            logger.info(f"Writing {outdir}/rdrbaf_final_nstates{config['n_states']}_smp.npz")
+
+            logger.info(
+                f"Writing {outdir}/rdrbaf_final_nstates{config['n_states']}_smp.npz"
+            )
 
             np.savez(
                 f"{outdir}/rdrbaf_final_nstates{config['n_states']}_smp.npz",
                 **res_combine,
             )
-            
+
             logger.info(f"Writing {outdir}/posterior_clone_probability.npy")
 
             np.save(f"{outdir}/posterior_clone_probability.npy", posterior)
@@ -1102,7 +1110,7 @@ def main(configuration_file):
                     logger.info(
                         f"max med ploidy = {max_medploidy}, clone {s}, integer copy inference loss = {_}"
                     )
-                    
+
                     allele_specific_copy.append(
                         pd.DataFrame(
                             best_integer_copies[
@@ -1121,7 +1129,7 @@ def main(configuration_file):
                             columns=np.arange(n_obs),
                         )
                     )
-                    
+
                     state_cnv.append(
                         pd.DataFrame(
                             res_combine["new_log_mu"][:, s].reshape(-1, 1),
@@ -1401,6 +1409,7 @@ def main(configuration_file):
     runtime = end - start
 
     logging.info(f"Complete in {runtime} [seconds].")
+
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
