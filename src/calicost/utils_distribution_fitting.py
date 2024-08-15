@@ -85,7 +85,7 @@ class Weighted_NegativeBinomial(GenericLikelihoodModel):
             else:
                 start_params = np.append(0.1 * np.ones(self.nparams), 0.01)
 
-        logger.info(f"Starting Weighted_NegativeBinomial optimization with start_params = {start_params}.")
+        logger.info(f"Starting Weighted_NegativeBinomial optimization @ {start_params}.")
 
         start = time.time()
 
@@ -139,7 +139,7 @@ class Weighted_NegativeBinomial_mix(GenericLikelihoodModel):
             else:
                 start_params = np.append(0.1 * np.ones(self.nparams), 0.01)
 
-        logger.info(f"Starting Weighted_NegativeBinomial_mix optimization with start_params = {start_params}.")
+        logger.info(f"Starting Weighted_NegativeBinomial_mix optimization @ {start_params}.")
 
         start = time.time()
 
@@ -206,7 +206,7 @@ class Weighted_BetaBinom(GenericLikelihoodModel):
                     0.5 / np.sum(self.exog.shape[1]) * np.ones(self.nparams), 1
                 )
 
-        logger.info(f"Starting Weighted_BetaBinomial optimization with start_params = {start_params}.")
+        logger.info(f"Starting Weighted_BetaBinomial optimization @ {start_params}.")
 
         start = time.time()
 
@@ -261,7 +261,7 @@ class Weighted_BetaBinom_mix(GenericLikelihoodModel):
                     0.5 / np.sum(self.exog.shape[1]) * np.ones(self.nparams), 1
                 )
 
-        logger.info(f"Starting Weighted_BetaBinom_mix optimization with start_params = {start_params}.")
+        logger.info(f"Starting Weighted_BetaBinom_mix optimization with @ {start_params}.")
 
         start = time.time()
 
@@ -307,7 +307,7 @@ class Weighted_BetaBinom_fixdispersion(GenericLikelihoodModel):
             else:
                 start_params = 0.1 * np.ones(self.nparams)
 
-        logger.info(f"Starting Weighted_BetaBinom_fixdispersion optimization with start_params = {start_params}.")
+        logger.info(f"Starting Weighted_BetaBinom_fixdispersion optimization @ {start_params}.")
 
         start = time.time()
 
@@ -359,7 +359,7 @@ class Weighted_BetaBinom_fixdispersion_mix(GenericLikelihoodModel):
             else:
                 start_params = 0.1 * np.ones(self.nparams)
 
-        logger.info(f"Starting Weighted_BetaBinom_fixdispersion_mix optimization with start_params = {start_params}.")
+        logger.info(f"Starting Weighted_BetaBinom_fixdispersion_mix optimization @ {start_params}.")
 
         start = time.time()
 
@@ -401,29 +401,27 @@ class BAF_Binom(GenericLikelihoodModel):
     exposure : array, (n_samples,)
         Total number of trials. In BAF case, this is the total number of SNP-covering UMIs.
     """
-
     def __init__(self, endog, exog, weights, exposure, offset, scaling, **kwds):
         super(BAF_Binom, self).__init__(endog, exog, **kwds)
+        
         self.weights = weights
         self.exposure = exposure
         self.offset = offset
         self.scaling = scaling
 
-    #
     def nloglikeobs(self, params):
         linear_term = self.exog @ params
         p = self.scaling / (1 + np.exp(-linear_term + self.offset))
-        llf = scipy.stats.binom.logpmf(self.endog, self.exposure, p)
-        neg_sum_llf = -llf.dot(self.weights)
-        return neg_sum_llf
 
-    #
+        return -scipy.stats.binom.logpmf(self.endog, self.exposure, p).dot(self.weights)
+        
     def fit(self, start_params=None, maxiter=10000, maxfun=5000, **kwds):
         if start_params is None:
             if hasattr(self, "start_params"):
                 start_params = self.start_params
             else:
                 start_params = 0.5 / np.sum(self.exog.shape[1]) * np.ones(self.nparams)
+                
         return super(BAF_Binom, self).fit(
             start_params=start_params, maxiter=maxiter, maxfun=maxfun, **kwds
         )
