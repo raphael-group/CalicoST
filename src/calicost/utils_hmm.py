@@ -470,7 +470,6 @@ def update_emission_params_nb_sitewise_uniqvalues(
     n_states = int(log_gamma.shape[0] / 2)
     gamma = np.exp(log_gamma)
 
-    # initialization
     new_log_mu = (
         copy.copy(start_log_mu)
         if not start_log_mu is None
@@ -614,7 +613,15 @@ def update_emission_params_nb_sitewise_uniqvalues(
                     xtol=1e-4,
                     ftol=1e-4,
                 )
-                if model.nloglikeobs(res2.params) < model.nloglikeobs(res.params):
+
+                logger.info(f"")
+
+                nloglikeobs2 = model.nloglikeobs(res2.params)
+                nloglikeobs = model.nloglikeobs(res.params)
+
+                logger.info(f"Comparing loglike for params2 of {nloglikeobs2:.6e} to params1 {nloglikeobs:.6e}.")
+                
+                if nloglikeobs2 < nloglikeobs:
                     for s, idx_state_posweight in enumerate(state_posweights):
                         l1 = int(np.sum([len(x) for x in state_posweights[:s]]))
                         l2 = int(np.sum([len(x) for x in state_posweights[: (s + 1)]]))
