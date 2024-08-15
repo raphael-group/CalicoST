@@ -4,6 +4,7 @@ import logging
 
 import numpy as np
 import scipy
+import time
 from scipy import linalg, special
 from scipy.special import logsumexp, loggamma
 import scipy.integrate
