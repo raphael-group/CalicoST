@@ -31,37 +31,6 @@ import seaborn
 
 import mkl
 
-import copy
-import functools
-import logging
-import subprocess
-import sys
-from pathlib import Path
-
-import anndata
-import matplotlib.patches as mpatches
-import mkl
-import numpy as np
-import pandas as pd
-import scanpy as sc
-import scipy
-import seaborn
-from matplotlib import pyplot as plt
-from matplotlib.lines import Line2D
-from sklearn.cluster import KMeans
-from sklearn.metrics import adjusted_rand_score
-
-from arg_parse import *
-from find_integer_copynumber import *
-from hmm_NB_BB_phaseswitch import *
-from hmrf import *
-from parse_input import *
-from phasing import *
-from utils_distribution_fitting import *
-from utils_hmrf import *
-from utils_IO import *
-from utils_plotting import *
-
 # DEPRECATE
 # mkl.set_num_threads(1)
 
