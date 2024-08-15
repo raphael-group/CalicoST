@@ -149,7 +149,7 @@ class hmm_nophasing_v2(object):
         log_emission : array, shape (n_states, n_obs, n_spots)
             Log emission probability for each gene each spot (or sample) under each state. There is a common bag of states across all spots.
         """
-        logger.info("Computing emission probability for *mixed* negative binomial & beta binommial.")
+        logger.info("Computing emission probability for *mixed* negative binomial & beta binomial.")
 
         n_obs = X.shape[0]
         n_comp = X.shape[1]
@@ -210,7 +210,7 @@ class hmm_nophasing_v2(object):
                         mix_p_B * taus[i, s],
                     )
 
-        logger.info("Computed emission probability for *mixed* negative binomial & beta binommial.")
+        logger.info("Computed emission probability for *mixed* negative binomial & beta binomial.")
 
         return log_emission_rdr, log_emission_baf
 
