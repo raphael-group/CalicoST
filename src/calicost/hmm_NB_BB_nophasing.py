@@ -1,19 +1,18 @@
-import copy
 import logging
-
-import networkx as nx
 import numpy as np
-import scipy.special
-import statsmodels.api as sm
 from numba import njit
-from scipy.optimize import Bounds, minimize
-from scipy.stats import multivariate_normal, norm, poisson
+from scipy.stats import norm, multivariate_normal, poisson
+import scipy.special
+from scipy.optimize import minimize
+from scipy.optimize import Bounds
 from sklearn.mixture import GaussianMixture
-from statsmodels.base.model import GenericLikelihoodModel
 from tqdm import trange
-
+import statsmodels.api as sm
+from statsmodels.base.model import GenericLikelihoodModel
+import copy
 from calicost.utils_distribution_fitting import *
 from calicost.utils_hmm import *
+import networkx as nx
 
 logger = logging.getLogger(__name__)
 
