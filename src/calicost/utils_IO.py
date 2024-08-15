@@ -1,30 +1,23 @@
-import copy
-import logging
 import sys
-from pathlib import Path
-
-import anndata
 import numpy as np
-import pandas as pd
-import scanpy as sc
 import scipy
-from sklearn.cluster import KMeans
-from sklearn.kernel_ridge import KernelRidge
+import copy
+import pandas as pd
+from pathlib import Path
 from sklearn.metrics import adjusted_rand_score
 from sklearn.neighbors import LocalOutlierFactor
-"""
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s - %(levelname)s - %(message)s",
-    datefmt="%Y-%m-%d %H:%M:%S",
-)
-"""
-logger = logging.getLogger(__name__)
+from sklearn.kernel_ridge import KernelRidge
+from sklearn.cluster import KMeans
+import scanpy as sc
+import anndata
+import logging
 
+from calicost.utils_phase_switch import *
+from calicost.utils_distribution_fitting import *
 import subprocess
 
-from calicost.utils_distribution_fitting import *
-from calicost.utils_phase_switch import *
+
+logger = logging.getLogger(__name__)
 
 
 def load_data(
