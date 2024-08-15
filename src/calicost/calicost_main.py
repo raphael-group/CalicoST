@@ -25,21 +25,20 @@ from calicost.find_integer_copynumber import *
 from calicost.parse_input import *
 from calicost.utils_plotting import *
 
+# NB prevent wrap-around of log lines due to high precision printing.
+np.set_printoptions(precision=6)
+
 logger = logging.getLogger("calicost")
 logger.setLevel(logging.INFO)
 
 handler = logging.StreamHandler(sys.stdout)
-# fhandler = logging.FileHandler('calicost.log', mode="w")
-
 formatter = logging.Formatter(
     "%(asctime)s - %(process)d - %(levelname)s - %(name)s:%(lineno)d - %(message)s"
 )
 
 handler.setFormatter(formatter)
-# fhandler.setFormatter(formatter)
 
 logger.addHandler(handler)
-# logger.addHandler(fhandler)
 
 
 def main(configuration_file):
