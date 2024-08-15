@@ -13,6 +13,7 @@ import copy
 from pathlib import Path
 import functools
 import subprocess
+import datetime
 from calicost.arg_parse import *
 from calicost.hmm_NB_BB_phaseswitch import *
 from calicost.utils_distribution_fitting import *
@@ -1253,11 +1254,16 @@ def main(configuration_file):
                 df_clone_label["tumor_proportion"] = single_tumor_prop
 
             logger.info(f"Writing clone labels to {outdir}/clone_labels.tsv")
-
+            
             df_clone_label.to_csv(
                 f"{outdir}/clone_labels.tsv", header=True, index=True, sep="\t"
             )
 
+            end = datetime.datetime.now()
+            runtime = end - start
+
+            logging.info(f"Complete in {runtime} [seconds].")
+            
             Path(f"{outdir}/plots").mkdir(parents=True, exist_ok=True)
 
             # NB plot RDR and BAF.
@@ -1404,11 +1410,6 @@ def main(configuration_file):
                     transparent=True,
                     bbox_inches="tight",
                 )
-
-    end = datetime.datetime.now()
-    runtime = end - start
-
-    logging.info(f"Complete in {runtime} [seconds].")
 
 
 if __name__ == "__main__":
