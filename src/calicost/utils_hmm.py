@@ -2,6 +2,7 @@ import numpy as np
 from numba import njit
 import copy
 import scipy.special
+from numba import njit
 from tqdm import trange
 from sklearn.mixture import GaussianMixture
 from calicost.utils_distribution_fitting import *
