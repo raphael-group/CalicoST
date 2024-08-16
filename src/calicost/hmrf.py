@@ -724,7 +724,7 @@ def hmrf_pipeline(
 
             pred = np.argmax(res["log_gamma"], axis=0)
 
-            # clone assignmment
+            # NB clone assignmment
             if nodepotential == "max":
                 logger.info(
                     "Assigning HMRF clone with nodepotential=max & aggr_hmrfmix_reassignment."
