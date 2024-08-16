@@ -338,35 +338,42 @@ class hmm_nophasing_v2(object):
         n_obs = X.shape[0]
         n_comp = X.shape[1]
         n_spots = X.shape[2]
+        
         assert n_comp == 2
         
-        logger.info("Initialize Baum Welch NB logmean shift, BetaBinom prob and dispersion param inverse.")
-
         log_mu = (
             np.vstack([np.linspace(-0.1, 0.1, n_states) for r in range(n_spots)]).T
             if init_log_mu is None
             else init_log_mu
         )
+        
         p_binom = (
             np.vstack([np.linspace(0.05, 0.45, n_states) for r in range(n_spots)]).T
             if init_p_binom is None
             else init_p_binom
         )
+        
         # NB initialize (inverse of) dispersion param in NB and BetaBinom
         alphas = (
             0.1 * np.ones((n_states, n_spots)) if init_alphas is None else init_alphas
         )
+        
         taus = 30 * np.ones((n_states, n_spots)) if init_taus is None else init_taus
 
+        use_defaults = (init_log_mu is None) and (init_p_binom is None) and (init_alphas is None) and (init_taus is None) 
+        
+        logger.info("Initialized Baum Welch NB logmean shift, BetaBinom prob and dispersion params inverse (use_defaults = {use_defaults}).")
+        
         # NB initialize start probability and emission probability
         log_startprob = np.log(np.ones(n_states) / n_states)
+        
         if n_states > 1:
             transmat = np.ones((n_states, n_states)) * (1 - self.t) / (n_states - 1)
             np.fill_diagonal(transmat, self.t)
             log_transmat = np.log(transmat)
         else:
             log_transmat = np.zeros((1, 1))
-        # initialize log_gamma
+            
         log_gamma = kwargs["log_gamma"] if "log_gamma" in kwargs else None
 
         # NB a trick to speed up BetaBinom optimization: taking only unique
