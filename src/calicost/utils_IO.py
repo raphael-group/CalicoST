@@ -1713,21 +1713,26 @@ def filter_de_genes_tri(
     df_bininfo : pd.DataFrame
         Contains columns ['CHR', 'START', 'END', 'INCLUDED_GENES', 'INCLUDED_SNP_IDS'], 'INCLUDED_GENES' contains space-delimited gene names.
     """
+
+    logger.info("Computing filter_de_genes_tri.")
+    
     adata = anndata.AnnData(exp_counts)
     adata.layers["count"] = exp_counts.values
     adata.obs["normal_candidate"] = normal_candidate
-    #
+    
     map_gene_adatavar = {}
     map_gene_umi = {}
     list_gene_umi = np.sum(adata.layers["count"], axis=0)
+    
     for i, x in enumerate(adata.var.index):
         map_gene_adatavar[x] = i
         map_gene_umi[x] = list_gene_umi[i]
-    #
+    
     if sample_list is None:
         sample_list = [None]
-    #
+    
     filtered_out_set = set()
+    
     for s, sname in enumerate(sample_list):
         if sname is None:
             index = np.arange(adata.shape[0])
@@ -1739,19 +1744,19 @@ def filter_de_genes_tri(
             < tmpadata.shape[1] * 10
         ):
             continue
-        #
+        
         umi_threshold = np.percentile(
             np.sum(tmpadata.layers["count"], axis=0), quantile_threshold
         )
-        #
-        # sc.pp.filter_cells(tmpadata, min_genes=200)
+        
         sc.pp.filter_genes(tmpadata, min_cells=10)
         med = np.median(np.sum(tmpadata.layers["count"], axis=1))
-        # sc.pp.normalize_total(tmpadata, target_sum=1e4)
+        
         sc.pp.normalize_total(tmpadata, target_sum=med)
         sc.pp.log1p(tmpadata)
-        # new added
+        
         sc.pp.pca(tmpadata, n_comps=4)
+
         kmeans = KMeans(n_clusters=2, random_state=0).fit(tmpadata.obsm["X_pca"])
         kmeans_labels = kmeans.predict(tmpadata.obsm["X_pca"])
         idx_kmeans_label = np.argmax(
@@ -1761,23 +1766,13 @@ def filter_de_genes_tri(
         clone[
             (kmeans_labels != idx_kmeans_label) & (~tmpadata.obs["normal_candidate"])
         ] = "tumor"
+        
         ### third part ###
         clone[
             (kmeans_labels == idx_kmeans_label) & (~tmpadata.obs["normal_candidate"])
         ] = "unsure"
         tmpadata.obs["clone"] = clone
-        # end added
-        # sc.tl.rank_genes_groups(tmpadata, 'clone', groups=["tumor", "unsure"], reference="normal", method='wilcoxon')
-        # # DE and log fold change comparing tumor and normal
-        # genenames_t = np.array([ x[0] for x in tmpadata.uns["rank_genes_groups"]["names"] ])
-        # logfc_t = np.array([ x[0] for x in tmpadata.uns["rank_genes_groups"]["logfoldchanges"] ])
-        # geneumis_t = np.array([ map_gene_umi[x] for x in genenames_t])
-        # # DE and log fold change comparing unsure and normal
-        # genenames_u = np.array([ x[1] for x in tmpadata.uns["rank_genes_groups"]["names"] ])
-        # logfc_u = np.array([ x[1] for x in tmpadata.uns["rank_genes_groups"]["logfoldchanges"] ])
-        # geneumis_u = np.array([ map_gene_umi[x] for x in genenames_u])
-        # this_filtered_out_set = set(list(genenames_t[ (np.abs(logfc_t) > logfcthreshold) & (geneumis_t > umi_threshold) ])) | set(list(genenames_u[ (np.abs(logfc_u) > logfcthreshold) & (geneumis_u > umi_threshold) ]))
-        #
+
         agg_counts = np.vstack(
             [
                 np.sum(tmpadata.layers["count"][tmpadata.obs["clone"] == c, :], axis=0)
@@ -1810,10 +1805,12 @@ def filter_de_genes_tri(
             )
         )
         filtered_out_set = filtered_out_set | this_filtered_out_set
-        print(f"Filter out {len(filtered_out_set)} DE genes")
-    #
-    # remove genes that are in filtered_out_set
+        
+        logger.info(f"Filtered {len(filtered_out_set)} differentially expressed genes.")
+
+    # NB remove genes that are in filtered_out_set
     new_single_X_rdr = np.zeros((df_bininfo.shape[0], adata.shape[0]))
+    
     for b, genestr in enumerate(df_bininfo.INCLUDED_GENES.values):
         # RDR (genes)
         involved_genes = set(genestr.split(" ")) - filtered_out_set
@@ -1821,6 +1818,8 @@ def filter_de_genes_tri(
             adata.layers["count"][:, adata.var.index.isin(involved_genes)], axis=1
         )
 
+    logger.info("Computed filter_de_genes_tri.")
+        
     return new_single_X_rdr, filtered_out_set
 
 

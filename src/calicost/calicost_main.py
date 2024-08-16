@@ -288,6 +288,7 @@ def main(configuration_file):
                 threshold=config["tumorprop_threshold"],
             )
 
+        # TODO merging groups?
         logger.info(
             f"BAF clone merging after requiring minimum # spots: {merging_groups}"
         )
