@@ -801,7 +801,7 @@ def hmrf_pipeline(
 
         if "mp" in params:
             logger.info(
-                "outer iteration {}: total_llf = {}, difference between parameters = {}, {}".format(
+                "Outer iteration {}: total_llf = {}, difference between parameters = {}, {}".format(
                     r,
                     res["total_llf"],
                     np.mean(np.abs(last_log_mu - res["new_log_mu"])),
@@ -810,7 +810,7 @@ def hmrf_pipeline(
             )
         elif "m" in params:
             logger.info(
-                "outer iteration {}: total_llf = {}, difference between NB parameters = {}".format(
+                "Outer iteration {}: total_llf = {}, difference between NB parameters = {}".format(
                     r,
                     res["total_llf"],
                     np.mean(np.abs(last_log_mu - res["new_log_mu"])),
@@ -818,7 +818,7 @@ def hmrf_pipeline(
             )
         elif "p" in params:
             logger.info(
-                "outer iteration {}: total_llf = {}, difference between BetaBinom parameters = {}".format(
+                "Outer iteration {}: total_llf = {}, difference between BetaBinom parameters = {}".format(
                     r,
                     res["total_llf"],
                     np.mean(np.abs(last_p_binom - res["new_p_binom"])),
@@ -826,7 +826,7 @@ def hmrf_pipeline(
             )
 
         logger.info(
-            "outer iteration {}: ARI between assignment = {}".format(
+            "Outer iteration {}: ARI between assignment = {}".format(
                 r, adjusted_rand_score(last_assignment, res["new_assignment"])
             )
         )
@@ -1631,7 +1631,7 @@ def hmrfmix_pipeline(
         # update last parameter
         if "mp" in params:
             print(
-                "outer iteration {}: total_llf = {}, difference between parameters = {}, {}".format(
+                "Outer iteration {}: total_llf = {}, difference between parameters = {}, {}".format(
                     r,
                     res["total_llf"],
                     np.mean(np.abs(last_log_mu - res["new_log_mu"])),
@@ -1640,7 +1640,7 @@ def hmrfmix_pipeline(
             )
         elif "m" in params:
             print(
-                "outer iteration {}: total_llf = {}, difference between NB parameters = {}".format(
+                "Outer iteration {}: total_llf = {}, difference between NB parameters = {}".format(
                     r,
                     res["total_llf"],
                     np.mean(np.abs(last_log_mu - res["new_log_mu"])),
@@ -1648,18 +1648,18 @@ def hmrfmix_pipeline(
             )
         elif "p" in params:
             print(
-                "outer iteration {}: total_llf = {}, difference between BetaBinom parameters = {}".format(
+                "Outer iteration {}: total_llf = {}, difference between BetaBinom parameters = {}".format(
                     r,
                     res["total_llf"],
                     np.mean(np.abs(last_p_binom - res["new_p_binom"])),
                 )
             )
         print(
-            "outer iteration {}: ARI between assignment = {}".format(
+            "Outer iteration {}: ARI between assignment = {}".format(
                 r, adjusted_rand_score(last_assignment, res["new_assignment"])
             )
         )
-        # if np.all( last_assignment == res["new_assignment"] ):
+
         if (
             adjusted_rand_score(last_assignment, res["new_assignment"]) > 0.99
             or len(np.unique(res["new_assignment"])) == 1
