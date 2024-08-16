@@ -818,7 +818,7 @@ def hmrf_pipeline(
             )
         elif "p" in params:
             logger.info(
-                f"Outer iteration {r}: total_llf = {res['total_llf']}, BetaBinom parameters mean abs. diff. = {np.mean(np.abs(last_p_binom - res["new_p_binom"]))}"
+                f"Outer iteration {r}: total_llf = {res['total_llf']}, BetaBinom parameters mean abs. diff. = {np.mean(np.abs(last_p_binom - res['new_p_binom']))}"
             )
 
         logger.info(
@@ -2191,7 +2191,7 @@ def hmrfmix_concatenate_pipeline(
 
         if "mp" in params:
             logger.info(
-                f"Outer iteration {r}: mean abs. diff. (mu, p) = {np.mean(np.abs(last_log_mu - res["new_log_mu"]))}, {np.mean(np.abs(last_p_binom - res["new_p_binom"]))}"
+                f"Outer iteration {r}: mean abs. diff. (mu, p) = {np.mean(np.abs(last_log_mu - res['new_log_mu']))}, {np.mean(np.abs(last_p_binom - res['new_p_binom']))}"
             )
         elif "m" in params:
             logger.info(
