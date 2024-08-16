@@ -801,34 +801,19 @@ def hmrf_pipeline(
 
         if "mp" in params:
             logger.info(
-                "Outer iteration {}: total_llf = {}, difference between parameters = {}, {}".format(
-                    r,
-                    res["total_llf"],
-                    np.mean(np.abs(last_log_mu - res["new_log_mu"])),
-                    np.mean(np.abs(last_p_binom - res["new_p_binom"])),
-                )
+                f"Outer iteration {r}: total_llf = {res['total_llf']}, mean abs. diff. (mu, p) = {np.mean(np.abs(last_log_mu - res['new_log_mu']))}, {np.mean(np.abs(last_p_binom - res['new_p_binom']))}"
             )
         elif "m" in params:
             logger.info(
-                "Outer iteration {}: total_llf = {}, difference between NB parameters = {}".format(
-                    r,
-                    res["total_llf"],
-                    np.mean(np.abs(last_log_mu - res["new_log_mu"])),
-                )
+                f"Outer iteration {r}: total_llf = {res['total_llf']}, mean abs. diff. (mu) = {np.mean(np.abs(last_log_mu - res['new_log_mu']))}"
             )
         elif "p" in params:
             logger.info(
-                "Outer iteration {}: total_llf = {}, BetaBinom parameters mean abs. diff. = {}".format(
-                    r,
-                    res["total_llf"],
-                    np.mean(np.abs(last_p_binom - res["new_p_binom"])),
-                )
+                f"Outer iteration {r}: total_llf = {res['total_llf']}, BetaBinom parameters mean abs. diff. = {np.mean(np.abs(last_p_binom - res["new_p_binom"]))}"
             )
 
         logger.info(
-            "Outer iteration {}: ARI between assignment = {} (unity is a perfect assignment)".format(
-                r, adjusted_rand_score(last_assignment, res["new_assignment"])
-            )
+            f"Outer iteration {r}: ARI between assignment = {adjusted_rand_score(last_assignment, res['new_assignment'])} (unity is a perfect assignment)"
         )
 
         if (
