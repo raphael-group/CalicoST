@@ -709,7 +709,7 @@ def hmrf_pipeline(
             
             # clone assignmment
             if nodepotential == "max":
-                logger.info("Assigning HMRF clone with nodepotential=max & aggr_hmrfix_reassignment.")
+                logger.info("Assigning HMRF clone with nodepotential=max & aggr_hmrfmix_reassignment.")
                 
                 new_assignment, single_llf, total_llf = aggr_hmrf_reassignment(
                     single_X,
@@ -726,7 +726,7 @@ def hmrf_pipeline(
                     hmmclass=hmmclass,
                 )
             elif nodepotential == "weighted_sum":
-                logger.info("Assigning HMRF clone with nodepotential=weighted_sum & hmrfix_reassignment_posterior.")
+                logger.info("Assigning HMRF clone with nodepotential=weighted_sum & hmrfmix_reassignment_posterior.")
                 
                 new_assignment, single_llf, total_llf = hmrf_reassignment_posterior(
                     single_X,
@@ -2060,7 +2060,7 @@ def hmrfmix_concatenate_pipeline(
             
             # NB HMRF clone assignmment
             if nodepotential == "max":
-                logger.info("Assigning HMRF clone with nodepotential=max & aggr_hmrfix_reassignment_concatenate.")
+                logger.info("Assigning HMRF clone with nodepotential=max & aggr_hmrfmix_reassignment_concatenate.")
 
                 new_assignment, single_llf, total_llf = (
                     aggr_hmrfmix_reassignment_concatenate(
@@ -2080,7 +2080,7 @@ def hmrfmix_concatenate_pipeline(
                     )
                 )
             elif nodepotential == "weighted_sum":
-                logger.info("Assigning HMRF clone with nodepotential=weighted_sum & hmrfix_reassignment_posterior_concatenate.")
+                logger.info("Assigning HMRF clone with nodepotential=weighted_sum & hmrfmix_reassignment_posterior_concatenate.")
 
                 new_assignment, single_llf, total_llf = (
                     hmrfmix_reassignment_posterior_concatenate(
