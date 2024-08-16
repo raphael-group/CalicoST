@@ -140,6 +140,8 @@ def hmrf_reassignment_posterior(
         "Computed hmrf_reassignment_posterior with compute_emission_probability_nb_betabinom of {hmmclass}."
     )
 
+    logger.info(f"Found a new clone assignment for N={N}:\n{np.unique(new_assignment, return_counts=True)}")
+    
     if return_posterior:
         return new_assignment, single_llf, total_llf, posterior
     else:
@@ -240,6 +242,8 @@ def aggr_hmrf_reassignment(
         "Computed aggr_hmrf_posterior with compute_emission_probability_nb_betabinom of {hmmclass}."
     )
 
+    logger.info(f"Found a new clone assignment for N={N}:\n{np.unique(new_assignment, return_counts=True)}")
+    
     if return_posterior:
         return new_assignment, single_llf, total_llf, posterior
     else:
@@ -353,6 +357,8 @@ def hmrf_reassignment_posterior_concatenate(
     logger.info(
         "Computed hmrf_reassignment_posterior_concatenate with compute_emission_probability_nb_betabinom of {hmmclass}."
     )
+
+    logger.info(f"Found a new clone assignment for N={N}:\n{np.unique(new_assignment, return_counts=True)}")
 
     if return_posterior:
         return new_assignment, single_llf, total_llf, posterior
@@ -493,6 +499,8 @@ def aggr_hmrf_reassignment_concatenate(
         "Computed aggr_hmrf_reassignment_concatenate with compute_emission_probability_nb_betabinom of {hmmclass}."
     )
 
+    logger.info(f"Found a new clone assignment for N={N}:\n{np.unique(new_assignment, return_counts=True)}")
+    
     if return_posterior:
         return new_assignment, single_llf, total_llf, posterior
     else:
@@ -789,7 +797,8 @@ def hmrf_pipeline(
             res = np.load(f"{outdir}/round{r}_nstates{n_states}_{params}.npz")
 
         logger.info(f"Regrouping to pseudobulk for iteration {r}.")
-
+        logger.info(f"Found a new clone assignment for {n_spots} spots:\n{np.unique(new_assignment, return_counts=True)}")
+        
         clone_index = [
             np.where(res["new_assignment"] == c)[0]
             for c in np.sort(np.unique(res["new_assignment"]))
@@ -1044,6 +1053,8 @@ def hmrf_concatenate_pipeline(
             else:
                 raise ValueError("Unknown mode for nodepotential!")
 
+            logger.info(f"Found a new clone assignment for {n_spots} spots:\n{np.unique(new_assignment, return_counts=True)}")
+            
             # NB handle the case when one clone has zero spots
             if len(np.unique(new_assignment)) < X.shape[2]:
                 res["assignment_before_reindex"] = new_assignment
@@ -1233,6 +1244,9 @@ def aggr_hmrfmix_reassignment(
                 new_assignment[adjacency_mat[i, :].nonzero()[1]] == new_assignment[i]
             )
         )
+
+    logger.info(f"Found a new clone assignment for N={N}:\n{np.unique(new_assignment, return_counts=True)}")
+        
     if return_posterior:
         return new_assignment, single_llf, total_llf, posterior
     else:
@@ -1363,7 +1377,8 @@ def hmrfmix_reassignment_posterior(
         )
 
     logger.info(f"Computed hmrfmix_reassignment_posterior.")
-
+    logger.info(f"Found a new clone assignment for N={N}:\n{np.unique(new_assignment, return_counts=True)}")
+    
     if return_posterior:
         return new_assignment, single_llf, total_llf, posterior
     else:
@@ -1589,7 +1604,8 @@ def hmrfmix_pipeline(
             allres["num_iterations"] = r + 1
             np.savez(f"{outdir}/{prefix}_nstates{n_states}_{params}.npz", **allres)
 
-        # regroup to pseudobulk
+        logger.info(f"Found a new clone assignment for {n_spots} spots:\n{np.unique(new_assignment, return_counts=True)}")
+
         clone_index = [
             np.where(res["new_assignment"] == c)[0]
             for c in np.sort(np.unique(res["new_assignment"]))
@@ -1781,7 +1797,9 @@ def hmrfmix_reassignment_posterior_concatenate(
         )
 
     logger.info(f"Computed hmrfmix_reassignment_posterior_concatenate.")
-        
+
+    logger.info(f"Found a new clone assignment for N={N}:\n{np.unique(new_assignment, return_counts=True)}")
+    
     if return_posterior:
         return new_assignment, single_llf, total_llf, posterior
     else:
@@ -1810,11 +1828,11 @@ def aggr_hmrfmix_reassignment_concatenate(
     n_states = res["new_p_binom"].shape[0]
     single_llf = np.zeros((N, n_clones))
     new_assignment = copy.copy(prev_assignment)
-    #
+    
     lambd = np.sum(single_base_nb_mean, axis=1) / np.sum(single_base_nb_mean)
-    #
+    
     posterior = np.zeros((N, n_clones))
-    #
+    
     for i in trange(N):
         idx = smooth_mat[i, :].nonzero()[1]
         idx = idx[~np.isnan(single_tumor_prop[idx])]
@@ -1887,6 +1905,9 @@ def aggr_hmrfmix_reassignment_concatenate(
                 new_assignment[adjacency_mat[i, :].nonzero()[1]] == new_assignment[i]
             )
         )
+
+    logger.info(f"Found a new clone assignment for N={N}:\n{np.unique(new_assignment, return_counts=True)}")
+        
     if return_posterior:
         return new_assignment, single_llf, total_llf, posterior
     else:
@@ -2118,6 +2139,8 @@ def hmrfmix_concatenate_pipeline(
             else:
                 raise ValueError("Unknown mode for nodepotential!")
 
+            logger.info(f"Found a new clone assignment for {n_spots} spots:\n{np.unique(new_assignment, return_counts=True)}")
+            
             # NB handle the case when one clone has zero spots
             if len(np.unique(new_assignment)) < X.shape[2]:
                 res["assignment_before_reindex"] = new_assignment
@@ -2129,11 +2152,11 @@ def hmrfmix_concatenate_pipeline(
                 )
                 res["log_gamma"] = res["log_gamma"][:, concat_idx]
                 res["pred_cnv"] = res["pred_cnv"][concat_idx]
-            # add to results
+                
             res["prev_assignment"] = last_assignment
             res["new_assignment"] = new_assignment
             res["total_llf"] = total_llf
-            # append to allres
+            
             for k, v in res.items():
                 if k == "prev_assignment":
                     allres[f"round{r-1}_assignment"] = v
@@ -2141,6 +2164,7 @@ def hmrfmix_concatenate_pipeline(
                     allres[f"round{r}_assignment"] = v
                 else:
                     allres[f"round{r}_{k}"] = v
+                    
             allres["num_iterations"] = r + 1
 
             logger.info(
@@ -2155,6 +2179,7 @@ def hmrfmix_concatenate_pipeline(
             np.where(res["new_assignment"] == c)[0]
             for c in np.sort(np.unique(res["new_assignment"]))
         ]
+        
         X, base_nb_mean, total_bb_RD, tumor_prop = merge_pseudobulk_by_index_mix(
             single_X,
             single_base_nb_mean,
@@ -2248,6 +2273,9 @@ def clonelabel_posterior_withinteger(
 
     spatial_weight : float
     """
+
+    logger.info("Computing clonelabel_posterior_withinteger.")
+    
     N = single_X.shape[2]
     n_obs = single_X.shape[0]
     # clone IDs
@@ -2403,4 +2431,6 @@ def clonelabel_posterior_withinteger(
             - scipy.special.logsumexp(w_node + spatial_weight * w_edge)
         )
 
+    logger.info("Computed clonelabel_posterior_withinteger.")
+        
     return df_posterior
