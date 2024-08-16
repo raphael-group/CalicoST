@@ -475,6 +475,7 @@ def update_emission_params_nb_sitewise_uniqvalues(
         if not start_log_mu is None
         else np.zeros((n_states, n_spots))
     )
+    
     new_alphas = copy.copy(alphas)
 
     # expression signal by NB distribution
@@ -550,6 +551,7 @@ def update_emission_params_nb_sitewise_uniqvalues(
             weights = []
             features = []
             state_posweights = []
+            
             for s in range(n_spots):
                 idx_nonzero = np.where(unique_values[s][:, 1] > 0)[0]
                 this_exposure = np.tile(unique_values[s][idx_nonzero, 1], n_states)
@@ -585,21 +587,31 @@ def update_emission_params_nb_sitewise_uniqvalues(
                     this_features[idx_row_posweight, :][:, idx_state_posweight]
                 )
                 state_posweights.append(idx_state_posweight)
+                
             exposure = np.concatenate(exposure)
             y = np.concatenate(y)
             weights = np.concatenate(weights)
             features = scipy.linalg.block_diag(*features)
+            
             model = Weighted_NegativeBinomial(
                 y, features, weights=weights, exposure=exposure
             )
-            res = model.fit(disp=0, maxiter=1500, xtol=1e-4, ftol=1e-4)
+
+            logger.info("Applying fit with default start params.")
+            
+            res = model.fit(disp=0, maxiter=1_500, xtol=1.e-4, ftol=1.e-4)
+            
             for s, idx_state_posweight in enumerate(state_posweights):
                 l1 = int(np.sum([len(x) for x in state_posweights[:s]]))
                 l2 = int(np.sum([len(x) for x in state_posweights[: (s + 1)]]))
                 new_log_mu[idx_state_posweight, s] = res.params[l1:l2]
+                
             if res.params[-1] > 0:
                 new_alphas[:, :] = res.params[-1]
+                
             if not (start_log_mu is None):
+                logger.info("Applying fit with custom start params.")
+                
                 res2 = model.fit(
                     disp=0,
                     maxiter=1500,
@@ -614,8 +626,6 @@ def update_emission_params_nb_sitewise_uniqvalues(
                     ftol=1e-4,
                 )
 
-                logger.info(f"")
-
                 nloglikeobs2 = model.nloglikeobs(res2.params)
                 nloglikeobs = model.nloglikeobs(res.params)
 
@@ -626,8 +636,10 @@ def update_emission_params_nb_sitewise_uniqvalues(
                         l1 = int(np.sum([len(x) for x in state_posweights[:s]]))
                         l2 = int(np.sum([len(x) for x in state_posweights[: (s + 1)]]))
                         new_log_mu[idx_state_posweight, s] = res2.params[l1:l2]
+                        
                     if res2.params[-1] > 0:
                         new_alphas[:, :] = res2.params[-1]
+                        
     new_log_mu[new_log_mu > max_log_rdr] = max_log_rdr
     new_log_mu[new_log_mu < min_log_rdr] = min_log_rdr
 
