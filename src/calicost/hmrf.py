@@ -2188,31 +2188,21 @@ def hmrfmix_concatenate_pipeline(
 
         if "mp" in params:
             logger.info(
-                "outer iteration {}: difference between parameters = {}, {}".format(
-                    r,
-                    np.mean(np.abs(last_log_mu - res["new_log_mu"])),
-                    np.mean(np.abs(last_p_binom - res["new_p_binom"])),
-                )
+                f"Outer iteration {r}: mean abs. diff. (mu, p) = {np.mean(np.abs(last_log_mu - res["new_log_mu"]))}, {np.mean(np.abs(last_p_binom - res["new_p_binom"]))}"
             )
         elif "m" in params:
             logger.info(
-                "outer iteration {}: difference between NB parameters = {}".format(
-                    r, np.mean(np.abs(last_log_mu - res["new_log_mu"]))
-                )
+                f"Outer iteration {r}: mean abs. diff. between NB parameters = {np.mean(np.abs(last_log_mu - res['new_log_mu']))}"
             )
         elif "p" in params:
             logger.info(
-                "Outer iteration {}: BetaBinom parameters mean abs. diff. = {}".format(
-                    r, np.mean(np.abs(last_p_binom - res["new_p_binom"]))
-                )
+                f"Outer iteration {r}: BetaBinom parameters mean abs. diff. = {np.mean(np.abs(last_p_binom - res['new_p_binom']))}"
             )
 
         logger.info(
-            "outer iteration {}: ARI between assignment = {} (unity is a perfect assignment)".format(
-                r, adjusted_rand_score(last_assignment, res["new_assignment"])
-            )
+            f"Outer iteration {r}: ARI between assignment = {adjusted_rand_score(last_assignment, res['new_assignment'])} (unity is a perfect assignment)"
         )
-        # if np.all( last_assignment == res["new_assignment"] ):
+
         if (
             adjusted_rand_score(last_assignment, res["new_assignment"]) > 0.99
             or len(np.unique(res["new_assignment"])) == 1
