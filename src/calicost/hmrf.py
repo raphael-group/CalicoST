@@ -727,7 +727,7 @@ def hmrf_pipeline(
             # NB clone assignmment
             if nodepotential == "max":
                 logger.info(
-                    "Assigning HMRF clone with nodepotential=max & aggr_hmrfmix_reassignment."
+                    "Assigning HMRF clone for iteration {r} with nodepotential=max & aggr_hmrfmix_reassignment."
                 )
 
                 new_assignment, single_llf, total_llf = aggr_hmrf_reassignment(
@@ -746,7 +746,7 @@ def hmrf_pipeline(
                 )
             elif nodepotential == "weighted_sum":
                 logger.info(
-                    "Assigning HMRF clone with nodepotential=weighted_sum & hmrfmix_reassignment_posterior."
+                    "Assigning HMRF clone for iteration {r} with nodepotential=weighted_sum & hmrfmix_reassignment_posterior."
                 )
 
                 new_assignment, single_llf, total_llf = hmrf_reassignment_posterior(
@@ -818,7 +818,7 @@ def hmrf_pipeline(
             )
         elif "p" in params:
             logger.info(
-                "Outer iteration {}: total_llf = {}, difference between BetaBinom parameters = {}".format(
+                "Outer iteration {}: total_llf = {}, BetaBinom parameters mean abs. diff. = {}".format(
                     r,
                     res["total_llf"],
                     np.mean(np.abs(last_p_binom - res["new_p_binom"])),
@@ -826,7 +826,7 @@ def hmrf_pipeline(
             )
 
         logger.info(
-            "Outer iteration {}: ARI between assignment = {}".format(
+            "Outer iteration {}: ARI between assignment = {} (unity is a perfect assignment)".format(
                 r, adjusted_rand_score(last_assignment, res["new_assignment"])
             )
         )
@@ -1017,7 +1017,7 @@ def hmrf_concatenate_pipeline(
             # NB HMRF clone assignmment
             if nodepotential == "max":
                 logger.info(
-                    "Assigning HMRF clone with nodepotential=max & aggr_hmrf_reassignment_concatenate."
+                    "Assigning HMRF clone for iteration {r} with nodepotential=max & aggr_hmrf_reassignment_concatenate."
                 )
 
                 new_assignment, single_llf, total_llf = (
@@ -1038,7 +1038,7 @@ def hmrf_concatenate_pipeline(
                 )
             elif nodepotential == "weighted_sum":
                 logger.info(
-                    "Assigning HMRF clone with nodepotential=weighted_sum & hmrf_reassignment_posterior_concatenate."
+                    "Assigning HMRF clone for iteration {r} with nodepotential=weighted_sum & hmrf_reassignment_posterior_concatenate."
                 )
 
                 new_assignment, single_llf, total_llf = (
@@ -1118,13 +1118,13 @@ def hmrf_concatenate_pipeline(
             )
         elif "p" in params:
             logger.info(
-                "outer iteration {}: difference between BetaBinom parameters = {}".format(
+                "outer iteration {}: BetaBinom parameters mean abs. diff. = {}".format(
                     r, np.mean(np.abs(last_p_binom - res["new_p_binom"]))
                 )
             )
 
         logger.info(
-            "outer iteration {}: ARI between assignment = {}".format(
+            "outer iteration {}: ARI between assignment = {} (unity is a perfect assignment)".format(
                 r, adjusted_rand_score(last_assignment, res["new_assignment"])
             )
         )
@@ -1630,7 +1630,7 @@ def hmrfmix_pipeline(
 
         # update last parameter
         if "mp" in params:
-            print(
+            logger.info(
                 "Outer iteration {}: total_llf = {}, difference between parameters = {}, {}".format(
                     r,
                     res["total_llf"],
@@ -1639,7 +1639,7 @@ def hmrfmix_pipeline(
                 )
             )
         elif "m" in params:
-            print(
+            logger.info(
                 "Outer iteration {}: total_llf = {}, difference between NB parameters = {}".format(
                     r,
                     res["total_llf"],
@@ -1647,15 +1647,15 @@ def hmrfmix_pipeline(
                 )
             )
         elif "p" in params:
-            print(
-                "Outer iteration {}: total_llf = {}, difference between BetaBinom parameters = {}".format(
+            logger.info(
+                "Outer iteration {}: total_llf = {}, BetaBinom mean abs. diff. = {}".format(
                     r,
                     res["total_llf"],
                     np.mean(np.abs(last_p_binom - res["new_p_binom"])),
                 )
             )
-        print(
-            "Outer iteration {}: ARI between assignment = {}".format(
+        logger.info(
+            "Outer iteration {}: ARI between assignment = {} (unity is a perfect assignment)".format(
                 r, adjusted_rand_score(last_assignment, res["new_assignment"])
             )
         )
@@ -2111,7 +2111,7 @@ def hmrfmix_concatenate_pipeline(
             # NB HMRF clone assignmment
             if nodepotential == "max":
                 logger.info(
-                    "Assigning HMRF clone with nodepotential=max & aggr_hmrfmix_reassignment_concatenate."
+                    "Assigning HMRF clone for iteration {r} with nodepotential=max & aggr_hmrfmix_reassignment_concatenate."
                 )
 
                 new_assignment, single_llf, total_llf = (
@@ -2133,7 +2133,7 @@ def hmrfmix_concatenate_pipeline(
                 )
             elif nodepotential == "weighted_sum":
                 logger.info(
-                    "Assigning HMRF clone with nodepotential=weighted_sum & hmrfmix_reassignment_posterior_concatenate."
+                    "Assigning HMRF clone for iteration {r} with nodepotential=weighted_sum & hmrfmix_reassignment_posterior_concatenate."
                 )
 
                 new_assignment, single_llf, total_llf = (
@@ -2217,13 +2217,13 @@ def hmrfmix_concatenate_pipeline(
             )
         elif "p" in params:
             logger.info(
-                "outer iteration {}: difference between BetaBinom parameters = {}".format(
+                "Outer iteration {}: BetaBinom parameters mean abs. diff. = {}".format(
                     r, np.mean(np.abs(last_p_binom - res["new_p_binom"]))
                 )
             )
 
         logger.info(
-            "outer iteration {}: ARI between assignment = {}".format(
+            "outer iteration {}: ARI between assignment = {} (unity is a perfect assignment)".format(
                 r, adjusted_rand_score(last_assignment, res["new_assignment"])
             )
         )
