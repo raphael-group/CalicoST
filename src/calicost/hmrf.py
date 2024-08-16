@@ -1089,31 +1089,21 @@ def hmrf_concatenate_pipeline(
 
         if "mp" in params:
             logger.info(
-                "outer iteration {}: difference between parameters = {}, {}".format(
-                    r,
-                    np.mean(np.abs(last_log_mu - res["new_log_mu"])),
-                    np.mean(np.abs(last_p_binom - res["new_p_binom"])),
-                )
+                f"Outer iteration {r}: mean abs. diff. (mu, p) = {np.mean(np.abs(last_log_mu - res['new_log_mu']))}, {np.mean(np.abs(last_p_binom - res['new_p_binom']))}"
             )
         elif "m" in params:
             logger.info(
-                "outer iteration {}: difference between NB parameters = {}".format(
-                    r, np.mean(np.abs(last_log_mu - res["new_log_mu"]))
-                )
+                f"Outer iteration {r}: mean abs. diff. (mu) = {np.mean(np.abs(last_log_mu - res['new_log_mu']))}"
             )
         elif "p" in params:
             logger.info(
-                "outer iteration {}: BetaBinom parameters mean abs. diff. = {}".format(
-                    r, np.mean(np.abs(last_p_binom - res["new_p_binom"]))
-                )
+                f"Outer iteration {r}: mean abs. diff. (p) = {np.mean(np.abs(last_p_binom - res['new_p_binom']))}"
             )
 
         logger.info(
-            "outer iteration {}: ARI between assignment = {} (unity is a perfect assignment)".format(
-                r, adjusted_rand_score(last_assignment, res["new_assignment"])
-            )
+            f"Outer iteration {r}: ARI between assignment = {adjusted_rand_score(last_assignment, res['new_assignment'])} (unity is a perfect assignment)"
         )
-        # if np.all( last_assignment == res["new_assignment"] ):
+
         if (
             adjusted_rand_score(last_assignment, res["new_assignment"]) > 0.99
             or len(np.unique(res["new_assignment"])) == 1
@@ -1616,33 +1606,19 @@ def hmrfmix_pipeline(
         # update last parameter
         if "mp" in params:
             logger.info(
-                "Outer iteration {}: total_llf = {}, difference between parameters = {}, {}".format(
-                    r,
-                    res["total_llf"],
-                    np.mean(np.abs(last_log_mu - res["new_log_mu"])),
-                    np.mean(np.abs(last_p_binom - res["new_p_binom"])),
-                )
+                f"Outer iteration {r}: total_llf = {res['total_llf']}, mean abs. diff. (mu, p) = {np.mean(np.abs(last_log_mu - res['new_log_mu']))}, {np.mean(np.abs(last_p_binom - res['new_p_binom']))}"
             )
         elif "m" in params:
             logger.info(
-                "Outer iteration {}: total_llf = {}, difference between NB parameters = {}".format(
-                    r,
-                    res["total_llf"],
-                    np.mean(np.abs(last_log_mu - res["new_log_mu"])),
-                )
+                f"Outer iteration {r}: total_llf = {res['total_llf']}, mean abs. diff. (mu) = {np.mean(np.abs(last_log_mu - res['new_log_mu']))}"
             )
         elif "p" in params:
             logger.info(
-                "Outer iteration {}: total_llf = {}, BetaBinom mean abs. diff. = {}".format(
-                    r,
-                    res["total_llf"],
-                    np.mean(np.abs(last_p_binom - res["new_p_binom"])),
-                )
+                f"Outer iteration {r}: total_llf = {res['total_llf']}, mean abs. diff. (p) = {np.mean(np.abs(last_p_binom - res['new_p_binom']))}"
             )
+            
         logger.info(
-            "Outer iteration {}: ARI between assignment = {} (unity is a perfect assignment)".format(
-                r, adjusted_rand_score(last_assignment, res["new_assignment"])
-            )
+            f"Outer iteration {r}: ARI between assignment = {adjusted_rand_score(last_assignment, res['new_assignment'])} (unity is a perfect assignment)"
         )
 
         if (
@@ -1650,12 +1626,14 @@ def hmrfmix_pipeline(
             or len(np.unique(res["new_assignment"])) == 1
         ):
             break
+        
         last_log_mu = res["new_log_mu"]
         last_p_binom = res["new_p_binom"]
         last_alphas = res["new_alphas"]
         last_taus = res["new_taus"]
         last_assignment = res["new_assignment"]
         log_persample_weights = np.ones((X.shape[2], n_samples)) * (-np.log(X.shape[2]))
+        
         for sidx in range(n_samples):
             index = np.where(sample_ids == sidx)[0]
             this_persample_weight = np.bincount(
