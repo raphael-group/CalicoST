@@ -1810,13 +1810,15 @@ def update_emission_params_bb_nophasing_uniqvalues(
     n_spots = len(unique_values)
     n_states = log_gamma.shape[0]
     gamma = np.exp(log_gamma)
-    # initialization
+    
+    # NB initialization
     new_p_binom = (
         copy.copy(start_p_binom)
         if not start_p_binom is None
         else np.ones((n_states, n_spots)) * 0.5
     )
     new_taus = copy.copy(taus)
+    
     if fix_BB_dispersion:
         for s in np.arange(len(unique_values)):
             tmp = (scipy.sparse.csr_matrix(gamma) @ mapping_matrices[s]).A
@@ -1892,6 +1894,7 @@ def update_emission_params_bb_nophasing_uniqvalues(
             weights = []
             features = []
             state_posweights = []
+            
             for s in np.arange(len(unique_values)):
                 idx_nonzero = np.where(unique_values[s][:, 1] > 0)[0]
                 this_exposure = np.tile(unique_values[s][idx_nonzero, 1], n_states)
@@ -1923,18 +1926,25 @@ def update_emission_params_bb_nophasing_uniqvalues(
                     this_features[idx_row_posweight, :][:, idx_state_posweight]
                 )
                 state_posweights.append(idx_state_posweight)
+                
             exposure = np.concatenate(exposure)
             y = np.concatenate(y)
             weights = np.concatenate(weights)
             features = scipy.linalg.block_diag(*features)
+
+            
+            
             model = Weighted_BetaBinom(y, features, weights=weights, exposure=exposure)
             res = model.fit(disp=0, maxiter=1500, xtol=1e-4, ftol=1e-4)
+            
             for s, idx_state_posweight in enumerate(state_posweights):
                 l1 = int(np.sum([len(x) for x in state_posweights[:s]]))
                 l2 = int(np.sum([len(x) for x in state_posweights[: (s + 1)]]))
                 new_p_binom[idx_state_posweight, s] = res.params[l1:l2]
+                
             if res.params[-1] > 0:
                 new_taus[:, :] = res.params[-1]
+                
             if not (start_p_binom is None):
                 res2 = model.fit(
                     disp=0,
@@ -1949,11 +1959,13 @@ def update_emission_params_bb_nophasing_uniqvalues(
                     xtol=1e-4,
                     ftol=1e-4,
                 )
+                
                 if model.nloglikeobs(res2.params) < model.nloglikeobs(res.params):
                     for s, idx_state_posweight in enumerate(state_posweights):
                         l1 = int(np.sum([len(x) for x in state_posweights[:s]]))
                         l2 = int(np.sum([len(x) for x in state_posweights[: (s + 1)]]))
                         new_p_binom[idx_state_posweight, s] = res2.params[l1:l2]
+                        
                     if res2.params[-1] > 0:
                         new_taus[:, :] = res2.params[-1]
 
@@ -1995,7 +2007,8 @@ def update_emission_params_bb_nophasing_uniqvalues_mix(
     n_spots = len(unique_values)
     n_states = log_gamma.shape[0]
     gamma = np.exp(log_gamma)
-    # initialization
+    
+    # NB initialization
     new_p_binom = (
         copy.copy(start_p_binom)
         if not start_p_binom is None
