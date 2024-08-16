@@ -1967,7 +1967,7 @@ def hmrfmix_concatenate_pipeline(
     spatial_weight=1.0 / 6,
     tumorprop_threshold=0.5,
 ):
-    logger.info("Solving hmrfix_concatenate_pipeline.")
+    logger.info("Solving hmrfmix_concatenate_pipeline.")
 
     n_obs, _, n_spots = single_X.shape
     n_clones = len(initial_clone_index)
