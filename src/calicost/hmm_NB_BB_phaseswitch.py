@@ -70,7 +70,9 @@ class hmm_sitewise(object):
         log_emission : array, shape (2*n_states, n_obs, n_spots)
             Log emission probability for each gene each spot (or sample) under each state. There is a common bag of states across all spots.
         """
-        logger.info("Computing emission probability for negative binomial & beta binomial (sitewise).")
+        logger.info(
+            "Computing emission probability for negative binomial & beta binomial (sitewise)."
+        )
 
         n_obs = X.shape[0]
         n_comp = X.shape[1]
@@ -113,7 +115,9 @@ class hmm_sitewise(object):
                         )
                     )
 
-        logger.info("Computed emission probability for negative binomial & beta binomial (sitewise).")
+        logger.info(
+            "Computed emission probability for negative binomial & beta binomial (sitewise)."
+        )
 
         return log_emission_rdr, log_emission_baf
 
@@ -158,7 +162,9 @@ class hmm_sitewise(object):
         log_emission : array, shape (2*n_states, n_obs, n_spots)
             Log emission probability for each gene each spot (or sample) under each state. There is a common bag of states across all spots.
         """
-        logger.info("Computing emission probability for *mixed* negative binomial & beta binomial (sitewise).")
+        logger.info(
+            "Computing emission probability for *mixed* negative binomial & beta binomial (sitewise)."
+        )
 
         n_obs = X.shape[0]
         n_comp = X.shape[1]
@@ -211,7 +217,9 @@ class hmm_sitewise(object):
                         mix_p_A * taus[i, s],
                     )
 
-        logger.info("Computed emission probability for *mixed* negative binomial & beta binomial (sitewise).")
+        logger.info(
+            "Computed emission probability for *mixed* negative binomial & beta binomial (sitewise)."
+        )
 
         return log_emission_rdr, log_emission_baf
 
@@ -381,7 +389,9 @@ class hmm_sitewise(object):
         n_spots = X.shape[2]
         assert n_comp == 2
 
-        logger.info("Initialize Baum Welch NB logmean shift, BetaBinom prob and dispersion param inverse (sitewise).")
+        logger.info(
+            "Initialize Baum Welch NB logmean shift, BetaBinom prob and dispersion param inverse (sitewise)."
+        )
 
         log_mu = (
             np.vstack([np.linspace(-0.1, 0.1, n_states) for r in range(n_spots)]).T
@@ -409,7 +419,7 @@ class hmm_sitewise(object):
         else:
             log_transmat = np.zeros((1, 1))
 
-        # NB a trick to speed up BetaBinom optimization: taking only unique values of 
+        # NB a trick to speed up BetaBinom optimization: taking only unique values of
         #   (B allele count, total SNP covering read count)
         unique_values_nb, mapping_matrices_nb = construct_unique_matrix(
             X[:, 0, :], base_nb_mean
@@ -419,7 +429,9 @@ class hmm_sitewise(object):
         )
 
         for r in trange(max_iter, desc="EM algorithm (sitewise)"):
-            logger.info(f"Calculating E-step (sitewise) for iteration {r} of {max_iter}.")
+            logger.info(
+                f"Calculating E-step (sitewise) for iteration {r} of {max_iter}."
+            )
 
             if tumor_prop is None:
                 log_emission_rdr, log_emission_baf = (
@@ -465,7 +477,9 @@ class hmm_sitewise(object):
                 log_alpha, log_beta, log_transmat, log_emission
             )
 
-            logger.info(f"Calculating M-step (sitewise) for iteration {r} of {max_iter}.")
+            logger.info(
+                f"Calculating M-step (sitewise) for iteration {r} of {max_iter}."
+            )
 
             if "s" in self.params:
                 new_log_startprob = update_startprob_sitewise(lengths, log_gamma)
@@ -540,23 +554,20 @@ class hmm_sitewise(object):
             else:
                 new_p_binom = p_binom
                 new_taus = taus
-            # check convergence
+
             logger.info(
-                "EM convergence metrics (sitewise)",
-                np.mean(np.abs(np.exp(new_log_startprob) - np.exp(log_startprob))),
-                np.mean(np.abs(np.exp(new_log_transmat) - np.exp(log_transmat))),
-                np.mean(np.abs(new_log_mu - log_mu)),
-                np.mean(np.abs(new_p_binom - p_binom)),
+                f"EM convergence metrics (sitewise): {np.mean(np.abs(np.exp(new_log_startprob) - np.exp(log_startprob)))}, {np.mean(np.abs(np.exp(new_log_transmat) - np.exp(log_transmat)))}, {np.mean(np.abs(new_log_mu - log_mu))}, {np.mean(np.abs(new_p_binom - p_binom))}"
             )
-            
-            logger.info(np.hstack([new_log_mu, new_p_binom]))
-            
+
+            # logger.info(np.hstack([new_log_mu, new_p_binom]))
+
             if (
                 np.mean(np.abs(np.exp(new_log_transmat) - np.exp(log_transmat))) < tol
                 and np.mean(np.abs(new_log_mu - log_mu)) < tol
                 and np.mean(np.abs(new_p_binom - p_binom)) < tol
             ):
                 break
+            
             log_startprob = new_log_startprob
             log_transmat = new_log_transmat
             log_mu = new_log_mu
@@ -566,6 +577,9 @@ class hmm_sitewise(object):
 
         logger.info("Computed Baum-Welch (sitewise).")
 
+        logger.info(f"Fitted (mu, p):\n{np.hstack([new_log_mu, new_p_binom])}")
+        logger.info(f"Fitted (alphas, taus):\n{np.hstack([new_alphas, new_taus])}")
+        
         return (
             new_log_mu,
             new_alphas,
@@ -860,15 +874,9 @@ def pipeline_baum_welch(
         if (init_p_binom is None) and ("p" in params):
             init_p_binom = tmp_p_binom
 
-    logger.info(f"Initial (mu, p):\n{np.hstack([init_log_mu, init_p_binom])}")
+    logger.info(f"Initial mu:\n{init_log_mu}")
+    logger.info(f"Initial p:\n{init_p_binom}")
 
-    # fit HMM-NB-BetaBinom
-    # new_log_mu, new_alphas, new_p_binom, new_taus, new_log_startprob, new_log_transmat = hmmmodel.run_baum_welch_nb_bb(X, lengths, \
-    #     n_states, base_nb_mean, total_bb_RD, log_sitewise_transmat, tumor_prop, \
-    #     fix_NB_dispersion=fix_NB_dispersion, shared_NB_dispersion=shared_NB_dispersion, \
-    #     fix_BB_dispersion=fix_BB_dispersion, shared_BB_dispersion=shared_BB_dispersion, \
-    #     is_diag=is_diag, init_log_mu=init_log_mu, init_p_binom=init_p_binom, init_alphas=init_alphas, init_taus=init_taus, \
-    #     max_iter=max_iter, tol=tol)
     hmmmodel = hmmclass(params=params, t=t)
     remain_kwargs = {
         k: v for k, v in kwargs.items() if k in ["lambd", "sample_length", "log_gamma"]
@@ -1237,13 +1245,15 @@ def similarity_components_rdrbaf_neymanpearson(
     n_states = res["new_p_binom"].shape[0]
     n_clones = X.shape[2]
 
-    logger.info("Computing similarity_components_rdrbaf_neymanpearson for (n_obs, n_states, n_clones) = ({n_obs}, {n_states}, {n_clones}).")
-    
+    logger.info(
+        "Computing similarity_components_rdrbaf_neymanpearson for (n_obs, n_states, n_clones) = ({n_obs}, {n_states}, {n_clones})."
+    )
+
     G = nx.Graph()
     G.add_nodes_from(np.arange(n_clones))
-    
+
     lambd = np.sum(base_nb_mean, axis=1) / np.sum(base_nb_mean)
-    
+
     if tumor_prop is None:
         log_emission_rdr, log_emission_baf = (
             hmmclass.compute_emission_probability_nb_betabinom(
@@ -1315,9 +1325,9 @@ def similarity_components_rdrbaf_neymanpearson(
     )
     reshaped_pred = np.argmax(res["log_gamma"], axis=0).reshape((X.shape[2], -1))
     reshaped_pred_cnv = reshaped_pred % n_states
-    
+
     all_test_statistics = []
-    
+
     for c1 in range(n_clones):
         for c2 in range(c1 + 1, n_clones):
             unique_pair_states = [
@@ -1331,7 +1341,7 @@ def similarity_components_rdrbaf_neymanpearson(
                     (reshaped_pred_cnv[c1, :] == p[0])
                     & (reshaped_pred_cnv[c2, :] == p[1])
                 )[0]
-                
+
                 if "m" in params and "p" in params:
                     t_neymanpearson = eval_neymanpearson_rdrbaf(
                         log_emission_rdr[:, :, c1],
@@ -1359,9 +1369,9 @@ def similarity_components_rdrbaf_neymanpearson(
 
                 # TODO
                 logger.info(f"{c1}, {c2}, {p}, {len(bidx)}, {t_neymanpearson}")
-                
+
                 all_test_statistics.append([c1, c2, p, t_neymanpearson])
-                
+
                 if len(bidx) >= minlength:
                     list_t_neymanpearson.append(t_neymanpearson)
             if (
@@ -1376,9 +1386,9 @@ def similarity_components_rdrbaf_neymanpearson(
                 G.add_weighted_edges_from([(c1, c2, max_v)])
 
     logger.info("Computing Maximal cliques.")
-                
+
     cliques = []
-    
+
     for x in nx.find_cliques(G):
         this_len = len(x)
         this_weights = (
@@ -1386,31 +1396,31 @@ def similarity_components_rdrbaf_neymanpearson(
             / 2
         )
         cliques.append((x, this_len, this_weights))
-        
+
     cliques.sort(key=lambda x: (-x[1], x[2]))
-    
+
     covered_nodes = set()
     merging_groups = []
-    
+
     for c in cliques:
         if len(set(c[0]) & covered_nodes) == 0:
             merging_groups.append(list(c[0]))
             covered_nodes = covered_nodes | set(c[0])
-            
+
     for c in range(n_clones):
         if not (c in covered_nodes):
             merging_groups.append([c])
             covered_nodes.add(c)
-            
+
     merging_groups.sort(key=lambda x: np.min(x))
-    
+
     # NB clone assignment after merging
     map_clone_id = {}
-    
+
     for i, x in enumerate(merging_groups):
         for z in x:
             map_clone_id[z] = i
-            
+
     new_assignment = np.array([map_clone_id[x] for x in res["new_assignment"]])
     merged_res = copy.copy(res)
     merged_res["new_assignment"] = new_assignment
@@ -1429,7 +1439,7 @@ def similarity_components_rdrbaf_neymanpearson(
     )
 
     logger.info("Computed similarity_components_rdrbaf_neymanpearson.")
-    
+
     return merging_groups, merged_res
 
 
@@ -1449,11 +1459,11 @@ def combine_similar_states_across_clones(
     n_states = res["new_p_binom"].shape[0]
     reshaped_pred = np.argmax(res["log_gamma"], axis=0).reshape((X.shape[2], -1))
     reshaped_pred_cnv = reshaped_pred % n_states
-    
+
     all_test_statistics = compute_neymanpearson_stats(
         X, base_nb_mean, total_bb_RD, res, params, tumor_prop, hmmclass
     )
-    
+
     # NB make the pair of states consistent between clone c1 and clone c2 if their t_neymanpearson test statistics is small
     for c1 in range(n_clones):
         for c2 in range(c1 + 1, n_clones):
