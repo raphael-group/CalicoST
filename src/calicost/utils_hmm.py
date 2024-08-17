@@ -907,7 +907,7 @@ def update_emission_params_bb_sitewise_uniqvalues(
     n_states = int(log_gamma.shape[0] / 2)
     gamma = np.exp(log_gamma)
 
-    logger.info("Computing emission params for Beta Binomial (sitewise, unique) for {n_spots} spots and {n_states} states.")
+    logger.info(f"Computing emission params for Beta Binomial (sitewise, unique) for {n_spots} spots and {n_states} states.")
     
     new_p_binom = (
         copy.copy(start_p_binom)
@@ -1119,7 +1119,7 @@ def update_emission_params_bb_sitewise_uniqvalues(
     new_p_binom[new_p_binom < min_binom_prob] = min_binom_prob
     new_p_binom[new_p_binom > max_binom_prob] = max_binom_prob
 
-    logger.info("Computed emission params for Beta Binomial (sitewise, unique) for {n_spots} spots and {n_states} states.")
+    logger.info(f"Computed emission params for Beta Binomial (sitewise, unique) for {n_spots} spots and {n_states} states.")
 
     return new_p_binom, new_taus
 
