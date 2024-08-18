@@ -75,7 +75,7 @@ class hmm_sitewise(object):
         n_states = log_mu.shape[0]
 
         logger.info(
-            f"Computing emission probability for negative binomial & beta binomial (sitewise) with n_spots and n_states = {n_spots} and {n_states}."
+            f"Computing emission probability for negative binomial & beta binomial (sitewise, phaseswitch) with n_spots and n_states = {n_spots} and {n_states}."
         )
 
         log_emission_rdr = np.zeros((2 * n_states, n_obs, n_spots))
@@ -110,7 +110,8 @@ class hmm_sitewise(object):
                     )
 
                     # TODO 
-                    # log_emission_baf[i, idx_nonzero_baf, s] - scipy.special.loggamma(X[idx_nonzero_baf, 1, s] + p_binom[i, s] * taus[i, s]) - scipy.special.loggamma(total_bb_RD[idx_nonzero_baf, s] - X[idx_nonzero_baf, 1, s] + (1. - p_binom[i, s]) * taus[i, s]) + scipy.special.loggamma(X[idx_nonzero_baf, 1, s] + (1. - p_binom[i, s]) * taus[i, s]) + scipy.special.loggamma(total_bb_RD[idx_nonzero_baf, s] - X[idx_nonzero_baf, 1, s] + p_binom[i, s] * taus[i, s])
+                    # log_emission_baf[i, idx_nonzero_baf, s] - scipy.special.loggamma(X[idx_nonzero_baf, 1, s] + p_binom[i, s] * taus[i, s]) - scipy.special.loggamma(total_bb_RD[idx_nonzero_baf, s] - X[idx_nonzero_baf, 1, s] + (1. - p_binom[i, s]) * taus[i, s])
+                    #               + scipy.special.loggamma(X[idx_nonzero_baf, 1, s] + (1. - p_binom[i, s]) * taus[i, s]) + scipy.special.loggamma(total_bb_RD[idx_nonzero_baf, s] - X[idx_nonzero_baf, 1, s] + p_binom[i, s] * taus[i, s])
                     
                     log_emission_baf[i + n_states, idx_nonzero_baf, s] = (
                         scipy.stats.betabinom.logpmf(
@@ -122,7 +123,7 @@ class hmm_sitewise(object):
                     )
 
         logger.info(
-            "Computed emission probability for negative binomial & beta binomial (sitewise)."
+            "Computed emission probability for negative binomial & beta binomial (sitewise, phaseswitch)."
         )
 
         return log_emission_rdr, log_emission_baf
@@ -169,7 +170,7 @@ class hmm_sitewise(object):
             Log emission probability for each gene each spot (or sample) under each state. There is a common bag of states across all spots.
         """
         logger.info(
-            "Computing emission probability for *mixed* negative binomial & beta binomial (sitewise)."
+            "Computing emission probability for *mixed* negative binomial & beta binomial (sitewise, phaseswitch)."
         )
 
         n_obs = X.shape[0]
@@ -224,7 +225,7 @@ class hmm_sitewise(object):
                     )
 
         logger.info(
-            "Computed emission probability for *mixed* negative binomial & beta binomial (sitewise)."
+            "Computed emission probability for *mixed* negative binomial & beta binomial (sitewise, phaseswitch)."
         )
 
         return log_emission_rdr, log_emission_baf
