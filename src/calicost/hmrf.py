@@ -64,7 +64,7 @@ def hmrf_reassignment_posterior(
         f"Computing hmrf_reassignment_posterior with compute_emission_probability_nb_betabinom of {hmmclass} for (N, n_obs, n_clones, n_states) = ({N}, {n_obs}, {n_clones}, {n_states})."
     )
 
-    for i in trange(N, desc="hmrf_reassignment_posterior"):
+    for i in range(N):
         idx = smooth_mat[i, :].nonzero()[1]
         for c in range(n_clones):
             tmp_log_emission_rdr, tmp_log_emission_baf = (
@@ -137,7 +137,7 @@ def hmrf_reassignment_posterior(
         )
 
     logger.info(
-        "Computed hmrf_reassignment_posterior with compute_emission_probability_nb_betabinom of {hmmclass}."
+        f"Computed hmrf_reassignment_posterior with compute_emission_probability_nb_betabinom of {hmmclass}."
     )
 
     logger.info(f"Found a new clone assignment for N={N}:\n{np.unique(new_assignment, return_counts=True)}")
@@ -181,7 +181,7 @@ def aggr_hmrf_reassignment(
         "Computing aggr_hmrf_posterior with compute_emission_probability_nb_betabinom of {hmmclass}."
     )
 
-    for i in trange(N, desc="aggr_hmrf_reassignment"):
+    for i in range(N):
         idx = smooth_mat[i, :].nonzero()[1]
 
         for c in range(n_clones):
@@ -239,7 +239,7 @@ def aggr_hmrf_reassignment(
         )
 
     logger.info(
-        "Computed aggr_hmrf_posterior with compute_emission_probability_nb_betabinom of {hmmclass}."
+        f"Computed aggr_hmrf_posterior with compute_emission_probability_nb_betabinom of {hmmclass}."
     )
 
     logger.info(f"Found a new clone assignment for N={N}:\n{np.unique(new_assignment, return_counts=True)}")
@@ -280,7 +280,7 @@ def hmrf_reassignment_posterior_concatenate(
         "Computing hmrf_reassignment_posterior_concatenate with compute_emission_probability_nb_betabinom of {hmmclass}."
     )
 
-    for i in trange(N, desc="hmrf_reassignment_posterior_concatenate"):
+    for i in range(N):
         idx = smooth_mat[i, :].nonzero()[1]
         tmp_log_emission_rdr, tmp_log_emission_baf = (
             hmmclass.compute_emission_probability_nb_betabinom(
@@ -355,7 +355,7 @@ def hmrf_reassignment_posterior_concatenate(
         )
 
     logger.info(
-        "Computed hmrf_reassignment_posterior_concatenate with compute_emission_probability_nb_betabinom of {hmmclass}."
+        f"Computed hmrf_reassignment_posterior_concatenate with compute_emission_probability_nb_betabinom of {hmmclass}."
     )
 
     logger.info(f"Found a new clone assignment for N={N}:\n{np.unique(new_assignment, return_counts=True)}")
@@ -438,9 +438,9 @@ def aggr_hmrf_reassignment_concatenate(
 
     posterior = np.zeros((N, n_clones))
 
-    for i in trange(N, desc="aggr_hmrf_reassignment_concatenate"):
+    for i in range(N):
         idx = smooth_mat[i, :].nonzero()[1]
-        # idx = np.append(idx, np.array([i]))
+        
         tmp_log_emission_rdr, tmp_log_emission_baf = (
             hmmclass.compute_emission_probability_nb_betabinom(
                 np.sum(single_X[:, :, idx], axis=2, keepdims=True),
@@ -496,7 +496,7 @@ def aggr_hmrf_reassignment_concatenate(
         )
 
     logger.info(
-        "Computed aggr_hmrf_reassignment_concatenate with compute_emission_probability_nb_betabinom of {hmmclass}."
+        f"Computed aggr_hmrf_reassignment_concatenate with compute_emission_probability_nb_betabinom of {hmmclass}."
     )
 
     logger.info(f"Found a new clone assignment for N={N}:\n{np.unique(new_assignment, return_counts=True)}")
@@ -1160,18 +1160,22 @@ def aggr_hmrfmix_reassignment(
     hmmclass=hmm_sitewise,
     return_posterior=False,
 ):
+    logger.info(
+        f"Computing aggr_hmrfmix_reassignment with compute_emission_probability_nb_betabinom of {hmmclass}."
+    )
+
     N = single_X.shape[2]
     n_obs = single_X.shape[0]
     n_clones = res["new_log_mu"].shape[1]
     n_states = res["new_p_binom"].shape[0]
     single_llf = np.zeros((N, n_clones))
     new_assignment = copy.copy(prev_assignment)
-    #
+    
     lambd = np.sum(single_base_nb_mean, axis=1) / np.sum(single_base_nb_mean)
-    #
+    
     posterior = np.zeros((N, n_clones))
-    #
-    for i in trange(N):
+    
+    for i in range(N):
         idx = smooth_mat[i, :].nonzero()[1]
         idx = idx[~np.isnan(single_tumor_prop[idx])]
         for c in range(n_clones):
@@ -1246,7 +1250,11 @@ def aggr_hmrfmix_reassignment(
         )
 
     logger.info(f"Found a new clone assignment for N={N}:\n{np.unique(new_assignment, return_counts=True)}")
-        
+
+    logger.info(
+	f"Computed aggr_hmrfmix_reassignment with compute_emission_probability_nb_betabinom of {hmmclass}."
+    )
+    
     if return_posterior:
         return new_assignment, single_llf, total_llf, posterior
     else:
@@ -1424,6 +1432,11 @@ def hmrfmix_pipeline(
 ):
     n_obs, _, n_spots = single_X.shape
     n_clones = len(initial_clone_index)
+
+    logger.info(
+	f"Computing hmrfmix_pipeline for (N, n_obs, n_clones) = ({n_spots}, {n_obs}, {n_clones})."
+    )
+    
     # spot adjacency matric
     assert not (coords is None and adjacency_mat is None)
     if adjacency_mat is None:
@@ -1663,6 +1676,10 @@ def hmrfmix_pipeline(
             log_persample_weights[:, sidx] = log_persample_weights[
                 :, sidx
             ] - scipy.special.logsumexp(log_persample_weights[:, sidx])
+
+    logger.info(
+	f"Computed hmrfmix_pipeline for (N, n_obs, n_clones) = ({n_spots}, {n_obs}, {n_clones})."
+    )
 
 
 def hmrfmix_reassignment_posterior_concatenate(
