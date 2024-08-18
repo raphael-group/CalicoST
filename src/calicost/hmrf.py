@@ -2117,7 +2117,7 @@ def hmrfmix_concatenate_pipeline(
                 )
             elif nodepotential == "weighted_sum":
                 logger.info(
-                    "Assigning HMRF clone for iteration {r} with nodepotential=weighted_sum & hmrfmix_reassignment_posterior_concatenate."
+                    f"Assigning HMRF clone for iteration {r} with nodepotential=weighted_sum & hmrfmix_reassignment_posterior_concatenate."
                 )
 
                 new_assignment, single_llf, total_llf = (
