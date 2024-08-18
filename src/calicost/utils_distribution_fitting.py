@@ -82,10 +82,15 @@ class Weighted_NegativeBinomial(GenericLikelihoodModel):
         if start_params is None:
             if hasattr(self, "start_params"):
                 start_params = self.start_params
+                start_params_str = "existing"
+                
             else:
                 start_params = np.append(0.1 * np.ones(self.nparams), 0.01)
+                start_params_str = "default"
+        else:
+            start_params_str = "input"
 
-        logger.info(f"Starting Weighted_NegativeBinomial optimization @ {start_params}.")
+        logger.info(f"Starting Weighted_NegativeBinomial optimization @ ({start_params_str}) {start_params}.")
 
         start = time.time()
 
@@ -136,10 +141,14 @@ class Weighted_NegativeBinomial_mix(GenericLikelihoodModel):
         if start_params is None:
             if hasattr(self, "start_params"):
                 start_params = self.start_params
+                start_params_str = "existing"
             else:
                 start_params = np.append(0.1 * np.ones(self.nparams), 0.01)
-
-        logger.info(f"Starting Weighted_NegativeBinomial_mix optimization @ {start_params}.")
+                start_params_str = "default"
+        else:
+            start_params_str = "input"
+                
+        logger.info(f"Starting Weighted_NegativeBinomial_mix optimization @ ({start_params_str}) {start_params}.")
 
         start = time.time()
 
@@ -201,12 +210,16 @@ class Weighted_BetaBinom(GenericLikelihoodModel):
         if start_params is None:
             if hasattr(self, "start_params"):
                 start_params = self.start_params
+                start_params_str = "existing"
             else:
                 start_params = np.append(
                     0.5 / np.sum(self.exog.shape[1]) * np.ones(self.nparams), 1
                 )
+                start_params_str = "default"
+        else:
+            start_params_str = "input"
 
-        logger.info(f"Starting Weighted_BetaBinomial optimization @ {start_params}.")
+        logger.info(f"Starting Weighted_BetaBinomial optimization @ ({start_params_str}) {start_params}.")
 
         start = time.time()
 
@@ -256,12 +269,16 @@ class Weighted_BetaBinom_mix(GenericLikelihoodModel):
         if start_params is None:
             if hasattr(self, "start_params"):
                 start_params = self.start_params
+                start_params_str = "existing"
             else:
                 start_params = np.append(
                     0.5 / np.sum(self.exog.shape[1]) * np.ones(self.nparams), 1
                 )
+                start_params_str = "default"
+        else:
+            start_params_str = "input"
 
-        logger.info(f"Starting Weighted_BetaBinom_mix optimization @ {start_params}.")
+        logger.info(f"Starting Weighted_BetaBinom_mix optimization @ ({start_params_str}) {start_params}.")
 
         start = time.time()
 
@@ -304,10 +321,14 @@ class Weighted_BetaBinom_fixdispersion(GenericLikelihoodModel):
         if start_params is None:
             if hasattr(self, "start_params"):
                 start_params = self.start_params
+                start_params_str = "existing"
             else:
                 start_params = 0.1 * np.ones(self.nparams)
-
-        logger.info(f"Starting Weighted_BetaBinom_fixdispersion optimization @ {start_params}.")
+                start_params_str = "default"
+        else:
+            start_params_str = "input"
+                
+        logger.info(f"Starting Weighted_BetaBinom_fixdispersion optimization @ ({start_params_str}) {start_params}.")
 
         start = time.time()
 
@@ -356,10 +377,14 @@ class Weighted_BetaBinom_fixdispersion_mix(GenericLikelihoodModel):
         if start_params is None:
             if hasattr(self, "start_params"):
                 start_params = self.start_params
+                start_params_str = "existing"
             else:
                 start_params = 0.1 * np.ones(self.nparams)
-
-        logger.info(f"Starting Weighted_BetaBinom_fixdispersion_mix optimization @ {start_params}.")
+                start_params_str = "default"
+        else:
+            start_params_str = "input"
+                
+        logger.info(f"Starting Weighted_BetaBinom_fixdispersion_mix optimization @ ({start_params_str}) {start_params}.")
 
         start = time.time()
 

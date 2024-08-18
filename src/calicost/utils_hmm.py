@@ -596,8 +596,6 @@ def update_emission_params_nb_sitewise_uniqvalues(
             model = Weighted_NegativeBinomial(
                 y, features, weights=weights, exposure=exposure
             )
-
-            logger.info("Applying fit with default start params.")
             
             res = model.fit(disp=0, maxiter=1_500, xtol=1.e-4, ftol=1.e-4)
             
@@ -610,8 +608,6 @@ def update_emission_params_nb_sitewise_uniqvalues(
                 new_alphas[:, :] = res.params[-1]
                 
             if not (start_log_mu is None):
-                logger.info("Applying fit with custom start params.")
-                
                 res2 = model.fit(
                     disp=0,
                     maxiter=1500,
@@ -825,8 +821,6 @@ def update_emission_params_nb_sitewise_uniqvalues_mix(
                 tumor_prop=tp,
                 penalty=0,
             )
-
-            logger.info("Applying fit with default start params.")
             
             res = model.fit(disp=0, maxiter=1500, xtol=1e-4, ftol=1e-4)
 
@@ -839,8 +833,6 @@ def update_emission_params_nb_sitewise_uniqvalues_mix(
                 new_alphas[:, :] = res.params[-1]
                 
             if not (start_log_mu is None):
-                logger.info("Applying fit with custom start params.")
-                
                 res2 = model.fit(
                     disp=0,
                     maxiter=1500,
@@ -1072,8 +1064,6 @@ def update_emission_params_bb_sitewise_uniqvalues(
             features = scipy.linalg.block_diag(*features)
             
             model = Weighted_BetaBinom(y, features, weights=weights, exposure=exposure)
-
-            logger.info("Applying fit with default start params.")
             
             res = model.fit(disp=0, maxiter=1_500, xtol=1e-4, ftol=1e-4)
             
@@ -1086,8 +1076,6 @@ def update_emission_params_bb_sitewise_uniqvalues(
                 new_taus[:, :] = res.params[-1]
                 
             if not (start_p_binom is None):
-                logger.info("Applying fit with custom start params.")
-                
                 res2 = model.fit(
                     disp=0,
                     maxiter=1500,
@@ -1347,8 +1335,6 @@ def update_emission_params_bb_sitewise_uniqvalues_mix(
             model = Weighted_BetaBinom_mix(
                 y, features, weights=weights, exposure=exposure, tumor_prop=tp
             )
-
-            logger.info("Applying fit with default start params.")
             
             res = model.fit(disp=0, maxiter=1500, xtol=1e-4, ftol=1e-4)
             
@@ -1360,9 +1346,7 @@ def update_emission_params_bb_sitewise_uniqvalues_mix(
             if res.params[-1] > 0:
                 new_taus[:, :] = res.params[-1]
                 
-            if not (start_p_binom is None):
-                logger.info("Applying fit with custom start params.")
-                
+            if not (start_p_binom is None):                
                 res2 = model.fit(
                     disp=0,
                     maxiter=1500,
@@ -1612,8 +1596,6 @@ def update_emission_params_nb_nophasing_uniqvalues(
             model = Weighted_NegativeBinomial(
                 y, features, weights=weights, exposure=exposure
             )
-
-            logger.info("Applying fit with default start params.")
             
             res = model.fit(disp=0, maxiter=1500, xtol=1e-4, ftol=1e-4)
             
@@ -1626,8 +1608,6 @@ def update_emission_params_nb_nophasing_uniqvalues(
                 new_alphas[:, :] = res.params[-1]
                 
             if not (start_log_mu is None):
-                logger.info("Applying fit with custom start params.")
-                
                 res2 = model.fit(
                     disp=0,
                     maxiter=1500,
@@ -1835,8 +1815,6 @@ def update_emission_params_nb_nophasing_uniqvalues_mix(
                 tumor_prop=tp,
                 penalty=0,
             )
-
-            logger.info("Applying fit with default start params.")
             
             res = model.fit(disp=0, maxiter=1500, xtol=1e-4, ftol=1e-4)
             
@@ -1849,8 +1827,6 @@ def update_emission_params_nb_nophasing_uniqvalues_mix(
                 new_alphas[:, :] = res.params[-1]
                 
             if not (start_log_mu is None):
-                logger.info("Applying fit with custom start params.")
-                
                 res2 = model.fit(
                     disp=0,
                     maxiter=1500,
@@ -2041,8 +2017,6 @@ def update_emission_params_bb_nophasing_uniqvalues(
 
             model = Weighted_BetaBinom(y, features, weights=weights, exposure=exposure)
 
-            logger.info("Applying fit with default start params.")
-            
             res = model.fit(disp=0, maxiter=1500, xtol=1e-4, ftol=1e-4)
             
             for s, idx_state_posweight in enumerate(state_posweights):
@@ -2054,8 +2028,6 @@ def update_emission_params_bb_nophasing_uniqvalues(
                 new_taus[:, :] = res.params[-1]
 
             if not (start_p_binom is None):
-                logger.info("Applying fit with custom start params.")
-                
                 res2 = model.fit(
                     disp=0,
                     maxiter=1500,
@@ -2275,8 +2247,6 @@ def update_emission_params_bb_nophasing_uniqvalues_mix(
                 y, features, weights=weights, exposure=exposure, tumor_prop=tp
             )
 
-            logger.info("Applying fit with default start params.")
-            
             res = model.fit(disp=0, maxiter=1500, xtol=1e-4, ftol=1e-4)
             
             for s, idx_state_posweight in enumerate(state_posweights):
@@ -2288,8 +2258,6 @@ def update_emission_params_bb_nophasing_uniqvalues_mix(
                 new_taus[:, :] = res.params[-1]
                 
             if not (start_p_binom is None):
-                logger.info("Applying fit with custom start params.")
-                
                 res2 = model.fit(
                     disp=0,
                     maxiter=1500,
