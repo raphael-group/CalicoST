@@ -76,7 +76,7 @@ class hmm_sitewise(object):
         n_states = log_mu.shape[0]
 
         logger.info(
-            "Computing emission probability for negative binomial & beta binomial (sitewise) with n_spots and n_states = {n_spots} and {n_states}."
+            f"Computing emission probability for negative binomial & beta binomial (sitewise) with n_spots and n_states = {n_spots} and {n_states}."
         )
 
         log_emission_rdr = np.zeros((2 * n_states, n_obs, n_spots))

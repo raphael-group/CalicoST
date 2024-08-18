@@ -1686,7 +1686,7 @@ def update_emission_params_nb_nophasing_uniqvalues_mix(
     base_nb_mean : array, shape (n_observations, n_spots)
         Mean expression under diploid state.
     """
-    logger.info("Computing emission params for Negative Binomial Mix (no phasing, unique) with {n_spots} spots and {n_states} states.")
+    logger.info(f"Computing emission params for Negative Binomial Mix (no phasing, unique) with {n_spots} spots and {n_states} states.")
 
     n_spots = len(unique_values)
     n_states = log_gamma.shape[0]
@@ -2117,7 +2117,7 @@ def update_emission_params_bb_nophasing_uniqvalues_mix(
     total_bb_RD : array, shape (n_observations, n_spots)
         SNP-covering reads for both REF and ALT across genes along genome.
     """
-    logger.info("Computing emission params for Beta Binomial Mix (no phasing, unique) with {n_spots} spots and {n_states} states.")
+    logger.info(f"Computing emission params for Beta Binomial Mix (no phasing, unique) with {n_spots} spots and {n_states} states.")
 
     n_spots = len(unique_values)
     n_states = log_gamma.shape[0]
