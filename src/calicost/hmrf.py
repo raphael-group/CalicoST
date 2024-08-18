@@ -785,7 +785,7 @@ def hmrf_pipeline(
             res["total_llf"] = total_llf
 
             logger.info(
-                f"Writing HMM iteration {r} to {outdir}/round{r}_nstates{n_states}_{params}.npz"
+                f"Writing likelihood, previous and new assignment to HMM iteration {r} to {outdir}/round{r}_nstates{n_states}_{params}.npz"
             )
 
             np.savez(f"{outdir}/round{r}_nstates{n_states}_{params}.npz", **res)
@@ -1071,7 +1071,6 @@ def hmrf_concatenate_pipeline(
             res["new_assignment"] = new_assignment
             res["total_llf"] = total_llf
 
-            # append to allres
             for k, v in res.items():
                 if k == "prev_assignment":
                     allres[f"round{r-1}_assignment"] = v
@@ -1083,7 +1082,7 @@ def hmrf_concatenate_pipeline(
             allres["num_iterations"] = r + 1
 
             logger.info(
-                f"Writing HMM iteration {r} to {outdir}/{prefix}_nstates{n_states}_{params}.npz"
+                f"Writing assignments for HMM iteration {r} to {outdir}/{prefix}_nstates{n_states}_{params}.npz"
             )
 
             np.savez(f"{outdir}/{prefix}_nstates{n_states}_{params}.npz", **allres)
@@ -1094,6 +1093,7 @@ def hmrf_concatenate_pipeline(
             np.where(res["new_assignment"] == c)[0]
             for c in np.sort(np.unique(res["new_assignment"]))
         ]
+        
         X, base_nb_mean, total_bb_RD = merge_pseudobulk_by_index(
             single_X, single_base_nb_mean, single_total_bb_RD, clone_index
         )
@@ -1588,12 +1588,11 @@ def hmrfmix_pipeline(
                 remaining_clones = np.sort(np.unique(new_assignment))
                 re_indexing = {c: i for i, c in enumerate(remaining_clones)}
                 new_assignment = np.array([re_indexing[x] for x in new_assignment])
-            #
+            
             res["prev_assignment"] = last_assignment
             res["new_assignment"] = new_assignment
             res["total_llf"] = total_llf
 
-            # append to allres
             for k, v in res.items():
                 if k == "prev_assignment":
                     allres[f"round{r-1}_assignment"] = v
@@ -1602,6 +1601,9 @@ def hmrfmix_pipeline(
                 else:
                     allres[f"round{r}_{k}"] = v
             allres["num_iterations"] = r + 1
+
+            logger.info("Writing assignments to {outdir}/{prefix}_nstates{n_states}_{params}.npz")
+            
             np.savez(f"{outdir}/{prefix}_nstates{n_states}_{params}.npz", **allres)
 
         logger.info(f"Found a new clone assignment for {n_spots} spots:\n{np.unique(new_assignment, return_counts=True)}")
@@ -2168,7 +2170,7 @@ def hmrfmix_concatenate_pipeline(
             allres["num_iterations"] = r + 1
 
             logger.info(
-                f"Writing HMM iteration {r} to {outdir}/{prefix}_nstates{n_states}_{params}.npz"
+                f"Writing assignments for HMM iteration {r} to {outdir}/{prefix}_nstates{n_states}_{params}.npz"
             )
 
             np.savez(f"{outdir}/{prefix}_nstates{n_states}_{params}.npz", **allres)
