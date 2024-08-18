@@ -1845,6 +1845,11 @@ def aggr_hmrfmix_reassignment_concatenate(
     n_obs = single_X.shape[0]
     n_clones = int(len(pred) / n_obs)
     n_states = res["new_p_binom"].shape[0]
+
+    logger.info(
+	f"Computing aggr_hmrfmix_reassignment_concatenate for (N, n_obs, n_clones, n_states) = ({N}, {n_obs}, {n_clones}, {n_states})."
+    )
+    
     single_llf = np.zeros((N, n_clones))
     new_assignment = copy.copy(prev_assignment)
     
@@ -1925,6 +1930,10 @@ def aggr_hmrfmix_reassignment_concatenate(
             )
         )
 
+    logger.info(
+	f"Computed aggr_hmrfmix_reassignment_concatenate for (N, n_obs, n_clones, n_states) = ({N}, {n_obs}, {n_clones}, {n_states})."
+    )
+        
     logger.info(f"Found a new clone assignment for N={N}:\n{np.unique(new_assignment, return_counts=True)}")
         
     if return_posterior:
