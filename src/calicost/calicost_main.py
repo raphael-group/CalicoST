@@ -333,7 +333,7 @@ def main(configuration_file):
         )
 
         logger.info(
-            "Preparing refinement of initial, merged clones using BAF & RDR  ****"
+            "**** Preparing refinement of initial, merged clones using BAF & RDR  ****"
         )
 
         if not config["bafonly"]:
@@ -481,7 +481,7 @@ def main(configuration_file):
             )
 
             logger.info(
-                f"****  Refining initial, merged clones (N={n_baf_clones}) using BAF & RDR  ****"
+                f"****  REFINING INITIAL, MERGED CLONES (N={n_baf_clones}) USING BAF & RDR  ****"
             )
 
             for bafc in range(n_baf_clones):
