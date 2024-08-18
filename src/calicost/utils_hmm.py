@@ -1467,13 +1467,12 @@ def update_emission_params_nb_nophasing_uniqvalues(
     base_nb_mean : array, shape (n_observations, n_spots)
         Mean expression under diploid state.
     """
-
-    logger.info("Computing emission params for Negative Binomial (no phasing, unique) with {n_spots} spots and {n_states} states.")
-
     n_spots = len(unique_values)
     n_states = log_gamma.shape[0]
     gamma = np.exp(log_gamma)
 
+    logger.info("Computing emission params for Negative Binomial (no phasing, unique) with {n_spots} spots and {n_states} states.")
+    
     new_log_mu = (
         copy.copy(start_log_mu)
         if not start_log_mu is None
@@ -1665,12 +1664,12 @@ def update_emission_params_nb_nophasing_uniqvalues_mix(
     base_nb_mean : array, shape (n_observations, n_spots)
         Mean expression under diploid state.
     """
-    logger.info(f"Computing emission params for Negative Binomial Mix (no phasing, unique) with {n_spots} spots and {n_states} states.")
-
     n_spots = len(unique_values)
     n_states = log_gamma.shape[0]
     gamma = np.exp(log_gamma)
 
+    logger.info(f"Computing emission params for Negative Binomial Mix (no phasing, unique) with {n_spots} spots and {n_states} states.")
+    
     new_log_mu = (
         copy.copy(start_log_mu)
         if not start_log_mu is None
@@ -1886,11 +1885,11 @@ def update_emission_params_bb_nophasing_uniqvalues(
     total_bb_RD : array, shape (n_observations, n_spots)
         SNP-covering reads for both REF and ALT across genes along genome.
     """
-    logger.info("Computing emission params for Beta Binomial (no phasing, unique) with {n_spots} spots and {n_states} states.")
-
     n_spots = len(unique_values)
     n_states = log_gamma.shape[0]
     gamma = np.exp(log_gamma)
+
+    logger.info("Computing emission params for Beta Binomial (no phasing, unique) with {n_spots} spots and {n_states} states.")
     
     # NB initialization
     new_p_binom = (
@@ -2088,11 +2087,11 @@ def update_emission_params_bb_nophasing_uniqvalues_mix(
     total_bb_RD : array, shape (n_observations, n_spots)
         SNP-covering reads for both REF and ALT across genes along genome.
     """
-    logger.info(f"Computing emission params for Beta Binomial Mix (no phasing, unique) with {n_spots} spots and {n_states} states.")
-
     n_spots = len(unique_values)
     n_states = log_gamma.shape[0]
     gamma = np.exp(log_gamma)
+
+    logger.info(f"Computing emission params for Beta Binomial Mix (no phasing, unique) with {n_spots} spots and {n_states} states.")
     
     # NB initialization
     new_p_binom = (
