@@ -629,7 +629,7 @@ def update_emission_params_nb_sitewise_uniqvalues(
                 nloglikeobs2 = model.nloglikeobs(res2.params)
                 nloglikeobs = model.nloglikeobs(res.params)
 
-                logger.info(f"Comparing loglike for custom start {nloglikeobs2:.6e} to default start {nloglikeobs:.6e}.")
+                logger.info(f"Comparing loglike for Negative Binomial with custom start {nloglikeobs2:.6e} to default start {nloglikeobs:.6e}.")
                 
                 if nloglikeobs2 < nloglikeobs:
                     for s, idx_state_posweight in enumerate(state_posweights):
@@ -858,7 +858,7 @@ def update_emission_params_nb_sitewise_uniqvalues_mix(
                 nloglikeobs2 = model.nloglikeobs(res2.params)
                 nloglikeobs = model.nloglikeobs(res.params)
 
-                logger.info(f"Comparing loglike for custom start {nloglikeobs2:.6e} to default start {nloglikeobs:.6e}.")
+                logger.info(f"Comparing loglike for Negative Binomial Mix with custom start {nloglikeobs2:.6e} to default start {nloglikeobs:.6e}.")
                 
                 if nloglikeobs2 < nloglikeobs:
                     for s, idx_state_posweight in enumerate(state_posweights):
@@ -1105,7 +1105,7 @@ def update_emission_params_bb_sitewise_uniqvalues(
                 nloglikeobs2 = model.nloglikeobs(res2.params)
                 nloglikeobs = model.nloglikeobs(res.params)
 
-                logger.info(f"Comparing loglike for custom start {nloglikeobs2:.6e} to default start {nloglikeobs:.6e}.")
+                logger.info(f"Comparing loglike for Beta Binomial with custom start {nloglikeobs2:.6e} to default start {nloglikeobs:.6e}.")
                 
                 if nloglikeobs2 < nloglikeobs:
                     for s, idx_state_posweight in enumerate(state_posweights):
@@ -1380,7 +1380,7 @@ def update_emission_params_bb_sitewise_uniqvalues_mix(
                 nloglikeobs2 = model.nloglikeobs(res2.params)
                 nloglikeobs = model.nloglikeobs(res.params)
 
-                logger.info(f"Comparing loglike for custom start {nloglikeobs2:.6e} to default start {nloglikeobs:.6e}.")
+                logger.info(f"Comparing loglike for Beta Binomial Mix custom start {nloglikeobs2:.6e} to default start {nloglikeobs:.6e}.")
                 
                 if nloglikeobs2 < nloglikeobs:
                     for s, idx_state_posweight in enumerate(state_posweights):
@@ -1868,7 +1868,7 @@ def update_emission_params_nb_nophasing_uniqvalues_mix(
                 nloglikeobs2 = model.nloglikeobs(res2.params)
                 nloglikeobs = model.nloglikeobs(res.params)
 
-                logger.info(f"Comparing loglike for custom start {nloglikeobs2:.6e} to default start {nloglikeobs:.6e}.")
+                logger.info(f"Comparing loglike for Negative Binomial Mix custom start {nloglikeobs2:.6e} to default start {nloglikeobs:.6e}.")
                 
                 if nloglikeobs2 < nloglikeobs:
                     for s, idx_state_posweight in enumerate(state_posweights):
@@ -2073,7 +2073,7 @@ def update_emission_params_bb_nophasing_uniqvalues(
                 nloglikeobs2 = model.nloglikeobs(res2.params)
                 nloglikeobs = model.nloglikeobs(res.params)
 
-                logger.info(f"Comparing loglike for custom start {nloglikeobs2:.6e} to default start {nloglikeobs:.6e}.")
+                logger.info(f"Comparing loglike for Beta Binomial custom start {nloglikeobs2:.6e} to default start {nloglikeobs:.6e}.")
                 
                 if nloglikeobs2 < nloglikeobs:
                     for s, idx_state_posweight in enumerate(state_posweights):
@@ -2307,7 +2307,7 @@ def update_emission_params_bb_nophasing_uniqvalues_mix(
                 nloglikeobs2 = model.nloglikeobs(res2.params)
                 nloglikeobs = model.nloglikeobs(res.params)
 
-                logger.info(f"Comparing loglike for custom start {nloglikeobs2:.6e} to default start {nloglikeobs:.6e}.")
+                logger.info(f"Comparing loglike for Beta Binomial Mix custom start {nloglikeobs2:.6e} to default start {nloglikeobs:.6e}.")
                 
                 if nloglikeobs2 < nloglikeobs:
                     for s, idx_state_posweight in enumerate(state_posweights):
