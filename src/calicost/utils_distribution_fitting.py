@@ -261,7 +261,7 @@ class Weighted_BetaBinom_mix(GenericLikelihoodModel):
                     0.5 / np.sum(self.exog.shape[1]) * np.ones(self.nparams), 1
                 )
 
-        logger.info(f"Starting Weighted_BetaBinom_mix optimization with @ {start_params}.")
+        logger.info(f"Starting Weighted_BetaBinom_mix optimization @ {start_params}.")
 
         start = time.time()
 
