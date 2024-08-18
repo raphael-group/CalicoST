@@ -590,7 +590,7 @@ class hmm_nophasing_v2(object):
             p_binom = new_p_binom
             taus = new_taus
 
-        logger.info("Computed Baum-Welch (v2).")
+        logger.info("Computed Baum-Welch (v2) in {r+1} iterations.")
 
         logger.info(f"Fitted (mu, p):\n{np.hstack([new_log_mu, new_p_binom])}")
         logger.info(f"Fitted (alphas, taus):\n{np.hstack([new_alphas, new_taus])}")
