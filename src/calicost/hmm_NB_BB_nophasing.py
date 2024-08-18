@@ -507,7 +507,7 @@ class hmm_nophasing(object):
             p_binom = new_p_binom
             taus = new_taus
 
-        logger.info("Computed Baum-Welch (v2).")
+        logger.info("Computed Baum-Welch (v2) in {r+1} iterations.")
 
         return (
             new_log_mu,

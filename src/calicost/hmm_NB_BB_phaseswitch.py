@@ -575,7 +575,7 @@ class hmm_sitewise(object):
             p_binom = new_p_binom
             taus = new_taus
 
-        logger.info("Computed Baum-Welch (sitewise).")
+        logger.info("Computed Baum-Welch (sitewise) in {r+1} iterations.")
 
         logger.info(f"Fitted (mu, p):\n{np.hstack([new_log_mu, new_p_binom])}")
         logger.info(f"Fitted (alphas, taus):\n{np.hstack([new_alphas, new_taus])}")
@@ -1487,7 +1487,7 @@ def combine_similar_states_across_clones(
                     ] = res["pred_cnv"][(c_keep * n_obs) : (c_keep * n_obs + n_obs)][
                         bidx
                     ]
-                    print(
+                    logger.info(
                         f"Merging states {[p1,p2]} in clone {c1} and clone {c2}. NP statistics = {t_neymanpearson}"
                     )
     return res
