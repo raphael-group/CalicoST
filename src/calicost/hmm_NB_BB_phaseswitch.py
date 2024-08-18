@@ -6,7 +6,6 @@ import scipy.special
 from scipy.optimize import minimize
 from scipy.optimize import Bounds
 from sklearn.mixture import GaussianMixture
-from tqdm import trange
 import statsmodels.api as sm
 from statsmodels.base.model import GenericLikelihoodModel
 import copy
