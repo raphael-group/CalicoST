@@ -137,6 +137,8 @@ def main(configuration_file):
             for c, idx in enumerate(initial_clone_index):
                 initial_assignment[idx] = c
 
+            logger.info(f"Writing initial assignment to {file_path}")
+                
             np.savez(
                 str(file_path),
                 **{"num_iterations": 0, "round-1_assignment": initial_assignment},
@@ -464,7 +466,7 @@ def main(configuration_file):
             single_base_nb_mean = copy_single_base_nb_mean
             n_obs = single_X.shape[0]
 
-            logger.info(f"Writing {outdir}/binned_data.npz")
+            logger.info(f"Writing lengths, single_X, single_base_nb_mean, single_total_bb_RD, log_sitewise_transmat, single_tumor_prop to {outdir}/binned_data.npz")
 
             np.savez(
                 f"{outdir}/binned_data.npz",
@@ -519,6 +521,8 @@ def main(configuration_file):
                     for c, idx in enumerate(initial_clone_index):
                         initial_assignment[idx] = c
 
+                    logger.info(f"Writing initial assignment to {file_path}")
+                        
                     np.savez(
                         str(file_path),
                         **{
@@ -987,6 +991,7 @@ def main(configuration_file):
                             return_posterior=True,
                         )
                     )
+                    
             res_combine["total_llf"] = total_llf
             res_combine["new_assignment"] = new_assignment
 
@@ -996,7 +1001,7 @@ def main(configuration_file):
             )
 
             logger.info(
-                f"Writing {outdir}/rdrbaf_final_nstates{config['n_states']}_smp.npz"
+                f"Writing likelihood and new clone assignment to {outdir}/rdrbaf_final_nstates{config['n_states']}_smp.npz"
             )
 
             np.savez(
@@ -1004,7 +1009,7 @@ def main(configuration_file):
                 **res_combine,
             )
 
-            logger.info(f"Writing {outdir}/posterior_clone_probability.npy")
+            logger.info(f"Writing posterior to {outdir}/posterior_clone_probability.npy")
 
             np.save(f"{outdir}/posterior_clone_probability.npy", posterior)
 
