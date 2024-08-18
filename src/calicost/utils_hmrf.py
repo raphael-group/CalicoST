@@ -104,9 +104,11 @@ def choose_adjacency_by_readcounts(
         adjacency_mat.setdiag(1)
         adjacency_mat = adjacency_mat - smooth_mat
         adjacency_mat[adjacency_mat < 0] = 0
+        
         if np.median(np.sum(adjacency_mat, axis=0).A.flatten()) >= 6:
-            print(f"bandwidth: {bandwidth}")
+            logger.info(f"Bandwidth={bandwidth}")
             break
+        
     return smooth_mat, adjacency_mat
 
 
