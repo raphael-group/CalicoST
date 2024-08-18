@@ -362,7 +362,7 @@ class hmm_nophasing_v2(object):
 
         use_defaults = (init_log_mu is None) and (init_p_binom is None) and (init_alphas is None) and (init_taus is None) 
         
-        logger.info("Initialized Baum Welch NB logmean shift, BetaBinom prob and dispersion params inverse (use_defaults = {use_defaults}).")
+        logger.info(f"Initialized Baum Welch NB logmean shift, BetaBinom prob and dispersion params inverse (use_defaults = {use_defaults}).")
         
         # NB initialize start probability and emission probability
         log_startprob = np.log(np.ones(n_states) / n_states)

@@ -264,7 +264,8 @@ def parse_visium(config):
         construct_adjacency_w=config["construct_adjacency_w"],
     )
     n_pooled = np.median(np.sum(smooth_mat > 0, axis=0).A.flatten())
-    print(f"Set up number of spots to pool in HMRF: {n_pooled}")
+    
+    logger.info(f"Set up number of spots to pool in HMRF: {n_pooled}")
 
     # If adjacency matrix is only constructed using gene expression similarity (e.g. scRNA-seq data)
     # Then, directly replace coords by the umap of gene expression, to avoid potential inconsistency in HMRF initialization
