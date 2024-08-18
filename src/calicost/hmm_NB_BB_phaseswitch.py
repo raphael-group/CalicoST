@@ -1008,9 +1008,11 @@ def pipeline_baum_welch(
     pred = np.argmax(log_gamma, axis=0)
     pred_cnv = pred % n_states
 
-    # save results
     if not output_prefix is None:
-        tmp = np.log10(1 - t)
+        tmp = np.log10(1. - t)
+
+        logger.info(f"Writing new parameters to {output_prefix}_nstates{n_states}_{params}_{tmp:.0f}_seed{random_state}.npz")
+        
         np.savez(
             f"{output_prefix}_nstates{n_states}_{params}_{tmp:.0f}_seed{random_state}.npz",
             new_log_mu=new_log_mu,
