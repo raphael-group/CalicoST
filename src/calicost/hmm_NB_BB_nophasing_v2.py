@@ -389,6 +389,7 @@ class hmm_nophasing_v2(object):
         )
 
         for r in range(max_iter):
+            logger.info("-" * 250)
             logger.info(f"Calculating E-step (v2) for iteration {r} of {max_iter}.")
 
             if tumor_prop is None:
