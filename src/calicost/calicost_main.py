@@ -84,7 +84,7 @@ def main(configuration_file):
         exp_counts,
     ) = run_parse_n_load(config)
 
-    logger.info(f"****  Estimating initial clones using BAF only  ****")
+    logger.info(f"****  ESTIMATING INITIAL CLONES USING BAF ONLY  ****")
 
     # NB setting transcript & baseline count to 0 so the emission probability will be ignored.
     copy_single_X_rdr = copy.copy(single_X[:, 0, :])

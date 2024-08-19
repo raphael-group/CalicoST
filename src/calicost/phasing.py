@@ -104,7 +104,8 @@ def initial_phase_given_partition(
 ):
 
     n_obs, _, n_spots = single_X.shape
-    
+
+    logger.info(f"****  COMPUTING INITIAL PHASE  ****")
     logger.info(f"Computing initial_phase_given_partition for (n_states, n_obs, n_spots) = ({n_states}, {n_obs}, {n_spots}).")
     
     # TODO HARDCODE
