@@ -596,7 +596,7 @@ def main(configuration_file):
                         tumorprop_threshold=config["tumorprop_threshold"],
                     )
 
-            logger.info(f"Combining results across clones.")
+            logger.info(f"****  REFINED CLONES BY RDR.  COMBINING RESULTS ACROSS CLONES.  ****")
 
             res_combine = {"prev_assignment": np.zeros(single_X.shape[2], dtype=int)}
             offset_clone = 0
@@ -672,7 +672,7 @@ def main(configuration_file):
                         tumor_prop = np.repeat(tumor_prop, X.shape[0]).reshape(-1, 1)
 
                     logger.info(
-                        f"Merging BAF+RDR clones based on Neyman-Pearson Likelihood ratio."
+                        f"****  MERGING BAF+RDR CLONES BASED ON NEYMAN-PEARSON LIKELIHOOD RATIO  ****"
                     )
 
                     merging_groups, merged_res = (
@@ -750,7 +750,7 @@ def main(configuration_file):
                         )
 
                     logger.info(
-                        f"Running Baum-Welch with refined & merged BAF+RDR clones."
+                        f"****  EVALUATING BAUM-WELCH WITH REFINED & MERGED BAF+RDR CLONES  ****"
                     )
 
                     merged_res = pipeline_baum_welch(
@@ -1000,6 +1000,10 @@ def main(configuration_file):
                 res_combine, posterior, single_tumor_prop
             )
 
+            logger.info(
+                f"****  EVALUATED BAUM-WELCH WITH REFINED & MERGED BAF+RDR CLONES  ****"
+            )
+            
             logger.info(
                 f"Writing likelihood and new clone assignment to {outdir}/rdrbaf_final_nstates{config['n_states']}_smp.npz"
             )
