@@ -114,8 +114,8 @@ def load_data(
     ).A.flatten()
     genenames = set(list(adata.var.index[indicator]))
     adata = adata[:, indicator]
-    print(adata)
-    print(
+    logger.info(adata)
+    logger.info(
         "median UMI after filtering out genes < 0.5% of cells = {}".format(
             np.median(np.sum(adata.layers["count"], axis=1))
         )
@@ -130,7 +130,7 @@ def load_data(
             [(not x in filter_gene_list) for x in adata.var.index]
         )
         adata = adata[:, indicator_filter]
-        print(
+        logger.info(
             "median UMI after filtering out genes in filtergenelist_file = {}".format(
                 np.median(np.sum(adata.layers["count"], axis=1))
             )
@@ -172,13 +172,13 @@ def load_data(
     clf = LocalOutlierFactor(n_neighbors=200)
     label = clf.fit_predict(np.sum(adata.layers["count"], axis=0).reshape(-1, 1))
     adata.layers["count"][:, np.where(label == -1)[0]] = 0
-    print("filter out {} outlier genes.".format(np.sum(label == -1)))
+    logger.info("filter out {} outlier genes.".format(np.sum(label == -1)))
 
     if not normalidx_file is None:
         normal_barcodes = pd.read_csv(normalidx_file, header=None).iloc[:, 0].values
         adata.obs["tumor_annotation"] = "tumor"
         adata.obs["tumor_annotation"][adata.obs.index.isin(normal_barcodes)] = "normal"
-        print(adata.obs["tumor_annotation"].value_counts())
+        logger.info(adata.obs["tumor_annotation"].value_counts())
 
     return adata, cell_snp_Aallele.A, cell_snp_Ballele.A, unique_snp_ids
 
@@ -374,8 +374,8 @@ def load_joint_data(
     ).A.flatten()
     genenames = set(list(adata.var.index[indicator]))
     adata = adata[:, indicator]
-    print(adata)
-    print(
+    logger.info(adata)
+    logger.info(
         "median UMI after filtering out genes < 0.5% of cells = {}".format(
             np.median(np.sum(adata.layers["count"], axis=1))
         )
@@ -388,7 +388,7 @@ def load_joint_data(
             [(not x in filter_gene_list) for x in adata.var.index]
         )
         adata = adata[:, indicator_filter]
-        print(
+        logger.info(
             "median UMI after filtering out genes in filtergenelist_file = {}".format(
                 np.median(np.sum(adata.layers["count"], axis=1))
             )
@@ -430,13 +430,13 @@ def load_joint_data(
     clf = LocalOutlierFactor(n_neighbors=200)
     label = clf.fit_predict(np.sum(adata.layers["count"], axis=0).reshape(-1, 1))
     adata.layers["count"][:, np.where(label == -1)[0]] = 0
-    print("filter out {} outlier genes.".format(np.sum(label == -1)))
+    logger.info("filter out {} outlier genes.".format(np.sum(label == -1)))
 
     if not normalidx_file is None:
         normal_barcodes = pd.read_csv(normalidx_file, header=None).iloc[:, 0].values
         adata.obs["tumor_annotation"] = "tumor"
         adata.obs["tumor_annotation"][adata.obs.index.isin(normal_barcodes)] = "normal"
-        print(adata.obs["tumor_annotation"].value_counts())
+        logger.info(adata.obs["tumor_annotation"].value_counts())
 
     return (
         adata,
@@ -548,8 +548,8 @@ def filter_genes_barcodes_hatchetblock(
     ).A.flatten()
     genenames = set(list(adata.var.index[indicator]))
     adata = adata[:, indicator]
-    print(adata)
-    print(
+    logger.info(adata)
+    logger.info(
         "median UMI after filtering out genes < 0.5% of cells = {}".format(
             np.median(np.sum(adata.layers["count"], axis=1))
         )
@@ -562,7 +562,7 @@ def filter_genes_barcodes_hatchetblock(
             [(not x in filter_gene_list) for x in adata.var.index]
         )
         adata = adata[:, indicator_filter]
-        print(
+        logger.info(
             "median UMI after filtering out genes in filtergenelist_file = {}".format(
                 np.median(np.sum(adata.layers["count"], axis=1))
             )
@@ -1680,7 +1680,7 @@ def filter_de_genes(
             )
         )
         filtered_out_set = filtered_out_set | this_filtered_out_set
-        print(f"Filter out {len(filtered_out_set)} DE genes")
+        logger.info(f"Filter out {len(filtered_out_set)} DE genes")
     #
     new_single_X_rdr = np.zeros((len(x_gene_list), adata.shape[0]))
     for i, x in enumerate(x_gene_list):
