@@ -1522,7 +1522,7 @@ def bin_selection_basedon_normal(
     min_betabinom_tau=30,
 ):
     """
-    Filter out bins that potential contain somatic mutations based on BAF of normal spots.
+    Filter out bins that potentially contain somatic mutations based on BAF of normal spots.
     """
     # pool B allele counts for each bin across all normal spots
     tmpX = np.sum(single_X[:, 1, index_normal], axis=1)
