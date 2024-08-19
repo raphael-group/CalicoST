@@ -2198,7 +2198,7 @@ def hmrfmix_concatenate_pipeline(
             allres["num_iterations"] = r + 1
 
             logger.info(
-                f"Writing assignments for HMM iteration {r} to {outdir}/{prefix}_nstates{n_states}_{params}.npz"
+                f"Writing round ({r}, {k}) assignments for HMM iteration {r} to {outdir}/{prefix}_nstates{n_states}_{params}.npz"
             )
 
             np.savez(f"{outdir}/{prefix}_nstates{n_states}_{params}.npz", **allres)
