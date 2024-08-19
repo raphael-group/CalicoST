@@ -661,7 +661,7 @@ def hmrf_pipeline(
         sample_ids = np.array([tmp_map_index[x] for x in sample_ids])
     log_persample_weights = np.ones((n_clones, n_samples)) * np.log(n_clones)
 
-    logger.info("Merging pseudobulk by clone index")
+    logger.info("Merging pseudobulk based on clone index")
 
     X, base_nb_mean, total_bb_RD = merge_pseudobulk_by_index(
         single_X, single_base_nb_mean, single_total_bb_RD, initial_clone_index
@@ -907,7 +907,7 @@ def hmrf_concatenate_pipeline(
 
     log_persample_weights = np.ones((n_clones, n_samples)) * np.log(n_clones)
 
-    logger.info("Merging pseudobulk by clone index")
+    logger.info("Merging pseudobulk based on clone index")
 
     X, base_nb_mean, total_bb_RD = merge_pseudobulk_by_index(
         single_X, single_base_nb_mean, single_total_bb_RD, initial_clone_index
@@ -2000,7 +2000,7 @@ def hmrfmix_concatenate_pipeline(
         sample_ids = np.array([tmp_map_index[x] for x in sample_ids])
     log_persample_weights = np.ones((n_clones, n_samples)) * (-np.log(n_clones))
 
-    logger.info("Merging pseudobulk by clone index")
+    logger.info("Merging pseudobulk based on clone index")
 
     X, base_nb_mean, total_bb_RD, tumor_prop = merge_pseudobulk_by_index_mix(
         single_X,
