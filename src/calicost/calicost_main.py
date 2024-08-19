@@ -485,7 +485,7 @@ def main(configuration_file):
             )
 
             for bafc in range(n_baf_clones):
-                logger.info(f"Refining BAF clone {bafc}.")
+                logger.info(f"****  Refining BAF clone {bafc}  ****")
 
                 prefix = f"clone{bafc}"
                 idx_spots = np.where(merged_baf_assignment == bafc)[0]

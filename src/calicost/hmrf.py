@@ -1815,8 +1815,9 @@ def hmrfmix_reassignment_posterior_concatenate(
             )
         )
 
+    unique_assignment, cnts = np.unique(new_assignment, return_counts=True)
+        
     logger.info(f"Computed hmrfmix_reassignment_posterior_concatenate.")
-
     logger.info(f"Found a new clone assignment for N={N}:\n{np.unique(new_assignment, return_counts=True)}")
     
     if return_posterior:
