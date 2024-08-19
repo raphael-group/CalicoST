@@ -199,8 +199,8 @@ def load_joint_data(
         columns=dict(zip(df_meta.columns[:3], ["bam", "sample_id", "spaceranger_dir"])),
         inplace=True,
     )
-    logger.info(f"Input spaceranger file list {input_filelist} contains:")
-    logger.info(df_meta)
+    logger.info(f"Input spaceranger file list {input_filelist} contains:\n{df_meta}")
+
     df_barcode = pd.read_csv(
         f"{snp_dir}/barcodes.txt", header=None, names=["combined_barcode"]
     )
@@ -376,7 +376,7 @@ def load_joint_data(
     adata = adata[:, indicator]
     logger.info(adata)
     logger.info(
-        "median UMI after filtering out genes < 0.5% of cells = {}".format(
+        "Median UMI after filtering out genes < 0.5% of cells = {}".format(
             np.median(np.sum(adata.layers["count"], axis=1))
         )
     )
@@ -389,7 +389,7 @@ def load_joint_data(
         )
         adata = adata[:, indicator_filter]
         logger.info(
-            "median UMI after filtering out genes in filtergenelist_file = {}".format(
+            "Median UMI after filtering out genes in filtergenelist_file = {}".format(
                 np.median(np.sum(adata.layers["count"], axis=1))
             )
         )
@@ -430,7 +430,8 @@ def load_joint_data(
     clf = LocalOutlierFactor(n_neighbors=200)
     label = clf.fit_predict(np.sum(adata.layers["count"], axis=0).reshape(-1, 1))
     adata.layers["count"][:, np.where(label == -1)[0]] = 0
-    logger.info("filter out {} outlier genes.".format(np.sum(label == -1)))
+    
+    logger.info("Filter out {} outlier genes.".format(np.sum(label == -1)))
 
     if not normalidx_file is None:
         normal_barcodes = pd.read_csv(normalidx_file, header=None).iloc[:, 0].values
