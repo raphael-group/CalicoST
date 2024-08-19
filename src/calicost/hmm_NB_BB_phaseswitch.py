@@ -394,11 +394,8 @@ class hmm_sitewise(object):
         n_obs = X.shape[0]
         n_comp = X.shape[1]
         n_spots = X.shape[2]
+        
         assert n_comp == 2
-
-        logger.info(
-            "Initialize Baum Welch NB logmean shift, BetaBinom prob and dispersion param inverse (sitewise)."
-        )
 
         log_mu = (
             np.vstack([np.linspace(-0.1, 0.1, n_states) for r in range(n_spots)]).T
@@ -417,6 +414,13 @@ class hmm_sitewise(object):
         )
         taus = 30 * np.ones((n_states, n_spots)) if init_taus is None else init_taus
 
+        logger.info(f"Initial alphas:\n{alphas}")
+        logger.info(f"Initial taus:\n{taus}")
+
+        logger.info(
+            "Initialize Baum Welch NB logmean shift, BetaBinom prob and dispersion param inverse (sitewise)."
+        )
+        
         # NB initialize start probability and emission probability
         log_startprob = np.log(np.ones(n_states) / n_states)
         if n_states > 1:
