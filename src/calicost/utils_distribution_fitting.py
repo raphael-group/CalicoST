@@ -1,22 +1,23 @@
+import contextlib
 import functools
 import inspect
 import logging
+import os
+import sys
+import time
 
 import numpy as np
 import scipy
-import time
-from scipy import linalg, special
-from scipy.special import logsumexp, loggamma
 import scipy.integrate
 import scipy.stats
-from numba import jit, njit
-from sklearn import cluster
-from sklearn.utils import check_random_state
 import statsmodels
 import statsmodels.api as sm
+from numba import jit, njit
+from scipy import linalg, special
+from scipy.special import loggamma, logsumexp
+from sklearn import cluster
+from sklearn.utils import check_random_state
 from statsmodels.base.model import GenericLikelihoodModel
-import os
-
 
 logger = logging.getLogger(__name__)
 
@@ -38,6 +39,20 @@ def convert_params(mean, std):
     n = mean * p / (1.0 - p)
 
     return n, p
+
+
+@contextlib.contextmanager
+def save_stdout(fpath):
+    original = sys.stdout
+    
+    with open(fpath, "w") as ff:
+        sys.stdout = ff
+        try:
+            yield
+
+        # NB teardown
+        finally:
+            sys.stdout = original
 
 
 class Weighted_NegativeBinomial(GenericLikelihoodModel):
@@ -170,7 +185,7 @@ class Weighted_NegativeBinomial_mix(GenericLikelihoodModel):
 
         return result
 
-
+    
 class Weighted_BetaBinom(GenericLikelihoodModel):
     """
     Beta-binomial model endog ~ BetaBin(exposure, tau * p, tau * (1 - p)), where p = exog @ params[:-1] and tau = params[-1].
@@ -190,6 +205,8 @@ class Weighted_BetaBinom(GenericLikelihoodModel):
     exposure : array, (n_samples,)
         Total number of trials. In BAF case, this is the total number of SNP-covering UMIs.
     """
+    ninstance = 0
+    
     def __init__(self, endog, exog, weights, exposure, **kwds):
         super(Weighted_BetaBinom, self).__init__(endog, exog, **kwds)
 
@@ -198,12 +215,25 @@ class Weighted_BetaBinom(GenericLikelihoodModel):
         self.weights = weights
         self.exposure = exposure
 
+        # NB update the instance count
+        Weighted_BetaBinom.ninstance += 1
+        
+        
     def nloglikeobs(self, params):
         a = (self.exog @ params[:-1]) * params[-1]
         b = (1 - self.exog @ params[:-1]) * params[-1]
 
         return -scipy.stats.betabinom.logpmf(self.endog, self.exposure, a, b).dot(self.weights)
 
+    def callback(self, params):
+        nloglike = self.nloglikeobs(params)
+
+        print(params, nloglike)
+
+    @classmethod
+    def get_ninstance(cls):
+        return cls.ninstance
+        
     def fit(self, start_params=None, maxiter=10_000, maxfun=5_000, **kwds):
         self.exog_names.append("tau")
 
@@ -223,16 +253,33 @@ class Weighted_BetaBinom(GenericLikelihoodModel):
 
         start = time.time()
 
-        result = super(Weighted_BetaBinom, self).fit(
-            start_params=start_params,
-            maxiter=maxiter,
-            maxfun=maxfun,
-            skip_hessian=True,
-            callback=None,
-            full_output=True,
-            retall=False,
-            **kwds
-        )
+        # NB kwds = {'xtol': 0.0001, 'ftol': 0.0001, disp: False}
+        kwds.pop("disp", None)
+
+        with save_stdout("weighted_betabinom_chain.tmp"):            
+            result = super(Weighted_BetaBinom, self).fit(
+                start_params=start_params,
+                maxiter=maxiter,
+                maxfun=maxfun,
+                skip_hessian=True,
+                callback=self.callback,
+                full_output=True,
+                retall=True,
+                disp=False,
+                **kwds
+            )
+
+        with open("weighted_betabinom_chain.tmp") as fin:
+            with open("weighted_betabinom_chain.txt", "w") as fout:
+                fout.write(f"#  Weighted_BetaBinom {Weighted_BetaBinom.get_ninstance()} @ {time.asctime()}:\n")
+                fout.write(f"start_type={start_params_str}, shape={self.endog.shape[0]}" + ", ".join(f"{key}: {value}" for key, value in result.mle_retvals.items()))
+                
+                for line in fin:
+                    fout.write(line)
+
+        os.remove("weighted_betabinom_chain.tmp")
+
+        breakpoint()
 
         # NB specific to nm (Nelder-Mead) optimization.
         niter = result.mle_retvals["iterations"]
@@ -241,6 +288,7 @@ class Weighted_BetaBinom(GenericLikelihoodModel):
 
         return result
 
+    
 class Weighted_BetaBinom_mix(GenericLikelihoodModel):
     def __init__(self, endog, exog, weights, exposure, tumor_prop, **kwds):
         super(Weighted_BetaBinom_mix, self).__init__(endog, exog, **kwds)
