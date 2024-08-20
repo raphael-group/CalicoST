@@ -221,14 +221,14 @@ class Weighted_BetaBinom(GenericLikelihoodModel):
         
     def nloglikeobs(self, params):
         a = (self.exog @ params[:-1]) * params[-1]
-        b = (1 - self.exog @ params[:-1]) * params[-1]
+        b = (1. - self.exog @ params[:-1]) * params[-1]
 
         return -scipy.stats.betabinom.logpmf(self.endog, self.exposure, a, b).dot(self.weights)
 
     def callback(self, params):
         nloglike = self.nloglikeobs(params)
 
-        print(params, nloglike)
+        print(params, nloglike, ";")
 
     @classmethod
     def get_ninstance(cls):
@@ -269,17 +269,20 @@ class Weighted_BetaBinom(GenericLikelihoodModel):
                 **kwds
             )
 
+        ninst = Weighted_BetaBinom.get_ninstance()
+
+        # TODO mkdir chains
         with open("weighted_betabinom_chain.tmp") as fin:
-            with open("weighted_betabinom_chain.txt", "w") as fout:
-                fout.write(f"#  Weighted_BetaBinom {Weighted_BetaBinom.get_ninstance()} @ {time.asctime()}:\n")
-                fout.write(f"start_type={start_params_str}, shape={self.endog.shape[0]}" + ", ".join(f"{key}: {value}" for key, value in result.mle_retvals.items()))
+            with open(f"chains/weighted_betabinom_chain_{ninst}.txt", "w") as fout:
+                fout.write(f"#  Weighted_BetaBinom {ninst} @ {time.asctime()}\n")
+                fout.write(f"#  start_type:{start_params_str},shape:{self.endog.shape[0]}," + ",".join(f"{key}:{value}" for key, value in result.mle_retvals.items()) + "\n")
                 
                 for line in fin:
                     fout.write(line)
 
         os.remove("weighted_betabinom_chain.tmp")
 
-        breakpoint()
+        # breakpoint()
 
         # NB specific to nm (Nelder-Mead) optimization.
         niter = result.mle_retvals["iterations"]
