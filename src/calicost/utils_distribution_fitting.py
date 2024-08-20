@@ -228,7 +228,7 @@ class Weighted_BetaBinom(GenericLikelihoodModel):
     def callback(self, params):
         nloglike = self.nloglikeobs(params)
 
-        print(params, nloglike, ";")
+        print(f"{params} {nloglike};")
 
     @classmethod
     def get_ninstance(cls):
