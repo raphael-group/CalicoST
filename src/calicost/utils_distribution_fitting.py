@@ -174,7 +174,7 @@ class WeightedModel(GenericLikelihoodModel, ABC):
         class_name = self.__class__.__name__.lower()
         final_path = f"chains/{class_name}/{class_name}_chain_{ninst}.txt.gzip"
 
-        Path(final_path).mkdir(parents=True, exist_ok=True)
+        Path(final_path).parent.mkdir(parents=True, exist_ok=True)
 
         with save_stdout(tmp_path):
             result = super().fit(
