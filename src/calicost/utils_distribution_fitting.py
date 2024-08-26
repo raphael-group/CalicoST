@@ -118,7 +118,7 @@ class WeightedModel(GenericLikelihoodModel, ABC):
     def __callback__(self, params):
         print(f"{params} {self.nloglikeobs(params)};")
 
-    def fit(self, start_params=None, maxiter=10_000, maxfun=5_000, **kwargs):
+    def fit(self, start_params=None, maxiter=10_000, maxfun=5_000, write_chain=True, **kwargs):
         ext_param_name = self.get_ext_param_name()
 
         self.exog_names.append(ext_param_name)
@@ -161,19 +161,20 @@ class WeightedModel(GenericLikelihoodModel, ABC):
                 **kwargs,
             )
 
-        with open(tmp_path) as fin:
-            with gzip.open(final_path, "wt") as fout:
-                fout.write(f"#  {self.__class__.__name__} {ninst} @ {time.asctime()}\n")
-                fout.write(
-                    f"#  start_type:{start_params_str},shape:{self.endog.shape[0]},"
-                    + ",".join(
-                        f"{key}:{value}" for key, value in result.mle_retvals.items()
+        if write_chain:
+            with open(tmp_path) as fin:
+                with gzip.open(final_path, "wt") as fout:
+                    fout.write(f"#  {self.__class__.__name__} {ninst} @ {time.asctime()}\n")
+                    fout.write(
+                        f"#  start_type:{start_params_str},shape:{self.endog.shape[0]},"
+                        + ",".join(
+                            f"{key}:{value}" for key, value in result.mle_retvals.items()
+                        )
+                        + "\n"
                     )
-                    + "\n"
-                )
 
-                for line in fin:
-                    fout.write(line)
+                    for line in fin:
+                        fout.write(line)
 
         os.remove(tmp_path)
 
