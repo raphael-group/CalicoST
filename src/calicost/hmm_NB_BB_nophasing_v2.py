@@ -13,6 +13,7 @@ import copy
 from calicost.utils_distribution_fitting import *
 from calicost.utils_hmm import *
 import networkx as nx
+from sklearn.metrics import adjusted_rand_score
 
 logger = logging.getLogger(__name__)
 
@@ -383,6 +384,7 @@ class hmm_nophasing_v2(object):
         else:
             log_transmat = np.zeros((1, 1))
 
+        # NB gamma[i,t] = P(q_t = i | O, lambda), n_states * n_observations;
         log_gamma = kwargs["log_gamma"] if "log_gamma" in kwargs else None
 
         # NB a trick to speed up BetaBinom optimization: taking only unique
@@ -476,12 +478,21 @@ class hmm_nophasing_v2(object):
                 log_sitewise_transmat,
             )
 
-            log_gamma = compute_posterior_obs(log_alpha, log_beta)
-
             log_xi = compute_posterior_transition_nophasing(
                 log_alpha, log_beta, log_transmat, log_emission
             )
+            
+            log_gamma = compute_posterior_obs(log_alpha, log_beta)
+            
+            pred_states = np.argmax(log_gamma, axis=0)
 
+            if last_pred_states is None:
+                last_pred_states = pred_states
+            
+            ari = {adjusted_rand_score(last_pred_states, pred_states)}
+
+            logger.info(f"Found Hidden State (v2) ARI for iteration {r} = {ari:.6f}.")
+            
             logger.info(f"Calculating M-step (v2) for iteration {r} of {max_iter}.")
 
             if "s" in self.params:
