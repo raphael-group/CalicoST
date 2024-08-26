@@ -213,7 +213,7 @@ class Weighted_NegativeBinomial_mix(WeightedModel):
 
     @classmethod
     def get_ninstance(cls):
-	return cls.ninstance
+        return cls.ninstance
         
 
 class Weighted_BetaBinom(WeightedModel):
@@ -246,10 +246,10 @@ class Weighted_BetaBinom(WeightedModel):
     
     @classmethod
     def get_ninstance(cls):
-	return cls.ninstance
+        return cls.ninstance
 
 
-class Weighted_BetaBinom_mix(WeightedModel_mix):
+class Weighted_BetaBinom_mix(WeightedModel):
     ninstance = 0
 
     def nloglikeobs(self, params):
