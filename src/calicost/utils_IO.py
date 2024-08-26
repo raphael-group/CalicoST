@@ -12,16 +12,12 @@ import scanpy as sc
 import anndata
 import logging
 
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s - %(levelname)s - %(message)s",
-    datefmt="%Y-%m-%d %H:%M:%S",
-)
-logger = logging.getLogger()
-
 from calicost.utils_phase_switch import *
 from calicost.utils_distribution_fitting import *
 import subprocess
+
+
+logger = logging.getLogger(__name__)
 
 
 def load_data(
@@ -42,6 +38,8 @@ def load_data(
         logging.error(
             f"{spaceranger_dir} directory doesn't have a filtered_feature_bc_matrix.h5 or filtered_feature_bc_matrix.h5ad file!"
         )
+
+        raise RuntimeError()
 
     adata.layers["count"] = adata.X.A.astype(int)
     cell_snp_Aallele = scipy.sparse.load_npz(f"{snp_dir}/cell_snp_Aallele.npz")
@@ -116,8 +114,8 @@ def load_data(
     ).A.flatten()
     genenames = set(list(adata.var.index[indicator]))
     adata = adata[:, indicator]
-    print(adata)
-    print(
+    logger.info(adata)
+    logger.info(
         "median UMI after filtering out genes < 0.5% of cells = {}".format(
             np.median(np.sum(adata.layers["count"], axis=1))
         )
@@ -132,7 +130,7 @@ def load_data(
             [(not x in filter_gene_list) for x in adata.var.index]
         )
         adata = adata[:, indicator_filter]
-        print(
+        logger.info(
             "median UMI after filtering out genes in filtergenelist_file = {}".format(
                 np.median(np.sum(adata.layers["count"], axis=1))
             )
@@ -174,13 +172,13 @@ def load_data(
     clf = LocalOutlierFactor(n_neighbors=200)
     label = clf.fit_predict(np.sum(adata.layers["count"], axis=0).reshape(-1, 1))
     adata.layers["count"][:, np.where(label == -1)[0]] = 0
-    print("filter out {} outlier genes.".format(np.sum(label == -1)))
+    logger.info("filter out {} outlier genes.".format(np.sum(label == -1)))
 
     if not normalidx_file is None:
         normal_barcodes = pd.read_csv(normalidx_file, header=None).iloc[:, 0].values
         adata.obs["tumor_annotation"] = "tumor"
         adata.obs["tumor_annotation"][adata.obs.index.isin(normal_barcodes)] = "normal"
-        print(adata.obs["tumor_annotation"].value_counts())
+        logger.info(adata.obs["tumor_annotation"].value_counts())
 
     return adata, cell_snp_Aallele.A, cell_snp_Ballele.A, unique_snp_ids
 
@@ -201,8 +199,8 @@ def load_joint_data(
         columns=dict(zip(df_meta.columns[:3], ["bam", "sample_id", "spaceranger_dir"])),
         inplace=True,
     )
-    logger.info(f"Input spaceranger file list {input_filelist} contains:")
-    logger.info(df_meta)
+    logger.info(f"Input spaceranger file list {input_filelist} contains:\n{df_meta}")
+
     df_barcode = pd.read_csv(
         f"{snp_dir}/barcodes.txt", header=None, names=["combined_barcode"]
     )
@@ -247,6 +245,7 @@ def load_joint_data(
             logging.error(
                 f"{df_meta['spaceranger_dir'].iloc[i]} directory doesn't have a filtered_feature_bc_matrix.h5 or filtered_feature_bc_matrix.h5ad file!"
             )
+            raise RuntimeError()
 
         adatatmp.layers["count"] = adatatmp.X.A
         # reorder anndata spots to have the same order as df_this_barcode
@@ -375,9 +374,9 @@ def load_joint_data(
     ).A.flatten()
     genenames = set(list(adata.var.index[indicator]))
     adata = adata[:, indicator]
-    print(adata)
-    print(
-        "median UMI after filtering out genes < 0.5% of cells = {}".format(
+    logger.info(adata)
+    logger.info(
+        "Median UMI after filtering out genes < 0.5% of cells = {}".format(
             np.median(np.sum(adata.layers["count"], axis=1))
         )
     )
@@ -389,8 +388,8 @@ def load_joint_data(
             [(not x in filter_gene_list) for x in adata.var.index]
         )
         adata = adata[:, indicator_filter]
-        print(
-            "median UMI after filtering out genes in filtergenelist_file = {}".format(
+        logger.info(
+            "Median UMI after filtering out genes in filtergenelist_file = {}".format(
                 np.median(np.sum(adata.layers["count"], axis=1))
             )
         )
@@ -431,13 +430,14 @@ def load_joint_data(
     clf = LocalOutlierFactor(n_neighbors=200)
     label = clf.fit_predict(np.sum(adata.layers["count"], axis=0).reshape(-1, 1))
     adata.layers["count"][:, np.where(label == -1)[0]] = 0
-    print("filter out {} outlier genes.".format(np.sum(label == -1)))
+    
+    logger.info("Filter out {} outlier genes.".format(np.sum(label == -1)))
 
     if not normalidx_file is None:
         normal_barcodes = pd.read_csv(normalidx_file, header=None).iloc[:, 0].values
         adata.obs["tumor_annotation"] = "tumor"
         adata.obs["tumor_annotation"][adata.obs.index.isin(normal_barcodes)] = "normal"
-        print(adata.obs["tumor_annotation"].value_counts())
+        logger.info(adata.obs["tumor_annotation"].value_counts())
 
     return (
         adata,
@@ -549,8 +549,8 @@ def filter_genes_barcodes_hatchetblock(
     ).A.flatten()
     genenames = set(list(adata.var.index[indicator]))
     adata = adata[:, indicator]
-    print(adata)
-    print(
+    logger.info(adata)
+    logger.info(
         "median UMI after filtering out genes < 0.5% of cells = {}".format(
             np.median(np.sum(adata.layers["count"], axis=1))
         )
@@ -563,7 +563,7 @@ def filter_genes_barcodes_hatchetblock(
             [(not x in filter_gene_list) for x in adata.var.index]
         )
         adata = adata[:, indicator_filter]
-        print(
+        logger.info(
             "median UMI after filtering out genes in filtergenelist_file = {}".format(
                 np.median(np.sum(adata.layers["count"], axis=1))
             )
@@ -1523,7 +1523,7 @@ def bin_selection_basedon_normal(
     min_betabinom_tau=30,
 ):
     """
-    Filter out bins that potential contain somatic mutations based on BAF of normal spots.
+    Filter out bins that potentially contain somatic mutations based on BAF of normal spots.
     """
     # pool B allele counts for each bin across all normal spots
     tmpX = np.sum(single_X[:, 1, index_normal], axis=1)
@@ -1681,7 +1681,7 @@ def filter_de_genes(
             )
         )
         filtered_out_set = filtered_out_set | this_filtered_out_set
-        print(f"Filter out {len(filtered_out_set)} DE genes")
+        logger.info(f"Filter out {len(filtered_out_set)} DE genes")
     #
     new_single_X_rdr = np.zeros((len(x_gene_list), adata.shape[0]))
     for i, x in enumerate(x_gene_list):
@@ -1714,21 +1714,26 @@ def filter_de_genes_tri(
     df_bininfo : pd.DataFrame
         Contains columns ['CHR', 'START', 'END', 'INCLUDED_GENES', 'INCLUDED_SNP_IDS'], 'INCLUDED_GENES' contains space-delimited gene names.
     """
+
+    logger.info("Computing filter_de_genes_tri.")
+    
     adata = anndata.AnnData(exp_counts)
     adata.layers["count"] = exp_counts.values
     adata.obs["normal_candidate"] = normal_candidate
-    #
+    
     map_gene_adatavar = {}
     map_gene_umi = {}
     list_gene_umi = np.sum(adata.layers["count"], axis=0)
+    
     for i, x in enumerate(adata.var.index):
         map_gene_adatavar[x] = i
         map_gene_umi[x] = list_gene_umi[i]
-    #
+    
     if sample_list is None:
         sample_list = [None]
-    #
+    
     filtered_out_set = set()
+    
     for s, sname in enumerate(sample_list):
         if sname is None:
             index = np.arange(adata.shape[0])
@@ -1740,19 +1745,19 @@ def filter_de_genes_tri(
             < tmpadata.shape[1] * 10
         ):
             continue
-        #
+        
         umi_threshold = np.percentile(
             np.sum(tmpadata.layers["count"], axis=0), quantile_threshold
         )
-        #
-        # sc.pp.filter_cells(tmpadata, min_genes=200)
+        
         sc.pp.filter_genes(tmpadata, min_cells=10)
         med = np.median(np.sum(tmpadata.layers["count"], axis=1))
-        # sc.pp.normalize_total(tmpadata, target_sum=1e4)
+        
         sc.pp.normalize_total(tmpadata, target_sum=med)
         sc.pp.log1p(tmpadata)
-        # new added
+        
         sc.pp.pca(tmpadata, n_comps=4)
+
         kmeans = KMeans(n_clusters=2, random_state=0).fit(tmpadata.obsm["X_pca"])
         kmeans_labels = kmeans.predict(tmpadata.obsm["X_pca"])
         idx_kmeans_label = np.argmax(
@@ -1762,23 +1767,13 @@ def filter_de_genes_tri(
         clone[
             (kmeans_labels != idx_kmeans_label) & (~tmpadata.obs["normal_candidate"])
         ] = "tumor"
+        
         ### third part ###
         clone[
             (kmeans_labels == idx_kmeans_label) & (~tmpadata.obs["normal_candidate"])
         ] = "unsure"
         tmpadata.obs["clone"] = clone
-        # end added
-        # sc.tl.rank_genes_groups(tmpadata, 'clone', groups=["tumor", "unsure"], reference="normal", method='wilcoxon')
-        # # DE and log fold change comparing tumor and normal
-        # genenames_t = np.array([ x[0] for x in tmpadata.uns["rank_genes_groups"]["names"] ])
-        # logfc_t = np.array([ x[0] for x in tmpadata.uns["rank_genes_groups"]["logfoldchanges"] ])
-        # geneumis_t = np.array([ map_gene_umi[x] for x in genenames_t])
-        # # DE and log fold change comparing unsure and normal
-        # genenames_u = np.array([ x[1] for x in tmpadata.uns["rank_genes_groups"]["names"] ])
-        # logfc_u = np.array([ x[1] for x in tmpadata.uns["rank_genes_groups"]["logfoldchanges"] ])
-        # geneumis_u = np.array([ map_gene_umi[x] for x in genenames_u])
-        # this_filtered_out_set = set(list(genenames_t[ (np.abs(logfc_t) > logfcthreshold) & (geneumis_t > umi_threshold) ])) | set(list(genenames_u[ (np.abs(logfc_u) > logfcthreshold) & (geneumis_u > umi_threshold) ]))
-        #
+
         agg_counts = np.vstack(
             [
                 np.sum(tmpadata.layers["count"][tmpadata.obs["clone"] == c, :], axis=0)
@@ -1811,10 +1806,12 @@ def filter_de_genes_tri(
             )
         )
         filtered_out_set = filtered_out_set | this_filtered_out_set
-        print(f"Filter out {len(filtered_out_set)} DE genes")
-    #
-    # remove genes that are in filtered_out_set
+        
+        logger.info(f"Filtered {len(filtered_out_set)} differentially expressed genes.")
+
+    # NB remove genes that are in filtered_out_set
     new_single_X_rdr = np.zeros((df_bininfo.shape[0], adata.shape[0]))
+    
     for b, genestr in enumerate(df_bininfo.INCLUDED_GENES.values):
         # RDR (genes)
         involved_genes = set(genestr.split(" ")) - filtered_out_set
@@ -1822,6 +1819,8 @@ def filter_de_genes_tri(
             adata.layers["count"][:, adata.var.index.isin(involved_genes)], axis=1
         )
 
+    logger.info("Computed filter_de_genes_tri.")
+        
     return new_single_X_rdr, filtered_out_set
 
 

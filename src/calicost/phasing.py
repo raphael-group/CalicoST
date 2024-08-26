@@ -102,11 +102,20 @@ def initial_phase_given_partition(
     threshold,
     min_snpumi=2e3,
 ):
+
+    n_obs, _, n_spots = single_X.shape
+
+    logger.info(f"****  COMPUTING INITIAL PHASE  ****")
+    logger.info(f"Computing initial_phase_given_partition for (n_states, n_obs, n_spots) = ({n_states}, {n_obs}, {n_spots}).")
+    
+    # TODO HARDCODE
     EPS_BAF = 0.05
+    
     if single_tumor_prop is None:
         X, base_nb_mean, total_bb_RD = merge_pseudobulk_by_index(
             single_X, single_base_nb_mean, single_total_bb_RD, initial_clone_index
         )
+        
         tumor_prop = None
     else:
         X, base_nb_mean, total_bb_RD, tumor_prop = merge_pseudobulk_by_index_mix(
@@ -121,6 +130,7 @@ def initial_phase_given_partition(
     # pseudobulk HMM for phase_prob
     baf_profiles = np.zeros((X.shape[2], X.shape[0]))
     pred_cnv = np.zeros((X.shape[2], X.shape[0]))
+    
     for i in range(X.shape[2]):
         if np.sum(total_bb_RD[:, i]) < min_snpumi:
             baf_profiles[i, :] = 0.5
@@ -150,7 +160,7 @@ def initial_phase_given_partition(
                 max_iter=max_iter,
                 tol=tol,
             )
-            #
+            
             pred = np.argmax(res["log_gamma"], axis=0)
             this_baf_profiles = np.where(
                 pred < n_states,
@@ -180,10 +190,12 @@ def initial_phase_given_partition(
             )
             @ baf_profiles
         )
+        
     adj_baf_profiles = np.where(baf_profiles < 0.5, baf_profiles, 1 - baf_profiles)
     phase_indicator = population_baf < 0.5
     refined_lengths = []
     cumlen = 0
+    
     for le in lengths:
         s = 0
         for i in range(le):
@@ -199,14 +211,19 @@ def initial_phase_given_partition(
         refined_lengths.append(le - s)
         cumlen += le
     refined_lengths = np.array(refined_lengths)
+
+    logger.info(f"Computed initial_phase_given_partition.")
+    
     return phase_indicator, refined_lengths
 
 
 def perform_partition(coords, sample_ids, x_part, y_part, single_tumor_prop, threshold):
     initial_clone_index = []
+    
     for s in range(np.max(sample_ids) + 1):
         index = np.where(sample_ids == s)[0]
         assert len(index) > 0
+        
         if single_tumor_prop is None:
             tmp_clone_index = fixed_rectangle_initialization(
                 coords[index, :], x_part, y_part
@@ -219,6 +236,8 @@ def perform_partition(coords, sample_ids, x_part, y_part, single_tumor_prop, thr
                 single_tumor_prop[index],
                 threshold=threshold,
             )
+            
         for x in tmp_clone_index:
             initial_clone_index.append(index[x])
+            
     return initial_clone_index

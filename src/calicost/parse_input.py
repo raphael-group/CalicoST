@@ -7,13 +7,14 @@ from sklearn.metrics import adjusted_rand_score
 import scanpy as sc
 import anndata
 import logging
-
+"""
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s - %(levelname)s - %(message)s",
     datefmt="%Y-%m-%d %H:%M:%S",
 )
-logger = logging.getLogger()
+"""
+logger = logging.getLogger(__name__)
 import copy
 from pathlib import Path
 import functools
@@ -159,6 +160,7 @@ def parse_visium(config):
         logphase_shift=config["logphase_shift"],
         geneticmap_file=config["geneticmap_file"],
     )
+    
     # infer an initial phase using pseudobulk
     if not Path(f"{config['output_dir']}/initial_phase.npz").exists():
         initial_clone_for_phasing = perform_partition(
@@ -169,6 +171,7 @@ def parse_visium(config):
             single_tumor_prop=single_tumor_prop,
             threshold=config["tumorprop_threshold"],
         )
+        
         phase_indicator, refined_lengths = initial_phase_given_partition(
             single_X,
             lengths,
@@ -185,15 +188,19 @@ def parse_visium(config):
             config["shared_NB_dispersion"],
             config["fix_BB_dispersion"],
             config["shared_BB_dispersion"],
-            30,
+            config["max_iter"],
             1e-3,
             threshold=config["tumorprop_threshold"],
         )
+
+        logger.info(f"Writing initial pase to {config['output_dir']}/initial_phase.npz")
+        
         np.savez(
             f"{config['output_dir']}/initial_phase.npz",
             phase_indicator=phase_indicator,
             refined_lengths=refined_lengths,
         )
+        
         # map phase indicator to individual snps
         df_gene_snp["phase"] = np.where(
             df_gene_snp.snp_id.isnull(),
@@ -227,21 +234,6 @@ def parse_visium(config):
         logphase_shift=config["logphase_shift"],
         geneticmap_file=config["geneticmap_file"],
     )
-    # lengths, single_X, single_base_nb_mean, single_total_bb_RD, log_sitewise_transmat, sorted_chr_pos, sorted_chr_pos_last, x_gene_list, n_snps = perform_binning_new(lengths, single_X, \
-    #     single_base_nb_mean, single_total_bb_RD, sorted_chr_pos, sorted_chr_pos_last, x_gene_list, n_snps, phase_indicator, refined_lengths, config["binsize"], config["rdrbinsize"], config["nu"], config["logphase_shift"], secondary_min_umi=secondary_min_umi)
-
-    # # remove bins where normal spots have imbalanced SNPs
-    # if not config["tumorprop_file"] is None:
-    #     for prop_threshold in np.arange(0, 0.6, 0.05):
-    #         normal_candidate = (single_tumor_prop <= prop_threshold)
-    #         if np.sum(single_X[:, 0, (normal_candidate==True)]) > single_X.shape[0] * 200:
-    #             break
-    #     index_normal = np.where(normal_candidate)[0]
-    #     lengths, single_X, single_base_nb_mean, single_total_bb_RD, log_sitewise_transmat, df_gene_snp = bin_selection_basedon_normal(df_gene_snp, \
-    #             single_X, single_base_nb_mean, single_total_bb_RD, config["nu"], config["logphase_shift"], index_normal, config['geneticmap_file'])
-    #     assert np.sum(lengths) == single_X.shape[0]
-    #     assert single_X.shape[0] == single_total_bb_RD.shape[0]
-    #     assert single_X.shape[0] == len(log_sitewise_transmat)
 
     # expression count dataframe
     exp_counts = pd.DataFrame.sparse.from_spmatrix(
@@ -262,8 +254,10 @@ def parse_visium(config):
         maxspots_pooling=config["maxspots_pooling"],
         construct_adjacency_w=config["construct_adjacency_w"],
     )
+    
     n_pooled = np.median(np.sum(smooth_mat > 0, axis=0).A.flatten())
-    print(f"Set up number of spots to pool in HMRF: {n_pooled}")
+    
+    logger.info(f"Set up number of spots to pool for HMRF: {n_pooled}")
 
     # If adjacency matrix is only constructed using gene expression similarity (e.g. scRNA-seq data)
     # Then, directly replace coords by the umap of gene expression, to avoid potential inconsistency in HMRF initialization
