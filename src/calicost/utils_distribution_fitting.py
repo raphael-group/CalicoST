@@ -1,5 +1,6 @@
 import contextlib
 import functools
+import gzip
 import inspect
 import logging
 import os
@@ -161,7 +162,7 @@ class WeightedModel(GenericLikelihoodModel, ABC):
             )
 
         with open(tmp_path) as fin:
-            with open(final_path, "w") as fout:
+            with gzip.open(final_path, "wt") as fout:
                 fout.write(f"#  {self.__class__.__name__} {ninst} @ {time.asctime()}\n")
                 fout.write(
                     f"#  start_type:{start_params_str},shape:{self.endog.shape[0]},"
