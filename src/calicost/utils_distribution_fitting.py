@@ -132,7 +132,7 @@ class WeightedModel(GenericLikelihoodModel, ABC):
         """
         Define callback for writing parameter chain to file.
         """
-        print(f"{params} {self.nloglikeobs(params)};")
+        print(f"{params} {self.nloglikeobs(params):.6f};")
 
     def fit(
         self,
