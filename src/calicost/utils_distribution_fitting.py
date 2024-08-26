@@ -77,11 +77,11 @@ class WeightedModel(GenericLikelihoodModel, ABC):
         Multiplication constant outside the exponential term. In scRNA-seq or SRT data, this term is the total UMI count per cell/spot.
     """
 
-    def __init__(self, endog, exog, weights, exposure, *args, seed=0, **kwargs):
+    def __init__(self, endog, exog, weights, exposure, tumor_prop=None, seed=0, **kwargs):
         super().__init__(endog, exog, **kwargs)
 
         # NB unpack a single additional positional argument as tumor_proportion.
-        self.tumor_prop = args if len(args) == 1 else None
+        self.tumor_prop = tumor_prop
 
         self.weights = weights
         self.exposure = exposure
@@ -241,7 +241,7 @@ class Weighted_NegativeBinomial(WeightedModel):
     def get_default_start_params(self):
         return np.append(0.1 * np.ones(self.exog.shape[1]), 0.01)
 
-    def get_ext_param_name():
+    def get_ext_param_name(self):
         return "alpha"
 
     def __post_init__(self):
@@ -327,7 +327,7 @@ class Weighted_BetaBinom_mix(WeightedModel):
     def get_default_start_params(self):
         return np.append(0.5 / np.sum(self.exog.shape[1]) * np.ones(self.nparams), 1)
 
-    def get_ext_param_name():
+    def get_ext_param_name(self):
         return "tau"
 
     def __post_init__(self):
