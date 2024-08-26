@@ -493,7 +493,7 @@ class hmm_nophasing_v2(object):
             
             ari = {adjusted_rand_score(last_pred_states, pred_states)}
 
-            logger.info(f"Found Hidden State (v2) ARI for iteration {r} = {ari:.6f}.")
+            logger.info(f"Found Hidden State (v2) ARI for iteration {r} = {ari:.6f} (first iteration burn-in).")
             
             logger.info(f"Calculating M-step (v2) for iteration {r} of {max_iter}.")
 
