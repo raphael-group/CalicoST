@@ -80,7 +80,6 @@ class WeightedModel(GenericLikelihoodModel, ABC):
     def __init__(self, endog, exog, weights, exposure, tumor_prop=None, seed=0, **kwargs):
         super().__init__(endog, exog, **kwargs)
 
-        # NB unpack a single additional positional argument as tumor_proportion.
         self.tumor_prop = tumor_prop
 
         self.weights = weights
@@ -273,7 +272,7 @@ class Weighted_NegativeBinomial_mix(WeightedModel):
     def __post_init__(self):
         assert self.tumor_prop is not None, "Tumor proportion must be defined."
 
-        Weighted_NegativeBinomial_mix.ninstance
+        Weighted_NegativeBinomial_mix.ninstance += 1
 
 
 class Weighted_BetaBinom(WeightedModel):
