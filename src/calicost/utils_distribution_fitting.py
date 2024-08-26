@@ -164,7 +164,6 @@ class Weighted_NegativeBinomial(WeightedModel):
 
     max_{params} \sum_{s} weights_s * log P(endog_s | exog_s; params)
     """
-
     ninstance = 0
 
     def nloglikeobs(self, params):
@@ -212,6 +211,10 @@ class Weighted_NegativeBinomial_mix(WeightedModel):
     def __post_init__(self):
         assert self.tumor_prop is not None, "Tumor proportion must be defined."
 
+    @classmethod
+    def get_ninstance(cls):
+	return cls.ninstance
+        
 
 class Weighted_BetaBinom(WeightedModel):
     """
@@ -237,6 +240,13 @@ class Weighted_BetaBinom(WeightedModel):
 
     def get_ext_param_name():
         return "tau"
+
+    def __post_init__(self):
+        pass
+    
+    @classmethod
+    def get_ninstance(cls):
+	return cls.ninstance
 
 
 class Weighted_BetaBinom_mix(WeightedModel_mix):
@@ -265,6 +275,9 @@ class Weighted_BetaBinom_mix(WeightedModel_mix):
     def __post_init__(self):
         assert self.tumor_prop is not None, "Tumor proportion must be defined."
 
+    @classmethod
+    def get_ninstance(cls):
+        return cls.ninstance
 
 class Weighted_BetaBinom_fixdispersion(WeightedModel):
     ninstance = 0
@@ -302,6 +315,10 @@ class Weighted_BetaBinom_fixdispersion(WeightedModel):
 
     def __post_init__(self):
         pass
+
+    @classmethod
+    def get_ninstance(cls):
+        return cls.ninstance
 
 
 class Weighted_BetaBinom_fixdispersion_mix(WeightedModel):
@@ -343,3 +360,7 @@ class Weighted_BetaBinom_fixdispersion_mix(WeightedModel):
 
     def __post_init__(self):
         assert self.tumor_prop is not None, "Tumor proportion must be defined."
+
+    @classmethod
+    def get_ninstance(cls):
+        return cls.ninstance
