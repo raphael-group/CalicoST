@@ -339,11 +339,10 @@ class Weighted_BetaBinom_fixdispersion(WeightedModel):
     ninstance = 0
 
     # NB custom __init__ required to handle tau.
-    def __init__(self, endog, exog, tau, weights, exposure, *args, seed=0, **kwargs):
+    def __init__(self, endog, exog, tau, weights, exposure, *args, tumor_prop=None, seed=0, **kwargs):
         super().__init__(endog, exog, **kwargs)
 
-        # NB unpack a single additional positional argument as tumor_proportion.
-        self.tumor_prop = args if len(args) == 1 else None
+        self.tumor_prop = tumor_prop
 
         self.tau = tau
         self.weights = weights
@@ -377,11 +376,10 @@ class Weighted_BetaBinom_fixdispersion(WeightedModel):
 
 class Weighted_BetaBinom_fixdispersion_mix(WeightedModel):
     # NB custom __init__ required to handle tau.
-    def __init__(self, endog, exog, tau, weights, exposure, *args, seed=0, **kwargs):
+    def __init__(self, endog, exog, tau, weights, exposure, *args, tumor_prop=None, seed=0, **kwargs):
         super().__init__(endog, exog, **kwargs)
 
-        # NB unpack a single additional positional argument as tumor_proportion.
-        self.tumor_prop = args if len(args) == 1 else None
+        self.tumor_prop = tumor_prop
 
         self.tau = tau
         self.weights = weights
