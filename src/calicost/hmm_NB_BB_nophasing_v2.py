@@ -490,8 +490,9 @@ class hmm_nophasing_v2(object):
 
             if last_pred_states is not None:
                 ari = adjusted_rand_score(last_pred_states, pred_states)
-
-                logger.info(f"Found Hidden State (v2) ARI for iteration {r} = {ari:.6f}.")
+                hamm = sum(last_pred_states != pred_states)
+                
+                logger.info(f"Found Hidden States (v2) for iteration {r} with ARI = {ari:.6f} and Hamming = {hamm:.1f}.")
 
             last_pred_states = pred_states                
             
