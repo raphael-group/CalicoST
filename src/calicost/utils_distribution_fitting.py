@@ -199,7 +199,7 @@ class WeightedModel(GenericLikelihoodModel, ABC):
                         f"#  {self.__class__.__name__} {ninst} @ {time.asctime()}\n"
                     )
                     fout.write(
-                        f"#  start_type:{start_params_str},runtime:{runtime},shape:{self.endog.shape[0]},"
+                        f"#  start_type:{start_params_str},runtime:{runtime:.6f},shape:{self.endog.shape[0]},"
                         + ",".join(
                             f"{key}:{value}"
                             for key, value in result.mle_retvals.items()
