@@ -492,7 +492,7 @@ class hmm_nophasing_v2(object):
                 ari = adjusted_rand_score(last_pred_states, pred_states)
                 hamm = sum(last_pred_states != pred_states)
                 
-                logger.info(f"Found Hidden States (v2) for iteration {r} with ARI = {ari:.6f} and Hamming = {hamm:.1f}.")
+                logger.info(f"Found Hidden States (v2) for iteration {r} with ARI = {ari:.6f} and Hamming = {hamm:.1f} for {len(log_gamma)} states.")
 
             last_pred_states = pred_states                
             
@@ -604,7 +604,7 @@ class hmm_nophasing_v2(object):
 
             logger.info(
                 f"EM convergence metrics (v2): startprob={np.mean(np.abs(np.exp(new_log_startprob) - np.exp(log_startprob)))}, transmat={np.mean(np.abs(np.exp(new_log_transmat) - np.exp(log_transmat)))},"
-                +"mu={np.mean(np.abs(new_log_mu - log_mu))}, pbinom={np.mean(np.abs(new_p_binom - p_binom))}"
+              + f"mu={np.mean(np.abs(new_log_mu - log_mu))}, pbinom={np.mean(np.abs(new_p_binom - p_binom))}"
             )
 
             if (

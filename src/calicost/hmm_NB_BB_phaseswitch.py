@@ -498,7 +498,7 @@ class hmm_sitewise(object):
                 ari = adjusted_rand_score(last_pred_states, pred_states)
                 hamm = sum(last_pred_states != pred_states)
 
-                logger.info(f"Found Hidden States (v2) for iteration {r} with ARI = {ari:.6f} and Hamming = {hamm:.1f}.")
+                logger.info(f"Found Hidden States (v2) for iteration {r} with ARI = {ari:.6f} and Hamming = {hamm:.1f} for {len(log_gamma)} states.")
                 
             last_pred_states = pred_states
             
