@@ -110,6 +110,11 @@ class WeightedModel(GenericLikelihoodModel, ABC):
         # NB will increment the instance count for each derived class.
         pass
 
+    @classmethod
+    @abstractmethod
+    def get_ninstance(cls):
+        pass
+
     def __callback__(self, params):
         print(f"{params} {self.nloglikeobs(params)};")
 
@@ -123,7 +128,7 @@ class WeightedModel(GenericLikelihoodModel, ABC):
                 start_params = self.start_params
                 start_params_str = "existing"
             else:
-                start_params = self.default_start_params()
+                start_params = self.get_default_start_params()
                 start_params_str = "default"
         else:
             start_params_str = "input"
@@ -238,7 +243,7 @@ class Weighted_BetaBinom(WeightedModel):
     def get_default_start_params(self):
         return np.append(0.5 / np.sum(self.exog.shape[1]) * np.ones(self.nparams), 1)
 
-    def get_ext_param_name():
+    def get_ext_param_name(self):
         return "tau"
 
     def __post_init__(self):
