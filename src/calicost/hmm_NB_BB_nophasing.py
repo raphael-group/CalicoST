@@ -9,6 +9,7 @@ from sklearn.mixture import GaussianMixture
 from tqdm import trange
 import statsmodels.api as sm
 from statsmodels.base.model import GenericLikelihoodModel
+from sklearn.metrics import adjusted_rand_score
 import copy
 from calicost.utils_distribution_fitting import *
 from calicost.utils_hmm import *
@@ -363,6 +364,8 @@ class hmm_nophasing(object):
             X[:, 1, :], total_bb_RD
         )
 
+        last_pred_states = None
+        
         for r in range(max_iter):
             logger.info(f"Calculating E-step for iteration {r} of {max_iter}.")
 
@@ -404,11 +407,20 @@ class hmm_nophasing(object):
                 log_sitewise_transmat,
             )
 
-            log_gamma = compute_posterior_obs(log_alpha, log_beta)
-
             log_xi = compute_posterior_transition_nophasing(
                 log_alpha, log_beta, log_transmat, log_emission
             )
+            
+            log_gamma = compute_posterior_obs(log_alpha, log_beta)
+
+            pred_states = np.argmax(log_gamma, axis=0)
+
+            if last_pred_states is not None:
+                ari = adjusted_rand_score(last_pred_states, pred_states)
+
+                logger.info(f"Found Hidden State (v2) ARI for iteration {r} = {ari:.6f}.")
+
+            last_pred_states = pred_states
             
             logger.info(f"Calculating M-step for iteration {r} of {max_iter}.")
 
