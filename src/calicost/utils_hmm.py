@@ -279,7 +279,7 @@ def construct_unique_matrix(obs_count, total_count):
         if total_count.dtype == int:
             pairs = np.unique( np.vstack([obs_count[:,s], total_count[:,s]]).T, axis=0 )
         else:
-            pairs = np.unique( np.vstack([obs_count[:,s], total_count[:,s]]).T.round(decimals=4), axis=0 )
+            pairs = np.unique( np.vstack([obs_count[:,s].round(decimals=4), total_count[:,s]]).T.round(decimals=4), axis=0 )
         unique_values.append( pairs )
         pair_index = {(pairs[i,0], pairs[i,1]):i for i in range(pairs.shape[0])}
         # construct mapping matrix
@@ -289,7 +289,7 @@ def construct_unique_matrix(obs_count, total_count):
             if total_count.dtype == int:
                 tmpidx = pair_index[(obs_count[i,s], total_count[i,s])]
             else:
-                tmpidx = pair_index[(obs_count[i,s], total_count[i,s].round(decimals=4))]
+                tmpidx = pair_index[(obs_count[i,s].round(decimals=4), total_count[i,s].round(decimals=4))]
             mat_col[i] = tmpidx
         mapping_matrices.append( scipy.sparse.csr_matrix((np.ones(len(mat_row)), (mat_row, mat_col) )) )
     return unique_values, mapping_matrices

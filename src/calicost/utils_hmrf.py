@@ -399,11 +399,14 @@ def reorder_results_merged(res, n_obs):
 def load_hmrf_last_iteration(filename):
     allres = dict( np.load(filename, allow_pickle=True) )
     r = allres["num_iterations"] - 1
-    res = {"new_log_mu":allres[f"round{r}_new_log_mu"], "new_alphas":allres[f"round{r}_new_alphas"], \
-        "new_p_binom":allres[f"round{r}_new_p_binom"], "new_taus":allres[f"round{r}_new_taus"], \
-        "new_log_startprob":allres[f"round{r}_new_log_startprob"], "new_log_transmat":allres[f"round{r}_new_log_transmat"], "log_gamma":allres[f"round{r}_log_gamma"], \
-        "pred_cnv":allres[f"round{r}_pred_cnv"], "llf":allres[f"round{r}_llf"], "total_llf":allres[f"round{r}_total_llf"], \
-        "prev_assignment":allres[f"round{r-1}_assignment"], "new_assignment":allres[f"round{r}_assignment"]}
+    res = {}
+    for k,v in allres.items():
+        if k.startswith(f"round{r}_"):
+            res[k.replace(f"round{r}_", "")] = v
+    # special case for assignment
+    del res["assignment"]
+    res['new_assignment'] = allres[f"round{r}_assignment"]
+    res['prev_assignment'] = allres[f"round{r-1}_assignment"]
     if "barcodes" in allres.keys():
         res["barcodes"] = allres["barcodes"]
     return res
@@ -411,11 +414,13 @@ def load_hmrf_last_iteration(filename):
 
 def load_hmrf_given_iteration(filename, r):
     allres = dict( np.load(filename, allow_pickle=True) )
-    res = {"new_log_mu":allres[f"round{r}_new_log_mu"], "new_alphas":allres[f"round{r}_new_alphas"], \
-        "new_p_binom":allres[f"round{r}_new_p_binom"], "new_taus":allres[f"round{r}_new_taus"], \
-        "new_log_startprob":allres[f"round{r}_new_log_startprob"], "new_log_transmat":allres[f"round{r}_new_log_transmat"], "log_gamma":allres[f"round{r}_log_gamma"], \
-        "pred_cnv":allres[f"round{r}_pred_cnv"], "llf":allres[f"round{r}_llf"], "total_llf":allres[f"round{r}_total_llf"], \
-        "prev_assignment":allres[f"round{r-1}_assignment"], "new_assignment":allres[f"round{r}_assignment"]}
+    for k,v in allres.items():
+        if k.startswith(f"round{r}_"):
+            res[k.replace(f"round{r}_", "")] = v
+    # special case for assignment
+    del res["assignment"]
+    res['new_assignment'] = allres[f"round{r}_assignment"]
+    res['prev_assignment'] = allres[f"round{r-1}_assignment"]
     if "barcodes" in allres.keys():
         res["barcodes"] = allres["barcodes"]
     return res
