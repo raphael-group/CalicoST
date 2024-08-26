@@ -497,7 +497,7 @@ class hmm_sitewise(object):
             if last_pred_states is None:
                 last_pred_states = pred_states
 
-            ari = {adjusted_rand_score(last_pred_states, pred_states)}
+            ari = adjusted_rand_score(last_pred_states, pred_states)
 
             logger.info(f"Found Hidden State (v2) ARI for iteration {r} = {ari:.6f} (first iteration burn-in).")
             
