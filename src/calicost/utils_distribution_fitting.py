@@ -86,7 +86,7 @@ class WeightedModel(GenericLikelihoodModel, ABC):
         self.__post_init__()
 
         logger.info(
-            f"Initializing {self.__class__.__name__} model for endog.shape = {endog.shape}."
+            f"Initializing {self.get_ninstance()}th instance of {self.__class__.__name__} model for endog.shape = {endog.shape}."
         )
 
     @abstractmethod
