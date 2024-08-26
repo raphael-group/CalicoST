@@ -174,12 +174,20 @@ class WeightedModel(GenericLikelihoodModel, ABC):
                 **kwargs,
             )
 
+        # NB specific to nm (Nelder-Mead) optimization.                                                                                                                                                                                                                         
+        niter = result.mle_retvals["iterations"]
+        runtime = time.time() - start
+        
+        logger.info(
+            f"Finished {self.__class__.__name__} optimization in {runtime:.2f} seconds, with {niter} iterations."
+        )
+            
         if write_chain:
             with open(tmp_path) as fin:
                 with gzip.open(final_path, "wt") as fout:
                     fout.write(f"#  {self.__class__.__name__} {ninst} @ {time.asctime()}\n")
                     fout.write(
-                        f"#  start_type:{start_params_str},shape:{self.endog.shape[0]},"
+                        f"#  start_type:{start_params_str},runtime:{runtime},shape:{self.endog.shape[0]},"
                         + ",".join(
                             f"{key}:{value}" for key, value in result.mle_retvals.items()
                         )
@@ -190,14 +198,7 @@ class WeightedModel(GenericLikelihoodModel, ABC):
                         fout.write(line)
 
         os.remove(tmp_path)
-
-        # NB specific to nm (Nelder-Mead) optimization.
-        niter = result.mle_retvals["iterations"]
-
-        logger.info(
-            f"Finished {self.__class__.__name__} optimization in {time.time() - start:.2f} seconds, with {niter} iterations."
-        )
-
+        
         return result
 
 
