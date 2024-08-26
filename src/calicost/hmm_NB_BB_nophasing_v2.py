@@ -395,7 +395,9 @@ class hmm_nophasing_v2(object):
         unique_values_bb, mapping_matrices_bb = construct_unique_matrix(
             X[:, 1, :], total_bb_RD
         )
-
+        
+        last_pred_states = None
+        
         for r in range(max_iter):
             logger.info("-" * 250)
             logger.info(f"Calculating E-step (v2) for iteration {r} of {max_iter}.")
