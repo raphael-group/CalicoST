@@ -78,6 +78,7 @@ class hmm_nophasing_v2(object):
         n_comp = X.shape[1]
         n_spots = X.shape[2]
         n_states = log_mu.shape[0]
+
         # initialize log_emission
         log_emission_rdr = np.zeros((n_states, n_obs, n_spots))
         log_emission_baf = np.zeros((n_states, n_obs, n_spots))
@@ -335,48 +336,53 @@ class hmm_nophasing_v2(object):
             log_mu: size of n_states. Log of mean/exposure/base_prob of each HMM state.
             alpha: size of n_states. Dispersioon parameter of each HMM state.
         """
-        n_obs = X.shape[0]
-        n_comp = X.shape[1]
-        n_spots = X.shape[2]
-        
+        n_obs, n_comp, n_spots  = X.shape
+
         assert n_comp == 2
-        
+
         log_mu = (
             np.vstack([np.linspace(-0.1, 0.1, n_states) for r in range(n_spots)]).T
             if init_log_mu is None
             else init_log_mu
         )
-        
+
         p_binom = (
             np.vstack([np.linspace(0.05, 0.45, n_states) for r in range(n_spots)]).T
             if init_p_binom is None
             else init_p_binom
         )
-        
+
         # NB initialize (inverse of) dispersion param in NB and BetaBinom
         alphas = (
             0.1 * np.ones((n_states, n_spots)) if init_alphas is None else init_alphas
         )
-        
+
         taus = 30 * np.ones((n_states, n_spots)) if init_taus is None else init_taus
 
-        use_defaults = (init_log_mu is None) and (init_p_binom is None) and (init_alphas is None) and (init_taus is None) 
+        use_defaults = (
+            (init_log_mu is None)
+            and (init_p_binom is None)
+            and (init_alphas is None)
+            and (init_taus is None)
+        )
 
         logger.info(f"Initial alphas:\n{alphas}")
         logger.info(f"Initial taus:\n{taus}")
-        
-        logger.info(f"Initialized Baum Welch NB logmean shift, BetaBinom prob and dispersion params inverse (use_defaults = {use_defaults}).")
-        
+
+        logger.info(
+            f"Initialized Baum Welch NB logmean shift, BetaBinom prob and dispersion params inverse (use_defaults = {use_defaults})."
+        )
+
         # NB initialize start probability and emission probability
         log_startprob = np.log(np.ones(n_states) / n_states)
-        
+
         if n_states > 1:
             transmat = np.ones((n_states, n_states)) * (1 - self.t) / (n_states - 1)
             np.fill_diagonal(transmat, self.t)
             log_transmat = np.log(transmat)
         else:
             log_transmat = np.zeros((1, 1))
-            
+
         log_gamma = kwargs["log_gamma"] if "log_gamma" in kwargs else None
 
         # NB a trick to speed up BetaBinom optimization: taking only unique
@@ -398,11 +404,11 @@ class hmm_nophasing_v2(object):
                         X, base_nb_mean, log_mu, alphas, total_bb_RD, p_binom, taus
                     )
                 )
-                log_emission = log_emission_rdr + log_emission_baf
             else:
                 # compute mu as adjusted RDR
                 if ((not log_gamma is None) or (r > 0)) and ("m" in self.params):
                     logmu_shift = []
+
                     for c in range(len(kwargs["sample_length"])):
                         this_pred_cnv = (
                             np.argmax(
@@ -451,7 +457,8 @@ class hmm_nophasing_v2(object):
                             tumor_prop,
                         )
                     )
-                log_emission = log_emission_rdr + log_emission_baf
+
+            log_emission = log_emission_rdr + log_emission_baf
 
             log_alpha = hmm_nophasing_v2.forward_lattice(
                 lengths,
@@ -482,10 +489,12 @@ class hmm_nophasing_v2(object):
                 new_log_startprob = new_log_startprob.flatten()
             else:
                 new_log_startprob = log_startprob
+
             if "t" in self.params:
                 new_log_transmat = update_transition_nophasing(log_xi, is_diag=is_diag)
             else:
                 new_log_transmat = log_transmat
+
             if "m" in self.params:
                 if tumor_prop is None:
                     new_log_mu, new_alphas = (
@@ -515,6 +524,7 @@ class hmm_nophasing_v2(object):
             else:
                 new_log_mu = log_mu
                 new_alphas = alphas
+
             if "p" in self.params:
                 if tumor_prop is None:
                     new_p_binom, new_taus = (
@@ -532,6 +542,7 @@ class hmm_nophasing_v2(object):
                     # compute mu as adjusted RDR
                     if "m" in self.params:
                         mu = []
+                        
                         for c in range(len(kwargs["sample_length"])):
                             this_pred_cnv = (
                                 np.argmax(
@@ -560,6 +571,7 @@ class hmm_nophasing_v2(object):
                         )
                     else:
                         weighted_tp = tumor_prop
+
                     new_p_binom, new_taus = (
                         update_emission_params_bb_nophasing_uniqvalues_mix(
                             unique_values_bb,
@@ -577,16 +589,17 @@ class hmm_nophasing_v2(object):
                 new_taus = taus
 
             logger.info(
-                f"EM convergence metrics (v2): {np.mean(np.abs(np.exp(new_log_startprob) - np.exp(log_startprob)))}, {np.mean(np.abs(np.exp(new_log_transmat) - np.exp(log_transmat)))}, {np.mean(np.abs(new_log_mu - log_mu))}, {np.mean(np.abs(new_p_binom - p_binom))}"
+                f"EM convergence metrics (v2): startprob={np.mean(np.abs(np.exp(new_log_startprob) - np.exp(log_startprob)))}, transmat={np.mean(np.abs(np.exp(new_log_transmat) - np.exp(log_transmat)))},"
+                +"mu={np.mean(np.abs(new_log_mu - log_mu))}, pbinom={np.mean(np.abs(new_p_binom - p_binom))}"
             )
-            
+
             if (
                 np.mean(np.abs(np.exp(new_log_transmat) - np.exp(log_transmat))) < tol
                 and np.mean(np.abs(new_log_mu - log_mu)) < tol
                 and np.mean(np.abs(new_p_binom - p_binom)) < tol
             ):
                 break
-            
+
             log_startprob = new_log_startprob
             log_transmat = new_log_transmat
             log_mu = new_log_mu
@@ -598,7 +611,7 @@ class hmm_nophasing_v2(object):
 
         logger.info(f"Fitted (mu, p):\n{np.hstack([new_log_mu, new_p_binom])}")
         logger.info(f"Fitted (alphas, taus):\n{np.hstack([new_alphas, new_taus])}")
-        
+
         return (
             new_log_mu,
             new_alphas,
