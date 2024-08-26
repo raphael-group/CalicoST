@@ -62,7 +62,8 @@ class WeightedModel(GenericLikelihoodModel, ABC):
     """
     An ABC for defined emission models.
 
-    Attributes                                                                                                                                                                                                                                                                      ----------
+    Attributes                                                                                                                                                                                                                                                                 
+    ----------
     endog : array, (n_samples,)                                                                                                                                                                                                                                                         Y values.
     exog : array, (n_samples, n_features)
         Design matrix.
@@ -71,7 +72,6 @@ class WeightedModel(GenericLikelihoodModel, ABC):
     exposure : array, (n_samples,)
         Multiplication constant outside the exponential term. In scRNA-seq or SRT data, this term is the total UMI count per cell/spot.
     """
-
     def __init__(self, endog, exog, weights, exposure, *args, seed=0, **kwargs):
         super().__init__(endog, exog, **kwargs)
 
@@ -84,6 +84,7 @@ class WeightedModel(GenericLikelihoodModel, ABC):
         # NB Weight_BetaBinomial does not specify seed
         self.seed = seed
 
+        # NB __pos_init__ validates the expected tumor proportion and handles incrementing instance count.
         self.__post_init__()
 
         logger.info(
@@ -92,6 +93,9 @@ class WeightedModel(GenericLikelihoodModel, ABC):
 
     @abstractmethod
     def nloglikeobs(self, params):
+        """
+        Negative log-likelihood for the emission model.
+        """
         pass
 
     @abstractmethod
@@ -100,22 +104,31 @@ class WeightedModel(GenericLikelihoodModel, ABC):
 
     @abstractmethod
     def get_ext_param_name(self):
+        """
+        Named parameter in the model.
+        """
         pass
 
     @abstractmethod
     def get_ninstance(self):
+        """
+        Return the instance count for the given model
+        """
         pass
 
     @abstractmethod
     def __post_init__(self):
-        # NB will increment the instance count for each derived class.
-        pass
-
-    @abstractmethod
-    def get_ninstance(self):
+        """
+        Validation and customisation for the derived class.
+        E.g. validate the tumor_proportion and increment the instance
+        count of the derived class.
+        """
         pass
 
     def __callback__(self, params):
+        """
+        Define callback for writing parameter chain to file.
+        """
         print(f"{params} {self.nloglikeobs(params)};")
 
     def fit(self, start_params=None, maxiter=10_000, maxfun=5_000, write_chain=True, **kwargs):
@@ -393,7 +406,7 @@ class Weighted_BetaBinom_fixdispersion_mix(WeightedModel):
     def __post_init__(self):
         assert self.tumor_prop is not None, "Tumor proportion must be defined."
 
-         Weighted_BetaBinom_fixdispersion_mix.ninstance += 1
+        Weighted_BetaBinom_fixdispersion_mix.ninstance += 1
         
     def get_ninstance(self):
         return self.ninstance
