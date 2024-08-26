@@ -495,10 +495,10 @@ class hmm_sitewise(object):
             pred_states = np.argmax(log_gamma, axis=0)
 
             if last_pred_states is not None:
-		ari = adjusted_rand_score(last_pred_states, pred_states)
+                ari = adjusted_rand_score(last_pred_states, pred_states)
 
                 logger.info(f"Found Hidden State (v2) ARI for iteration {r} = {ari:.6f}.")
-
+                
             last_pred_states = pred_states
             
             logger.info(
