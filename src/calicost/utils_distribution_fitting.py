@@ -194,7 +194,7 @@ class WeightedModel(GenericLikelihoodModel, ABC):
         runtime = time.time() - start
 
         logger.info(
-            f"Finished {self.__class__.__name__} optimization in {runtime:.2f} seconds, with {niter} iterations."
+            f"{self.__class__.__name__} optimization in {runtime:.2f}s, with {niter} iterations.  Best-fit: {result.params}"
         )
 
         if write_chain:
@@ -216,7 +216,7 @@ class WeightedModel(GenericLikelihoodModel, ABC):
                         fout.write(line)
 
         os.remove(tmp_path)
-
+        
         return result
 
 
