@@ -6,9 +6,12 @@ import pandas as pd
 from matplotlib import pyplot as plt
 import seaborn
 
+import graph_tool.all as gt
+
 from calicost.utils_hmm import *
 from calicost.hmm_NB_BB_phaseswitch import *
 from calicost.utils_phase_switch import *
+from calicost.utils_hmm import multinoulli_sampler_high_dimensional
 
 
 def compute_potential(single_llf, labels, spatial_weight, adjacency_mat):
@@ -58,7 +61,6 @@ def block_gibbs_sampling_labels(emission_llf, log_clonesize, adjacency_mat, bloc
     initial_logprob : np.array, size (num_spots, n_clones)
         Initial log probability to sample clone labels.
     """
-    from calicost.utils_hmm import multinoulli_sampler_high_dimensional
     np.random.seed(random_state)
     # number of spots, blocks, and clones
     N, n_clones = emission_llf.shape
@@ -83,14 +85,200 @@ def block_gibbs_sampling_labels(emission_llf, log_clonesize, adjacency_mat, bloc
             for c in range(n_clones):
                 post[:,c] += spatial_weight * A_sub_list[b] @ (list_labels[-1][block_ids!=b] == c)
 
-            post -= scipy.special.logsumexp(post, axis=1, keepdims=True)
             post = post / temperature
+            post -= scipy.special.logsumexp(post, axis=1, keepdims=True)
             this_l[block_ids==b] = multinoulli_sampler_high_dimensional(post)
         
         list_labels.append(this_l)
         # potential of the new state
         list_potentials.append( compute_potential(emission_llf + log_clonesize, list_labels[-1], spatial_weight, adjacency_mat) )
     
+    return list_labels, list_potentials
+
+
+def update_bond(label, adjacency_mat, prob):
+    """
+    Bond configuration of the S-W algorithm.
+    A bond is created between two adjacent nodes with probability prob (prob=1 - exp(-beta / T)) if the two nodes have the same label.
+    There is no bond between two nodes with different labels.
+
+    Attributes
+    ----------
+    label : numpy.ndarray
+        Label of each node.
+
+    adjacency_mat : scipy.sparse.csr_matrix
+        Adjacency matrix of the graph.
+
+    prob : float
+        Probability of creating a bond between two adjacent nodes.
+
+    Returns
+    -------
+    bond : scipy.sparse.csr_matrix
+        Bond matrix of the graph.
+
+    connected_components : np.ndarray
+        Label for each node to belong to which connected components from the graph with original nodes and sampled bonds.
+    """
+    # adjacency edges from the adjacency matrix
+    edges = scipy.sparse.triu(adjacency_mat, k=1).nonzero()
+    # indicator of the same label
+    same_label = (label[edges[0]] == label[edges[1]])
+    edges = (edges[0][same_label], edges[1][same_label])
+    # create bonds with probability prob
+    sample_bond = (np.random.rand(len(edges[0])) < prob)
+    edges = (edges[0][sample_bond], edges[1][sample_bond])
+    # create bond matrix
+    bond = scipy.sparse.csr_matrix((np.ones(len(edges[0]), dtype=bool), edges), shape=adjacency_mat.shape)
+    bond = bond + bond.T
+
+    # connected components by graph_tool
+    es = np.array( bond.nonzero() ).T
+    g = gt.Graph(adjacency_mat.shape[0])
+    g.add_edge_list(es)
+    comp, hist = gt.label_components(g)
+    connected_components = comp.a
+
+    return bond, connected_components
+
+
+# def update_label(emission_llf, log_clonesize, connected_components):
+#     """
+#     Label of each connected component is sampled randomly from the posterior distribution, which is proportional to exp(emission_llf + log_clonesize).
+
+#     Attributes
+#     ----------
+#     emission_llf : np.array, size (num_spots, n_clones)
+#         The log-likelihood of each pixel being in each clone label.
+#     log_clonesize : np.array, size (num_spots, n_clones)
+#         The prior probability of selecting each clone label for each spot.
+#     connected_components : np.ndarray
+#         Index of connected components for each node. Ranges from 0 to n_components - 1.
+    
+#     Returns
+#     -------
+#     labels : np.ndarray
+#         Sampled label of each node.
+#     """
+#     # number of connected components
+#     n_components = np.max(connected_components) + 1
+#     assert n_components == len(np.unique(connected_components)), "Connected components are not consecutive."
+
+#     # number of clone labels
+#     n_labels = emission_llf.shape[1]
+
+#     # compute posterior distribution of each connected component by taking the average of related nodes
+#     post_per_node = emission_llf + log_clonesize
+#     post_per_component = np.zeros((n_components, n_labels))
+#     for i in range(n_components):
+#         post_per_component[i] = np.mean(post_per_node[connected_components == i], axis=0)
+#     # normalize
+#     post_per_component -= scipy.special.logsumexp(post_per_component, axis=1, keepdims=True)
+#     # sample label per connected component
+#     l_per_component = multinoulli_sampler_high_dimensional(post_per_component)
+#     # assign label to each node
+#     labels = l_per_component[connected_components]
+
+#     return labels
+
+
+def update_label(emission_llf, log_clonesize, connected_components, temperature):
+    """
+    Label of each connected component is sampled randomly from the posterior distribution, which is proportional to exp(emission_llf + log_clonesize).
+
+    Attributes
+    ----------
+    emission_llf : np.array, size (num_spots, n_clones)
+        The log-likelihood of each pixel being in each clone label.
+    log_clonesize : np.array, size (num_spots, n_clones)
+        The prior probability of selecting each clone label for each spot.
+    connected_components : np.ndarray
+        Index of connected components for each node. Ranges from 0 to n_components - 1.
+    temperature : float
+        Temperature parameter to adjust the log emission probability.
+    
+    Returns
+    -------
+    labels : np.ndarray
+        Sampled label of each node.
+    """
+    # number of connected components
+    n_components = np.max(connected_components) + 1
+    assert n_components == len(np.unique(connected_components)), "Connected components are not consecutive."
+
+    # number of clone labels
+    n_labels = emission_llf.shape[1]
+
+    # compute posterior distribution of each connected component by taking the average of related nodes
+    post_per_node = emission_llf + log_clonesize
+    # convert connected_components into one-hot encoding scipy sparse matrix
+    onehot = scipy.sparse.csr_matrix((np.ones(len(connected_components), dtype=int), (np.arange(len(connected_components)), connected_components)), 
+                                    shape=(len(connected_components), n_components))
+    # take sum of post_per_node for each connected component
+    post_per_component = onehot.T.dot(post_per_node)
+    # divided by the number of nodes in each connected component
+    post_per_component = post_per_component / onehot.sum(axis=0).T.A
+    # scale by temperature
+    post_per_component = post_per_component / temperature
+    # normalize
+    post_per_component -= scipy.special.logsumexp(post_per_component, axis=1, keepdims=True)
+    # sample label per connected component
+    l_per_component = multinoulli_sampler_high_dimensional(post_per_component)
+    # assign label to each node
+    labels = l_per_component[connected_components]
+
+    return labels
+
+
+def SW_sampling_labels(emission_llf, log_clonesize, adjacency_mat, block_ids, spatial_weight, num_draws, random_state, temperature, initial_logprob=None):
+    """
+    Sampling num_draws of label configurations using the S-W algorithm (a specific MCMC method).
+
+    Attributes
+    ----------
+    emission_llf : np.array, size (num_spots, n_clones)
+        The log-likelihood of each pixel being in each clone label.
+    log_clonesize : np.array, size (num_spots, n_clones)
+        The prior probability of selecting each clone label for each spot.
+    adjacency_mat : scipy.sparse.csr_matrix
+        Adjacency matrix of the graph.
+    spatial_weight : float
+        Spatial weight parameter.
+    num_draws : int
+        Number of label configurations to draw in this Markov chain.
+    random_state : int
+        Random seed.
+    temperature : float
+        Temperature parameter. Temperature and spatial_weight are used to determine the bond probability.
+    initial_logprob : np.array, size (num_spots, n_clones), optional
+
+    Returns
+    -------
+    list_labels : list of np.ndarray
+        List of sampled label configurations across num_draws iterations.
+    """
+    # set random seed
+    np.random.seed(random_state)
+
+    # initialization
+    n_spots, n_clones = emission_llf.shape
+    if not initial_logprob is None:
+        list_labels = [ multinoulli_sampler_high_dimensional(initial_logprob) ]
+    else:
+        list_labels = [ multinoulli_sampler_high_dimensional(log_clonesize) ]
+    list_potentials = [ compute_potential(emission_llf + log_clonesize, list_labels[-1], spatial_weight, adjacency_mat) ]
+
+    # sample across num_draws iterations
+    for iter in range(num_draws):
+        # update bond
+        prob = 1 - np.exp(-spatial_weight / temperature)
+        bond, connected_components = update_bond(list_labels[-1], adjacency_mat, prob)
+        # update label
+        list_labels.append( update_label(emission_llf, log_clonesize, connected_components, temperature) )
+        # update potential
+        list_potentials.append( compute_potential(emission_llf + log_clonesize, list_labels[-1], spatial_weight, adjacency_mat) )
+
     return list_labels, list_potentials
 
 
@@ -140,7 +328,7 @@ def posterior_distribution_clone_labels(emission_llf, log_clonesize, adjacency_m
 
 def infer_all(single_X, lengths, single_base_nb_mean, single_total_bb_RD, single_tumor_prop, initial_clone_label, n_states,
     coords, adjacency_mat, tumorprop_threshold, spatial_weight, platform, max_iter_outer, num_chains, burnin, sampling_tol, temperature,
-    hmmclass, hmm_params, hmm_t, hmm_random_state, hmm_max_iter, hmm_tol, hmm_num_draws,
+    hmmclass, hmm_params, hmm_t, hmm_random_state, hmm_max_iter, hmm_tol, hmm_num_draws, fun=block_gibbs_sampling_labels,
     smooth_mat=None, sample_ids=None, init_log_mu=None, init_p_binom=None, init_alphas=None, init_taus=None,
     fix_NB_dispersion=False, shared_NB_dispersion=True, fix_BB_dispersion=False, shared_BB_dispersion=True):
 
@@ -177,6 +365,7 @@ def infer_all(single_X, lengths, single_base_nb_mean, single_total_bb_RD, single
 
     list_posterior_clones = [posterior_clones]
     list_cna_states = []
+    list_emission_llf = []
     list_log_mu = []
     list_p_binom = []
     list_elbo = []
@@ -223,6 +412,7 @@ def infer_all(single_X, lengths, single_base_nb_mean, single_total_bb_RD, single
                 emission_llf[s,c] /= hmm_num_draws
 
         # save results
+        list_emission_llf.append(emission_llf)
         list_log_mu.append(res['new_log_mu'])
         list_p_binom.append(res['new_p_binom'])
         list_cna_states.append( np.stack([res['pred_cnv'][(i*n_obs):(i*n_obs+n_obs)] for i in range(n_clones)]) )
@@ -234,14 +424,14 @@ def infer_all(single_X, lengths, single_base_nb_mean, single_total_bb_RD, single
         last_taus = res['new_taus']
 
         ##### Infer clone labels using the estimated log emission probability #####
-        posterior_clones, list_labels, list_potentials = posterior_distribution_clone_labels(emission_llf, log_clonesize, adjacency_mat, coords, spatial_weight, num_chains, burnin, platform=platform, temperature=temperature)
+        posterior_clones, list_labels, list_potentials = posterior_distribution_clone_labels(emission_llf, log_clonesize, adjacency_mat, coords, spatial_weight, num_chains, burnin, platform=platform, temperature=temperature, fun=fun)
         list_posterior_clones.append(posterior_clones)
 
         plot_posterior_clones_single(list_posterior_clones, coords, len(list_posterior_clones)-1, sample_ids)
         plt.show()
         # update log clone size
         log_clonesize = np.mean(posterior_clones, axis=0)
-        log_clonesize = np.repeat( log_clonesize[None,:], single_X.shape[2], axis=0 )
+        log_clonesize = np.repeat( np.log(log_clonesize)[None,:], single_X.shape[2], axis=0 )
 
         # update elbo
         prior_log_prob = np.zeros(n_clones)
@@ -261,7 +451,139 @@ def infer_all(single_X, lengths, single_base_nb_mean, single_total_bb_RD, single
         # if r > 2:
         #     temperature = max(1.0, temperature-2)
 
-    return list_posterior_clones, list_cna_states, list_log_mu, list_p_binom, list_elbo
+    return list_posterior_clones, list_cna_states, list_emission_llf, list_log_mu, list_p_binom, list_elbo
+
+
+
+def infer_all_v2(single_X, lengths, single_base_nb_mean, single_total_bb_RD, single_tumor_prop, initial_clone_label, n_states,
+    coords, adjacency_mat, tumorprop_threshold, spatial_weight, platform, max_iter_outer, num_chains, burnin, sampling_tol, temperature,
+    hmmclass, hmm_params, hmm_t, hmm_random_state, hmm_max_iter, hmm_tol, hmm_num_draws, fun=block_gibbs_sampling_labels,
+    smooth_mat=None, sample_ids=None, init_log_mu=None, init_p_binom=None, init_alphas=None, init_taus=None,
+    fix_NB_dispersion=False, shared_NB_dispersion=True, fix_BB_dispersion=False, shared_BB_dispersion=True):
+    """
+    initial_clone_label : one hot encoding of initial clones, or probability of each spot being in each clone.
+    """
+    n_clones = initial_clone_label.shape[1]
+    n_obs, n_spots = single_total_bb_RD.shape
+
+    # aggregated counts according to smooth_mat
+    if not smooth_mat is None:
+        agg_single_X = np.stack([ single_X[i,:,:] @ smooth_mat for i in range(single_X.shape[0]) ])
+        agg_single_base_nb_mean = single_base_nb_mean @ smooth_mat
+        agg_single_total_bb_RD = single_total_bb_RD @ smooth_mat
+        agg_single_tumor_prop = (single_tumor_prop @ smooth_mat) / np.sum(smooth_mat.A, axis=0)
+    else:
+        # aggregated matrices are the same as their original ones
+        agg_single_X = single_X
+        agg_single_base_nb_mean = single_base_nb_mean
+        agg_single_total_bb_RD = single_total_bb_RD
+        agg_single_tumor_prop = single_tumor_prop
+
+    # make a fake log_sitewise_transmat because some function calls have that parameter for formating purpose, but it's not actually used
+    log_sitewise_transmat = np.zeros(n_obs)
+
+    # the initial posterior distribution of clone labels is a binary matrix derived from initial_clone_label
+    posterior_clones = initial_clone_label
+    log_clonesize = np.ones(n_clones) * np.log(1.0 / n_clones)
+    log_clonesize = np.repeat( log_clonesize[None,:], single_X.shape[2], axis=0 )
+
+    # initial emission parameters
+    last_log_mu = init_log_mu
+    last_alphas = init_alphas
+    last_p_binom = init_p_binom
+    last_taus = init_taus
+
+    list_posterior_clones = [initial_clone_label]
+    list_cna_states = []
+    list_emission_llf = []
+    list_log_mu = []
+    list_p_binom = []
+    list_elbo = []
+
+    for r in range(max_iter_outer):
+        ##### Fit HMM using posterior_clones #####
+        # aggregate into pseudobulk for each clone weighted by posterior_clones
+        X = (single_X[:,:, single_tumor_prop>tumorprop_threshold] @ posterior_clones[single_tumor_prop>tumorprop_threshold, :])
+        base_nb_mean = single_base_nb_mean[:, single_tumor_prop>tumorprop_threshold] @ posterior_clones[single_tumor_prop>tumorprop_threshold, :]
+        total_bb_RD = single_total_bb_RD[:, single_tumor_prop>tumorprop_threshold] @ posterior_clones[single_tumor_prop>tumorprop_threshold, :]
+        tumor_prop = single_tumor_prop[single_tumor_prop>tumorprop_threshold] @ posterior_clones[single_tumor_prop>tumorprop_threshold, :] / posterior_clones[single_tumor_prop>tumorprop_threshold, :].sum(axis=0)
+        
+        # initialize parameters
+        if (last_log_mu is None and "m" in hmm_params) or (last_p_binom is None and "p" in hmm_params):
+            tmp_log_mu, tmp_p_binom = initialization_by_gmm(n_states, np.vstack([X[:,0,:].flatten("F"), X[:,1,:].flatten("F")]).T.reshape(-1,2,1), \
+                base_nb_mean.flatten("F").reshape(-1,1), total_bb_RD.flatten("F").reshape(-1,1), hmm_params, random_state=hmm_random_state, in_log_space=False, only_minor=False)
+            
+            last_log_mu = tmp_log_mu if init_log_mu is None and "m" in hmm_params else None
+            last_p_binom = tmp_p_binom if init_p_binom is None and "p" in hmm_params else None
+
+        # fit HMM
+        res = pipeline_baum_welch(None, np.vstack([X[:,0,:].flatten("F"), X[:,1,:].flatten("F")]).T.reshape(-1,2,1), np.tile(lengths, X.shape[2]), n_states, \
+                        base_nb_mean.flatten("F").reshape(-1,1), total_bb_RD.flatten("F").reshape(-1,1),  np.tile(log_sitewise_transmat, X.shape[2]), np.repeat(tumor_prop, X.shape[0]).reshape(-1,1), \
+                        hmmclass=hmmclass, params=hmm_params, t=hmm_t, random_state=hmm_random_state, \
+                        fix_NB_dispersion=fix_NB_dispersion, shared_NB_dispersion=shared_NB_dispersion, fix_BB_dispersion=fix_BB_dispersion, shared_BB_dispersion=shared_BB_dispersion, \
+                        is_diag=True, init_log_mu=last_log_mu, init_p_binom=last_p_binom, init_alphas=last_alphas, init_taus=last_taus, max_iter=hmm_max_iter, tol=hmm_tol)
+        # estimate log emission probability for each spot belong to each clone based on the fitted HMM res
+        list_h = FFBS_faster(hmm_num_draws, res['log_alpha'], res['log_gamma'], res['new_log_transmat'], np.tile(lengths, X.shape[2]))
+        # emission probability of each spot under the posterior distribution of hidden states of each clone
+        log_prob_rdr, log_prob_baf = hmmclass.compute_emission_probability_nb_betabinom_mix(np.vstack([agg_single_X[:,0,:].flatten("F"), agg_single_X[:,1,:].flatten("F")]).T.reshape(-1,2,1), 
+                                                                                                    agg_single_base_nb_mean.flatten("F").reshape(-1,1), res['new_log_mu'], res['new_alphas'], 
+                                                                                                    agg_single_total_bb_RD.flatten("F").reshape(-1,1), res['new_p_binom'], res['new_taus'], 
+                                                                                                    np.repeat(agg_single_tumor_prop, agg_single_X.shape[0]).reshape(-1,1))
+        log_per_state_emission = log_prob_rdr + log_prob_baf
+
+        emission_llf = np.zeros((agg_single_X.shape[2], n_clones))
+        for s in range(agg_single_X.shape[2]):
+            this_log_emission = log_per_state_emission[:,(s*n_obs):(s*n_obs+n_obs), 0]
+            for c in range(n_clones):
+                sampled_h = list_h[:, (c*n_obs):(c*n_obs+n_obs)]
+                # emission probability
+                emission_llf[s,c] = this_log_emission[(sampled_h, np.arange(n_obs))].sum()
+                # take average
+                emission_llf[s,c] /= hmm_num_draws
+
+        # save results
+        list_emission_llf.append( emission_llf )
+        list_log_mu.append(res['new_log_mu'])
+        list_p_binom.append(res['new_p_binom'])
+        list_cna_states.append( np.stack([res['pred_cnv'][(i*n_obs):(i*n_obs+n_obs)] for i in range(n_clones)]) )
+
+        # update last_log_mu, last_p_binom, last_alphas, last_taus
+        last_log_mu = res['new_log_mu']
+        last_p_binom = res['new_p_binom']
+        last_alphas = res['new_alphas']
+        last_taus = res['new_taus']
+
+        ##### Infer clone labels using the estimated log emission probability #####
+        posterior_clones, list_labels, list_potentials = posterior_distribution_clone_labels(emission_llf, log_clonesize, adjacency_mat, coords, spatial_weight, num_chains, burnin, platform=platform, temperature=temperature, fun=fun)
+        list_posterior_clones.append(posterior_clones)
+
+        plot_posterior_clones_single(list_posterior_clones, coords, len(list_posterior_clones)-1, sample_ids)
+        plt.show()
+        # update log clone size
+        log_clonesize = np.mean(posterior_clones, axis=0)
+        log_clonesize = np.repeat( np.log(log_clonesize)[None,:], single_X.shape[2], axis=0 )
+
+        # update elbo
+        prior_log_prob = np.zeros(n_clones)
+        for c in range(n_clones):
+            sampled_h = list_h[:, (c*n_obs):(c*n_obs+n_obs)]
+            prior_log_prob[c] = compute_state_prior_prob_highdim(sampled_h, res['new_log_startprob'], res['new_log_transmat'], lengths).mean()
+
+        # eventual_llf = [compute_potential(emission_llf + log_clonesize, l, spatial_weight, adjacency_mat) + prior_log_prob.sum() for l in list_labels]
+        eventual_llf = [compute_potential(emission_llf + log_clonesize, l, spatial_weight, adjacency_mat) for l in list_labels]
+        list_elbo.append( np.mean(eventual_llf) )
+
+        # compare the difference between the current and previous posterior_clones
+        if np.square(list_posterior_clones[-1] - list_posterior_clones[-2]).mean() < sampling_tol:
+            break
+
+        ##### temperature annealing #####
+        temperature = max(1.0, 0.95 * temperature)
+        # if r > 2:
+        #     temperature = max(1.0, temperature-2)
+
+    return list_posterior_clones, list_cna_states, list_emission_llf, list_log_mu, list_p_binom, list_elbo
+
 
 
 def plot_posterior_clones_single(list_posterior_clones, coords, idx, sample_ids=None):
