@@ -110,9 +110,8 @@ class WeightedModel(GenericLikelihoodModel, ABC):
         # NB will increment the instance count for each derived class.
         pass
 
-    @classmethod
     @abstractmethod
-    def get_ninstance(cls):
+    def get_ninstance(self):
         pass
 
     def __callback__(self, params):
@@ -139,17 +138,43 @@ class WeightedModel(GenericLikelihoodModel, ABC):
 
         start = time.time()
 
-        result = super().fit(
-            start_params=start_params,
-            maxiter=maxiter,
-            maxfun=maxfun,
-            skip_hessian=True,
-            callback=self.__callback__,
-            full_output=True,
-            retall=True,
-            disp=False,
-            **kwargs,
-        )
+        # NB kwargs = {'xtol': 0.0001, 'ftol': 0.0001, disp: False}
+        kwargs.pop("disp", None)
+
+        tmp_path = f"{self.__class__.__name__.lower()}_chain.tmp"
+
+        # TODO mkdir chains
+        ninst = self.get_ninstance()
+        final_path = f"chains/{self.__class__.__name__.lower()}_chain_{ninst}.txt"
+
+        with save_stdout(tmp_path):
+            result = super().fit(
+                start_params=start_params,
+                maxiter=maxiter,
+                maxfun=maxfun,
+                skip_hessian=True,
+                callback=self.__callback__,
+                full_output=True,
+                retall=True,
+                disp=False,
+                **kwargs,
+            )
+
+        with open(tmp_path) as fin:
+            with open(final_path, "w") as fout:
+                fout.write(f"#  {self.__class__.__name__} {ninst} @ {time.asctime()}\n")
+                fout.write(
+                    f"#  start_type:{start_params_str},shape:{self.endog.shape[0]},"
+                    + ",".join(
+                        f"{key}:{value}" for key, value in result.mle_retvals.items()
+                    )
+                    + "\n"
+                )
+
+                for line in fin:
+                    fout.write(line)
+
+        os.remove(tmp_path)
 
         # NB specific to nm (Nelder-Mead) optimization.
         niter = result.mle_retvals["iterations"]
@@ -169,6 +194,7 @@ class Weighted_NegativeBinomial(WeightedModel):
 
     max_{params} \sum_{s} weights_s * log P(endog_s | exog_s; params)
     """
+
     ninstance = 0
 
     def nloglikeobs(self, params):
@@ -188,9 +214,8 @@ class Weighted_NegativeBinomial(WeightedModel):
     def __post_init__(self):
         pass
 
-    @classmethod
-    def get_ninstance(cls):
-        return cls.ninstance
+    def get_ninstance(self):
+        return self.ninstance
 
 
 class Weighted_NegativeBinomial_mix(WeightedModel):
@@ -216,10 +241,9 @@ class Weighted_NegativeBinomial_mix(WeightedModel):
     def __post_init__(self):
         assert self.tumor_prop is not None, "Tumor proportion must be defined."
 
-    @classmethod
-    def get_ninstance(cls):
-        return cls.ninstance
-        
+    def get_ninstance(self):
+        return self.ninstance
+
 
 class Weighted_BetaBinom(WeightedModel):
     """
@@ -248,10 +272,9 @@ class Weighted_BetaBinom(WeightedModel):
 
     def __post_init__(self):
         pass
-    
-    @classmethod
-    def get_ninstance(cls):
-        return cls.ninstance
+
+    def get_ninstance(self):
+        return self.ninstance
 
 
 class Weighted_BetaBinom_mix(WeightedModel):
@@ -280,9 +303,9 @@ class Weighted_BetaBinom_mix(WeightedModel):
     def __post_init__(self):
         assert self.tumor_prop is not None, "Tumor proportion must be defined."
 
-    @classmethod
-    def get_ninstance(cls):
-        return cls.ninstance
+    def get_ninstance(self):
+        return self.ninstance
+
 
 class Weighted_BetaBinom_fixdispersion(WeightedModel):
     ninstance = 0
@@ -321,9 +344,8 @@ class Weighted_BetaBinom_fixdispersion(WeightedModel):
     def __post_init__(self):
         pass
 
-    @classmethod
-    def get_ninstance(cls):
-        return cls.ninstance
+    def get_ninstance(self):
+        return self.ninstance
 
 
 class Weighted_BetaBinom_fixdispersion_mix(WeightedModel):
@@ -366,6 +388,5 @@ class Weighted_BetaBinom_fixdispersion_mix(WeightedModel):
     def __post_init__(self):
         assert self.tumor_prop is not None, "Tumor proportion must be defined."
 
-    @classmethod
-    def get_ninstance(cls):
-        return cls.ninstance
+    def get_ninstance(self):
+        return self.ninstance
