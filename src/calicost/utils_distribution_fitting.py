@@ -7,6 +7,7 @@ import os
 import sys
 import time
 from abc import ABC, abstractmethod
+from pathlib import Path
 
 import numpy as np
 import scipy
@@ -167,9 +168,13 @@ class WeightedModel(GenericLikelihoodModel, ABC):
 
         tmp_path = f"{self.__class__.__name__.lower()}_chain.tmp"
 
-        # TODO mkdir chains
         ninst = self.get_ninstance()
-        final_path = f"chains/{self.__class__.__name__.lower()}_chain_{ninst}.txt.gzip"
+
+        # TODO mkdir chains 
+        class_name = self.__class__.__name__.lower()
+        final_path = f"chains/{class_name}/{class_name}_chain_{ninst}.txt.gzip"
+
+        Path(final_path).mkdir(parents=True, exist_ok=True)
 
         with save_stdout(tmp_path):
             result = super().fit(
