@@ -414,6 +414,7 @@ def load_hmrf_last_iteration(filename):
 
 def load_hmrf_given_iteration(filename, r):
     allres = dict( np.load(filename, allow_pickle=True) )
+    res = {}
     for k,v in allres.items():
         if k.startswith(f"round{r}_"):
             res[k.replace(f"round{r}_", "")] = v
