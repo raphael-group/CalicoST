@@ -497,7 +497,10 @@ def infer_all_v2(single_X, lengths, single_base_nb_mean, single_total_bb_RD, sin
     list_cna_states = []
     list_emission_llf = []
     list_log_mu = []
+    list_alphas = []
     list_p_binom = []
+    list_taus = []
+    list_log_startprob = []
     list_elbo = []
 
     for r in range(max_iter_outer):
@@ -544,7 +547,10 @@ def infer_all_v2(single_X, lengths, single_base_nb_mean, single_total_bb_RD, sin
         # save results
         list_emission_llf.append( emission_llf )
         list_log_mu.append(res['new_log_mu'])
+        list_alphas.append(res['new_alphas'])
         list_p_binom.append(res['new_p_binom'])
+        list_taus.append(res['new_taus'])
+        list_log_startprob.append(res['new_log_startprob'])
         list_cna_states.append( np.stack([res['pred_cnv'][(i*n_obs):(i*n_obs+n_obs)] for i in range(n_clones)]) )
 
         # update last_log_mu, last_p_binom, last_alphas, last_taus
@@ -582,7 +588,7 @@ def infer_all_v2(single_X, lengths, single_base_nb_mean, single_total_bb_RD, sin
         # if r > 2:
         #     temperature = max(1.0, temperature-2)
 
-    return list_posterior_clones, list_cna_states, list_emission_llf, list_log_mu, list_p_binom, list_elbo
+    return list_posterior_clones, list_cna_states, list_emission_llf, list_log_mu,list_alphas, list_p_binom, list_taus, list_log_startprob, list_elbo, list_h, list_labels
 
 
 
