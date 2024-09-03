@@ -107,7 +107,7 @@ Check out our [readthedocs](https://calicost.readthedocs.io/en/latest/) for the 
 The simulated count matrices and parameter configuration file are available from [`examples/simulated_example.tar.gz`](https://github.com/raphael-group/CalicoST/blob/main/examples/simulated_example.tar.gz). CalicoST takes about 2h to finish on this example.
 
 2. [Inferring tumor purity, clones, allele-specific CNAs, and phylogeography on prostate cancer data](https://calicost.readthedocs.io/en/latest/notebooks/tutorials/prostate_tutorial.html)
-The transcript count, allele count matrices, and running configuration fies are available from [`examples/prostate_example.tar.gz`](https://github.com/raphael-group/CalicoST/blob/main/examples/prostate_example.tar.gz). This sample contains five slices and over 10000 spots, CalicoST takes about 9h to finish on this example.
+This sample contains five slices and over 10000 spots, CalicoST takes about 9h to jointly infer CNAs and cancer clones across the slides.
 
 <!-- CalicoST requires a reference SNP panel and phasing panel, which can be downloaded from
 * [SNP panel](https://sourceforge.net/projects/cellsnp/files/SNPlist/genome1K.phase3.SNP_AF5e4.chr1toX.hg38.vcf.gz/download). You can also choose other SNP panels from [cellsnp-lite webpage](https://cellsnp-lite.readthedocs.io/en/latest/snp_list.html).
