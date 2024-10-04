@@ -17,6 +17,14 @@ from calicost.hmm_NB_BB_nophasing_v2 import *
 import networkx as nx
 
 
+try:
+    import torch
+    device = 'cuda' if torch.cuda.is_available() else 'cpu'
+    from calicost.utils_distribution_fitting_gpu import *
+except ImportError:
+    device = 'cpu'
+
+
 ############################################################
 # whole inference
 ############################################################
@@ -285,24 +293,40 @@ class hmm_sitewise(object):
             else:
                 new_log_transmat = log_transmat
             if "m" in self.params:
-                # new_log_mu, new_alphas = update_emission_params_nb_sitewise(X[:,0,:], log_gamma, base_nb_mean, alphas, start_log_mu=log_mu, \
-                #     fix_NB_dispersion=fix_NB_dispersion, shared_NB_dispersion=shared_NB_dispersion)
                 if tumor_prop is None:
-                    new_log_mu, new_alphas = update_emission_params_nb_sitewise_uniqvalues(unique_values_nb, mapping_matrices_nb, log_gamma, base_nb_mean, alphas, start_log_mu=log_mu, \
-                        fix_NB_dispersion=fix_NB_dispersion, shared_NB_dispersion=shared_NB_dispersion)
+                    if device == 'cpu':
+                        new_log_mu, new_alphas = update_emission_params_nb_sitewise_uniqvalues(unique_values_nb, mapping_matrices_nb, log_gamma, base_nb_mean, alphas, start_log_mu=log_mu, \
+                            fix_NB_dispersion=fix_NB_dispersion, shared_NB_dispersion=shared_NB_dispersion)
+                    else:
+                        new_log_mu, new_alphas = update_emission_params_nb_sitewise_uniqvalues(unique_values_nb, mapping_matrices_nb, log_gamma, alphas, 
+                            fun=fit_weighted_NegativeBinomial_gpu, start_log_mu=log_mu, \
+                            fix_NB_dispersion=fix_NB_dispersion, shared_NB_dispersion=shared_NB_dispersion)
                 else:
-                    new_log_mu, new_alphas = update_emission_params_nb_sitewise_uniqvalues_mix(unique_values_nb, mapping_matrices_nb, log_gamma, base_nb_mean, alphas, tumor_prop, start_log_mu=log_mu, \
-                        fix_NB_dispersion=fix_NB_dispersion, shared_NB_dispersion=shared_NB_dispersion)
+                    if device == 'cpu':
+                        new_log_mu, new_alphas = update_emission_params_nb_sitewise_uniqvalues_mix(unique_values_nb, mapping_matrices_nb, log_gamma, base_nb_mean, alphas, tumor_prop, start_log_mu=log_mu, \
+                            fix_NB_dispersion=fix_NB_dispersion, shared_NB_dispersion=shared_NB_dispersion)
+                    else:
+                        new_log_mu, new_alphas = update_emission_params_nb_sitewise_uniqvalues_mix(unique_values_nb, mapping_matrices_nb, log_gamma, base_nb_mean, alphas, tumor_prop, start_log_mu=log_mu, \
+                            fun=fit_weighted_NegativeBinomial_mix_gpu, fix_NB_dispersion=fix_NB_dispersion, shared_NB_dispersion=shared_NB_dispersion)
             else:
                 new_log_mu = log_mu
                 new_alphas = alphas
             if "p" in self.params:
                 if tumor_prop is None:
-                    new_p_binom, new_taus = update_emission_params_bb_sitewise_uniqvalues(unique_values_bb, mapping_matrices_bb, log_gamma, total_bb_RD, taus, start_p_binom=p_binom, \
-                        fix_BB_dispersion=fix_BB_dispersion, shared_BB_dispersion=shared_BB_dispersion)
+                    if device == 'cpu':
+                        new_p_binom, new_taus = update_emission_params_bb_sitewise_uniqvalues(unique_values_bb, mapping_matrices_bb, log_gamma, total_bb_RD, taus, start_p_binom=p_binom, \
+                            fix_BB_dispersion=fix_BB_dispersion, shared_BB_dispersion=shared_BB_dispersion)
+                    else:
+                        new_p_binom, new_taus = update_emission_params_bb_sitewise_uniqvalues(unique_values_bb, mapping_matrices_bb, log_gamma, taus, 
+                            fun=fit_weighted_BetaBinomial_gpu, start_p_binom=p_binom,
+                            fix_BB_dispersion=fix_BB_dispersion, shared_BB_dispersion=shared_BB_dispersion)
                 else:
-                    new_p_binom, new_taus = update_emission_params_bb_sitewise_uniqvalues_mix(unique_values_bb, mapping_matrices_bb, log_gamma, total_bb_RD, taus, tumor_prop, start_p_binom=p_binom, \
-                        fix_BB_dispersion=fix_BB_dispersion, shared_BB_dispersion=shared_BB_dispersion)
+                    if device == 'cpu':
+                        new_p_binom, new_taus = update_emission_params_bb_sitewise_uniqvalues_mix(unique_values_bb, mapping_matrices_bb, log_gamma, total_bb_RD, taus, tumor_prop, start_p_binom=p_binom, \
+                            fix_BB_dispersion=fix_BB_dispersion, shared_BB_dispersion=shared_BB_dispersion)
+                    else:
+                        new_p_binom, new_taus = update_emission_params_bb_sitewise_uniqvalues_mix(unique_values_bb, mapping_matrices_bb, log_gamma, total_bb_RD, taus, tumor_prop, start_p_binom=p_binom, \
+                            fun=fit_weighted_BetaBinomial_mix_gpu, fix_BB_dispersion=fix_BB_dispersion, shared_BB_dispersion=shared_BB_dispersion)
             else:
                 new_p_binom = p_binom
                 new_taus = taus
@@ -546,10 +570,12 @@ def pipeline_baum_welch(output_prefix, X, lengths, n_states, base_nb_mean, total
         tmp = np.log10(1 - t)
         np.savez(f"{output_prefix}_nstates{n_states}_{params}_{tmp:.0f}_seed{random_state}.npz", \
                 new_log_mu=new_log_mu, new_alphas=new_alphas, new_p_binom=new_p_binom, new_taus=new_taus, \
-                new_log_startprob=new_log_startprob, new_log_transmat=new_log_transmat, log_gamma=log_gamma, pred_cnv=pred_cnv, llf=llf)
+                new_log_startprob=new_log_startprob, new_log_transmat=new_log_transmat, log_gamma=log_gamma, pred_cnv=pred_cnv, llf=llf,
+                log_emission=log_emission, log_alpha=log_alpha, log_beta=log_beta)
     else:
         res = {"new_log_mu":new_log_mu, "new_alphas":new_alphas, "new_p_binom":new_p_binom, "new_taus":new_taus, \
-            "new_log_startprob":new_log_startprob, "new_log_transmat":new_log_transmat, "log_gamma":log_gamma, "pred_cnv":pred_cnv, "llf":llf}
+            "new_log_startprob":new_log_startprob, "new_log_transmat":new_log_transmat, "log_gamma":log_gamma, "pred_cnv":pred_cnv, "llf":llf,
+            "log_emission":log_emission, "log_alpha":log_alpha, "log_beta":log_beta}
         return res
 
 
