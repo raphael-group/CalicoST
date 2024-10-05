@@ -21,6 +21,7 @@ from scipy.special import loggamma, logsumexp
 from sklearn import cluster
 from sklearn.utils import check_random_state
 from statsmodels.base.model import GenericLikelihoodModel
+from scipy.optimize import minimize
 
 logger = logging.getLogger(__name__)
 
@@ -33,15 +34,25 @@ os.environ["OPENBLAS_NUM_THREADS"] = num_threads
 os.environ["OMP_NUM_THREADS"] = num_threads
 
 
-def convert_params(mean, std):
+# def convert_params(mean, std):
+#     """
+#     Convert mean/dispersion parameterization of a negative binomial to the ones scipy supports
+
+#     See https://mathworld.wolfram.com/NegativeBinomialDistribution.html
+#     """
+#     p = mean / std**2
+#     n = mean * p / (1.0 - p)
+
+#     return n, p
+
+def convert_params(mean, alpha):
     """
     Convert mean/dispersion parameterization of a negative binomial to the ones scipy supports
 
     See https://mathworld.wolfram.com/NegativeBinomialDistribution.html
     """
-    p = mean / std**2
-    n = mean * p / (1.0 - p)
-
+    p = 1.0 / (1.0 + mean * alpha)
+    n = 1.0 / alpha
     return n, p
 
 
@@ -107,6 +118,10 @@ class WeightedModel(GenericLikelihoodModel, ABC):
         pass
 
     @abstractmethod
+    def get_default_bounds(self):
+        pass
+
+    @abstractmethod
     def get_ext_param_name(self):
         """
         Named parameter in the model.
@@ -139,12 +154,13 @@ class WeightedModel(GenericLikelihoodModel, ABC):
         start_params=None,
         maxiter=10_000,
         maxfun=5_000,
-        write_chain=True,
+        write_chain=False,
         **kwargs,
     ):
         ext_param_name = self.get_ext_param_name()
 
-        self.exog_names.append(ext_param_name)
+        if not ext_param_name is None:
+            self.exog_names.append(ext_param_name)
 
         if start_params is None:
             if hasattr(self, "start_params"):
@@ -155,6 +171,10 @@ class WeightedModel(GenericLikelihoodModel, ABC):
                 start_params_str = "default"
         else:
             start_params_str = "input"
+
+        bounds = self.get_default_bounds()
+
+        method = 'powell' if "method" not in kwargs else kwargs.pop("method")
 
         logger.info(
             f"Starting {self.__class__.__name__} optimization @ ({start_params_str}) {start_params}."
@@ -176,24 +196,24 @@ class WeightedModel(GenericLikelihoodModel, ABC):
         Path(final_path).parent.mkdir(parents=True, exist_ok=True)
 
         with save_stdout(tmp_path):
-            result = super().fit(
-                start_params=start_params,
-                maxiter=maxiter,
-                maxfun=maxfun,
-                skip_hessian=True,
+            result = minimize(
+                self.nloglikeobs,
+                x0=start_params,
+                method=method,
+                bounds=bounds,
+                options={"maxiter":maxiter, "maxfun":maxfun, "disp":False, **kwargs},
                 callback=self.__callback__,
-                full_output=True,
-                retall=True,
-                disp=False,
-                **kwargs,
             )
 
         # NB specific to nm (Nelder-Mead) optimization.
-        niter = result.mle_retvals["iterations"]
+        niter, params = result.nit, result.x
+        
         runtime = time.time() - start
 
+        np.set_printoptions(precision=6)
+        
         logger.info(
-            f"{self.__class__.__name__} optimization in {runtime:.2f}s, with {niter} iterations.  Best-fit: {result.params}"
+            f"{self.__class__.__name__} optimization in {runtime:.2f}s, with {niter} iterations.  Best-fit: {params}"
         )
 
         if write_chain:
@@ -216,7 +236,7 @@ class WeightedModel(GenericLikelihoodModel, ABC):
 
         os.remove(tmp_path)
         
-        return result
+        return result.x
 
 
 class Weighted_NegativeBinomial(WeightedModel):
@@ -233,12 +253,16 @@ class Weighted_NegativeBinomial(WeightedModel):
         nb_mean = np.exp(self.exog @ params[:-1]) * self.exposure
         nb_std = np.sqrt(nb_mean + params[-1] * nb_mean**2)
 
-        n, p = convert_params(nb_mean, nb_std)
+        # n, p = convert_params(nb_mean, nb_std)
+        n, p = convert_params(nb_mean, params[-1])
 
         return -scipy.stats.nbinom.logpmf(self.endog, n, p).dot(self.weights)
 
     def get_default_start_params(self):
         return np.append(0.1 * np.ones(self.exog.shape[1]), 0.01)
+    
+    def get_default_bounds(self):
+        return [(None, None)] * self.exog.shape[1] + [(0.001, None)]
 
     def get_ext_param_name(self):
         return "alpha"
@@ -259,12 +283,16 @@ class Weighted_NegativeBinomial_mix(WeightedModel):
 
         nb_std = np.sqrt(nb_mean + params[-1] * nb_mean**2)
 
-        n, p = convert_params(nb_mean, nb_std)
+        # n, p = convert_params(nb_mean, nb_std)
+        n, p = convert_params(nb_mean, params[-1])
 
         return -scipy.stats.nbinom.logpmf(self.endog, n, p).dot(self.weights)
 
     def get_default_start_params(self):
         return np.append(0.1 * np.ones(self.nparams), 0.01)
+    
+    def get_default_bounds(self):
+        return [(None, None)] * self.exog.shape[1] + [(0.001, None)]
 
     def get_ext_param_name(self):
         return "alpha"
@@ -296,6 +324,9 @@ class Weighted_BetaBinom(WeightedModel):
 
     def get_default_start_params(self):
         return np.append(0.5 / np.sum(self.exog.shape[1]) * np.ones(self.nparams), 1)
+    
+    def get_default_bounds(self):
+        return [(0.01, 0.99)] * self.exog.shape[1] + [(0.001, None)]
 
     def get_ext_param_name(self):
         return "tau"
@@ -325,6 +356,9 @@ class Weighted_BetaBinom_mix(WeightedModel):
 
     def get_default_start_params(self):
         return np.append(0.5 / np.sum(self.exog.shape[1]) * np.ones(self.nparams), 1)
+    
+    def get_default_bounds(self):
+        return [(0.01, 0.99)] * self.exog.shape[1] + [(0.001, None)]
 
     def get_ext_param_name(self):
         return "tau"
@@ -339,23 +373,10 @@ class Weighted_BetaBinom_fixdispersion(WeightedModel):
     ninstance = 0
 
     # NB custom __init__ required to handle tau.
-    def __init__(self, endog, exog, tau, weights, exposure, *args, tumor_prop=None, seed=0, **kwargs):
-        super().__init__(endog, exog, **kwargs)
-
-        self.tumor_prop = tumor_prop
+    def __init__(self, endog, exog, weights, exposure, tau, tumor_prop=None, seed=0, **kwargs):
+        super().__init__(endog, exog, weights, exposure, tumor_prop, seed, **kwargs)
 
         self.tau = tau
-        self.weights = weights
-        self.exposure = exposure
-
-        # NB Weighted_BetaBinom_fixdispersion does not specify seed previously.
-        self.seed = seed
-
-        self.__post_init__()
-
-        logger.info(
-            f"Initializing {self.__class__.__name__} model for endog.shape = {endog.shape}."
-        )
 
     def nloglikeobs(self, params):
         a = (self.exog @ params) * self.tau
@@ -367,6 +388,12 @@ class Weighted_BetaBinom_fixdispersion(WeightedModel):
 
     def get_default_start_params(self):
         return 0.1 * np.ones(self.nparams)
+    
+    def get_default_bounds(self):
+        return [(0.01, 0.99)] * self.exog.shape[1]
+    
+    def get_ext_param_name(self):
+        return None
 
     def __post_init__(self):
         assert self.tumor_prop is None
@@ -375,24 +402,13 @@ class Weighted_BetaBinom_fixdispersion(WeightedModel):
 
 
 class Weighted_BetaBinom_fixdispersion_mix(WeightedModel):
-    # NB custom __init__ required to handle tau.
-    def __init__(self, endog, exog, tau, weights, exposure, *args, tumor_prop=None, seed=0, **kwargs):
-        super().__init__(endog, exog, **kwargs)
+    ninstance = 0
 
-        self.tumor_prop = tumor_prop
+    # NB custom __init__ required to handle tau.
+    def __init__(self, endog, exog, weights, exposure, tau, tumor_prop=None, seed=0, **kwargs):
+        super().__init__(endog, exog, weights, exposure, tumor_prop, seed, **kwargs)
 
         self.tau = tau
-        self.weights = weights
-        self.exposure = exposure
-
-        # NB Weighted_BetaBinom_fixdispersion does not specify seed previously.
-        self.seed = seed
-
-        self.__post_init__()
-
-        logger.info(
-            f"Initializing {self.__class__.__name__} model for endog.shape = {endog.shape}."
-        )
 
     def nloglikeobs(self, params):
         a = (
@@ -409,6 +425,12 @@ class Weighted_BetaBinom_fixdispersion_mix(WeightedModel):
 
     def get_default_start_params(self):
         return 0.1 * np.ones(self.nparams)
+    
+    def get_default_bounds(self):
+        return [(0.01, 0.99)] * self.exog.shape[1]
+    
+    def get_ext_param_name(self):
+        return None
 
     def __post_init__(self):
         assert self.tumor_prop is not None, "Tumor proportion must be defined."

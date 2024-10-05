@@ -1532,20 +1532,20 @@ def bin_selection_basedon_normal(
         tmpX, np.ones(len(tmpX)), weights=np.ones(len(tmpX)), exposure=tmptotal_bb_RD
     )
     tmpres = model.fit(disp=0)
-    tmpres.params[0] = 0.5
-    tmpres.params[-1] = max(tmpres.params[-1], min_betabinom_tau)
+    tmpres[0] = 0.5
+    tmpres[-1] = max(tmpres[-1], min_betabinom_tau)
     # remove bins if normal B allele frequencies fall out of 5%-95% probability range
     removal_indicator1 = tmpX < scipy.stats.betabinom.ppf(
         confidence_interval[0],
         tmptotal_bb_RD,
-        tmpres.params[0] * tmpres.params[1],
-        (1 - tmpres.params[0]) * tmpres.params[1],
+        tmpres[0] * tmpres[1],
+        (1 - tmpres[0]) * tmpres[1],
     )
     removal_indicator2 = tmpX > scipy.stats.betabinom.ppf(
         confidence_interval[1],
         tmptotal_bb_RD,
-        tmpres.params[0] * tmpres.params[1],
-        (1 - tmpres.params[0]) * tmpres.params[1],
+        tmpres[0] * tmpres[1],
+        (1 - tmpres[0]) * tmpres[1],
     )
     print(np.sum(removal_indicator1 | removal_indicator2))
     index_removal = np.where(removal_indicator1 | removal_indicator2)[0]
