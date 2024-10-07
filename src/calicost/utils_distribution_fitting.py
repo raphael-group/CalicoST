@@ -23,6 +23,8 @@ from sklearn.utils import check_random_state
 from statsmodels.base.model import GenericLikelihoodModel
 from scipy.optimize import minimize
 
+from scipy.special import gammaln, xlog1py
+
 logger = logging.getLogger(__name__)
 
 num_threads = "2"
@@ -54,6 +56,58 @@ def convert_params(mean, alpha):
     p = 1.0 / (1.0 + mean * alpha)
     n = 1.0 / alpha
     return n, p
+
+
+"""
+NB, BB log PMF that allows float values for x and n.
+"""
+
+def betabinom_logpmf_float(x, n, a, b):
+    """
+    Compute beta-binomial logpmf allowing x and n to be float values.
+
+    Attributes
+    ----------
+    x : np.array
+        Number of successes. Allowing float number.
+    n : np.array
+        Number of trials. Allowing float number.
+    a : np.array
+        Shape parameter of the beta distribution. Probability of success * tau, where tau is a transformation of the over-dispersion parameter.
+    b : np.array
+        Shape parameter of the beta distribution. Probability of failure * tau, where tau is a transformation of the over-dispersion parameter.
+    """
+    tau = a + b
+    d_choose_y = gammaln(n + 1) - \
+                 gammaln(x + 1) - \
+                 gammaln(n - x + 1)
+
+    logbeta_numer = gammaln(x + a) + \
+                    gammaln(n - x + b) - \
+                    gammaln(n + tau)
+
+    logbeta_denom = gammaln(a) + \
+                    gammaln(b) - \
+                    gammaln(tau)
+
+    return d_choose_y + logbeta_numer - logbeta_denom
+
+
+def nbinom_logpmf_float(x, n, p):
+    """
+    Compute negative binomial logpmf allowing x and n to be float values.
+
+    Attributes
+    ----------
+    x : np.array
+        Number of successes. Allowing float number.
+    n : np.array
+        Number of trials. Allowing float number.
+    p : np.array
+        Probability of success.
+    """
+    coeff = gammaln(n+x) - gammaln(x+1) - gammaln(n)
+    return coeff + n*np.log(p) + xlog1py(x, -p)
 
 
 @contextlib.contextmanager
@@ -234,7 +288,7 @@ class WeightedModel(GenericLikelihoodModel, ABC):
                     for line in fin:
                         fout.write(line)
 
-        os.remove(tmp_path)
+        # os.remove(tmp_path)
         
         return result.x
 
@@ -256,7 +310,8 @@ class Weighted_NegativeBinomial(WeightedModel):
         # n, p = convert_params(nb_mean, nb_std)
         n, p = convert_params(nb_mean, params[-1])
 
-        return -scipy.stats.nbinom.logpmf(self.endog, n, p).dot(self.weights)
+        # return -scipy.stats.nbinom.logpmf(self.endog, n, p).dot(self.weights)
+        return -nbinom_logpmf_float(self.endog, n, p).dot(self.weights)
 
     def get_default_start_params(self):
         return np.append(0.1 * np.ones(self.exog.shape[1]), 0.01)
@@ -286,7 +341,8 @@ class Weighted_NegativeBinomial_mix(WeightedModel):
         # n, p = convert_params(nb_mean, nb_std)
         n, p = convert_params(nb_mean, params[-1])
 
-        return -scipy.stats.nbinom.logpmf(self.endog, n, p).dot(self.weights)
+        # return -scipy.stats.nbinom.logpmf(self.endog, n, p).dot(self.weights)
+        return -nbinom_logpmf_float(self.endog, n, p).dot(self.weights)
 
     def get_default_start_params(self):
         return np.append(0.1 * np.ones(self.nparams), 0.01)
@@ -318,7 +374,10 @@ class Weighted_BetaBinom(WeightedModel):
         a = (self.exog @ params[:-1]) * params[-1]
         b = (1.0 - self.exog @ params[:-1]) * params[-1]
 
-        return -scipy.stats.betabinom.logpmf(self.endog, self.exposure, a, b).dot(
+        # return -scipy.stats.betabinom.logpmf(self.endog, self.exposure, a, b).dot(
+        #     self.weights
+        # )
+        return -betabinom_logpmf_float(self.endog, self.exposure, a, b).dot(
             self.weights
         )
 
@@ -350,7 +409,10 @@ class Weighted_BetaBinom_mix(WeightedModel):
             + 0.5 * (1 - self.tumor_prop)
         ) * params[-1]
 
-        return -scipy.stats.betabinom.logpmf(self.endog, self.exposure, a, b).dot(
+        # return -scipy.stats.betabinom.logpmf(self.endog, self.exposure, a, b).dot(
+        #     self.weights
+        # )
+        return -betabinom_logpmf_float(self.endog, self.exposure, a, b).dot(
             self.weights
         )
 
@@ -382,7 +444,10 @@ class Weighted_BetaBinom_fixdispersion(WeightedModel):
         a = (self.exog @ params) * self.tau
         b = (1 - self.exog @ params) * self.tau
 
-        return -scipy.stats.betabinom.logpmf(self.endog, self.exposure, a, b).dot(
+        # return -scipy.stats.betabinom.logpmf(self.endog, self.exposure, a, b).dot(
+        #     self.weights
+        # )
+        return -betabinom_logpmf_float(self.endog, self.exposure, a, b).dot(
             self.weights
         )
 
@@ -419,7 +484,10 @@ class Weighted_BetaBinom_fixdispersion_mix(WeightedModel):
             (1 - self.exog @ params) * self.tumor_prop + 0.5 * (1 - self.tumor_prop)
         ) * self.tau
 
-        return -scipy.stats.betabinom.logpmf(self.endog, self.exposure, a, b).dot(
+        # return -scipy.stats.betabinom.logpmf(self.endog, self.exposure, a, b).dot(
+        #     self.weights
+        # )
+        return -betabinom_logpmf_float(self.endog, self.exposure, a, b).dot(
             self.weights
         )
 
@@ -436,3 +504,4 @@ class Weighted_BetaBinom_fixdispersion_mix(WeightedModel):
         assert self.tumor_prop is not None, "Tumor proportion must be defined."
 
         Weighted_BetaBinom_fixdispersion_mix.ninstance += 1
+
