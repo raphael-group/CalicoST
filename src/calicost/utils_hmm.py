@@ -147,7 +147,7 @@ def construct_unique_matrix(obs_count, total_count):
             pairs = np.unique(np.vstack([obs_count[:, s], total_count[:, s]]).T, axis=0)
         else:
             pairs = np.unique(
-                np.vstack([obs_count[:, s], total_count[:, s]]).T.round(decimals=4),
+                np.vstack([obs_count[:, s].round(decimals=4), total_count[:, s]]).T.round(decimals=4),
                 axis=0,
             )
         unique_values.append(pairs)
@@ -160,7 +160,7 @@ def construct_unique_matrix(obs_count, total_count):
                 tmpidx = pair_index[(obs_count[i, s], total_count[i, s])]
             else:
                 tmpidx = pair_index[
-                    (obs_count[i, s], total_count[i, s].round(decimals=4))
+                    (obs_count[i, s].round(decimals=4), total_count[i, s].round(decimals=4))
                 ]
             mat_col[i] = tmpidx
         mapping_matrices.append(
@@ -491,21 +491,14 @@ def update_emission_params_nb_sitewise_uniqvalues(
                     exposure=unique_values[s][idx_nonzero, 1],
                     var_weights=tmp[i, idx_nonzero] + tmp[i + n_states, idx_nonzero],
                 )
-                res = model.fit(disp=0, maxiter=1500, xtol=1e-4, ftol=1e-4)
-                new_log_mu[i, s] = res[0]
-                if not (start_log_mu is None):
-                    res2 = model.fit(
-                        disp=0,
-                        maxiter=1500,
-                        start_params=np.array([start_log_mu[i, s]]),
-                        xtol=1e-4,
-                        ftol=1e-4,
-                    )
-                    new_log_mu[i, s] = (
-                        res[0]
-                        if -model.loglike(res) < -model.loglike(res2)
-                        else res2[0]
-                    )
+                res2 = model.fit(
+                    disp=0,
+                    maxiter=1500,
+                    start_params=np.array([start_log_mu[i, s]]),
+                    xtol=1e-4,
+                    ftol=1e-4,
+                )
+                new_log_mu[i, s] = res2[0]
     else:
         if not shared_NB_dispersion:
             for s in range(n_spots):
@@ -519,31 +512,17 @@ def update_emission_params_nb_sitewise_uniqvalues(
                         exposure=unique_values[s][idx_nonzero, 1],
                         penalty=0,
                     )
-                    res = model.fit(disp=0, maxiter=1500, xtol=1e-4, ftol=1e-4)
-                    new_log_mu[i, s] = res[0]
-                    new_alphas[i, s] = res[-1]
-                    if not (start_log_mu is None):
-                        res2 = model.fit(
-                            disp=0,
-                            maxiter=1500,
-                            start_params=np.append(
-                                [start_log_mu[i, s]], [alphas[i, s]]
-                            ),
-                            xtol=1e-4,
-                            ftol=1e-4,
-                        )
-                        new_log_mu[i, s] = (
-                            res[0]
-                            if model.nloglikeobs(res)
-                            < model.nloglikeobs(res2)
-                            else res2[0]
-                        )
-                        new_alphas[i, s] = (
-                            res[-1]
-                            if model.nloglikeobs(res)
-                            < model.nloglikeobs(res2)
-                            else res2[-1]
-                        )
+                    res2 = model.fit(
+                        disp=0,
+                        maxiter=1500,
+                        start_params=np.append(
+                            [start_log_mu[i, s]], [alphas[i, s]]
+                        ),
+                        xtol=1e-4,
+                        ftol=1e-4,
+                    )
+                    new_log_mu[i, s] = res2[0]
+                    new_alphas[i, s] = res2[-1]
         else:
             exposure = []
             y = []
@@ -596,44 +575,27 @@ def update_emission_params_nb_sitewise_uniqvalues(
                 y, features, weights=weights, exposure=exposure
             )
             
-            res = model.fit(disp=0, maxiter=1_500, xtol=1.e-4, ftol=1.e-4)
-            
+            res2 = model.fit(
+                disp=0,
+                maxiter=1500,
+                start_params=np.concatenate(
+                    [
+                        start_log_mu[idx_state_posweight, s]
+                        for s, idx_state_posweight in enumerate(state_posweights)
+                    ]
+                    + [np.ones(1) * alphas[0, s]]
+                ),
+                xtol=1e-4,
+                ftol=1e-4,
+            )
+        
             for s, idx_state_posweight in enumerate(state_posweights):
                 l1 = int(np.sum([len(x) for x in state_posweights[:s]]))
                 l2 = int(np.sum([len(x) for x in state_posweights[: (s + 1)]]))
-                new_log_mu[idx_state_posweight, s] = res[l1:l2]
+                new_log_mu[idx_state_posweight, s] = res2[l1:l2]
                 
-            if res[-1] > 0:
-                new_alphas[:, :] = res[-1]
-                
-            if not (start_log_mu is None):
-                res2 = model.fit(
-                    disp=0,
-                    maxiter=1500,
-                    start_params=np.concatenate(
-                        [
-                            start_log_mu[idx_state_posweight, s]
-                            for s, idx_state_posweight in enumerate(state_posweights)
-                        ]
-                        + [np.ones(1) * alphas[0, s]]
-                    ),
-                    xtol=1e-4,
-                    ftol=1e-4,
-                )
-
-                nloglikeobs2 = model.nloglikeobs(res2)
-                nloglikeobs = model.nloglikeobs(res)
-
-                logger.info(f"Comparing loglike for Negative Binomial with custom start {nloglikeobs2:.6e} to default start {nloglikeobs:.6e}.")
-                
-                if nloglikeobs2 < nloglikeobs:
-                    for s, idx_state_posweight in enumerate(state_posweights):
-                        l1 = int(np.sum([len(x) for x in state_posweights[:s]]))
-                        l2 = int(np.sum([len(x) for x in state_posweights[: (s + 1)]]))
-                        new_log_mu[idx_state_posweight, s] = res2[l1:l2]
-                        
-                    if res2[-1] > 0:
-                        new_alphas[:, :] = res2[-1]
+            if res2[-1] > 0:
+                new_alphas[:, :] = res2[-1]
                         
     new_log_mu[new_log_mu > max_log_rdr] = max_log_rdr
     new_log_mu[new_log_mu < min_log_rdr] = min_log_rdr
@@ -696,21 +658,14 @@ def update_emission_params_nb_sitewise_uniqvalues_mix(
                     exposure=unique_values[s][idx_nonzero, 1],
                     var_weights=tmp[i, idx_nonzero] + tmp[i + n_states, idx_nonzero],
                 )
-                res = model.fit(disp=0, maxiter=1500, xtol=1e-4, ftol=1e-4)
-                new_log_mu[i, s] = res[0]
-                if not (start_log_mu is None):
-                    res2 = model.fit(
-                        disp=0,
-                        maxiter=1500,
-                        start_params=np.array([start_log_mu[i, s]]),
-                        xtol=1e-4,
-                        ftol=1e-4,
-                    )
-                    new_log_mu[i, s] = (
-                        res[0]
-                        if -model.loglike(res) < -model.loglike(res2)
-                        else res2[0]
-                    )
+                res2 = model.fit(
+                    disp=0,
+                    maxiter=1500,
+                    start_params=np.array([start_log_mu[i, s]]),
+                    xtol=1e-4,
+                    ftol=1e-4,
+                )
+                new_log_mu[i, s] = res2[0]
     else:
         if not shared_NB_dispersion:
             for s in range(n_spots):
@@ -730,31 +685,17 @@ def update_emission_params_nb_sitewise_uniqvalues_mix(
                         tumor_prop=this_tp,
                     )
                     # tumor_prop=tumor_prop[s], penalty=0)
-                    res = model.fit(disp=0, maxiter=1500, xtol=1e-4, ftol=1e-4)
-                    new_log_mu[i, s] = res[0]
-                    new_alphas[i, s] = res[-1]
-                    if not (start_log_mu is None):
-                        res2 = model.fit(
-                            disp=0,
-                            maxiter=1500,
-                            start_params=np.append(
-                                [start_log_mu[i, s]], [alphas[i, s]]
-                            ),
-                            xtol=1e-4,
-                            ftol=1e-4,
-                        )
-                        new_log_mu[i, s] = (
-                            res[0]
-                            if model.nloglikeobs(res)
-                            < model.nloglikeobs(res2)
-                            else res2[0]
-                        )
-                        new_alphas[i, s] = (
-                            res[-1]
-                            if model.nloglikeobs(res)
-                            < model.nloglikeobs(res2)
-                            else res2[-1]
-                        )
+                    res2 = model.fit(
+                        disp=0,
+                        maxiter=1500,
+                        start_params=np.append(
+                            [start_log_mu[i, s]], [alphas[i, s]]
+                        ),
+                        xtol=1e-4,
+                        ftol=1e-4,
+                    )
+                    new_log_mu[i, s] = res2[0]
+                    new_alphas[i, s] = res2[-1]
         else:
             exposure = []
             y = []
@@ -820,46 +761,29 @@ def update_emission_params_nb_sitewise_uniqvalues_mix(
                 tumor_prop=tp,
                 penalty=0,
             )
-            
-            res = model.fit(disp=0, maxiter=1500, xtol=1e-4, ftol=1e-4)
+
+            res2 = model.fit(
+                disp=0,
+                maxiter=1500,
+                start_params=np.concatenate(
+                    [
+                        start_log_mu[idx_state_posweight, s]
+                        for s, idx_state_posweight in enumerate(state_posweights)
+                    ]
+                    + [np.ones(1) * alphas[0, s]]
+                ),
+                xtol=1e-4,
+                ftol=1e-4,
+            )
 
             for s, idx_state_posweight in enumerate(state_posweights):
                 l1 = int(np.sum([len(x) for x in state_posweights[:s]]))
                 l2 = int(np.sum([len(x) for x in state_posweights[: (s + 1)]]))
-                new_log_mu[idx_state_posweight, s] = res[l1:l2]
                 
-            if res[-1] > 0:
-                new_alphas[:, :] = res[-1]
+                new_log_mu[idx_state_posweight, s] = res2[l1:l2]
                 
-            if not (start_log_mu is None):
-                res2 = model.fit(
-                    disp=0,
-                    maxiter=1500,
-                    start_params=np.concatenate(
-                        [
-                            start_log_mu[idx_state_posweight, s]
-                            for s, idx_state_posweight in enumerate(state_posweights)
-                        ]
-                        + [np.ones(1) * alphas[0, s]]
-                    ),
-                    xtol=1e-4,
-                    ftol=1e-4,
-                )
-
-                nloglikeobs2 = model.nloglikeobs(res2)
-                nloglikeobs = model.nloglikeobs(res)
-
-                logger.info(f"Comparing loglike for Negative Binomial Mix with custom start {nloglikeobs2:.6e} to default start {nloglikeobs:.6e}.")
-                
-                if nloglikeobs2 < nloglikeobs:
-                    for s, idx_state_posweight in enumerate(state_posweights):
-                        l1 = int(np.sum([len(x) for x in state_posweights[:s]]))
-                        l2 = int(np.sum([len(x) for x in state_posweights[: (s + 1)]]))
-                        
-                        new_log_mu[idx_state_posweight, s] = res2[l1:l2]
-                        
-                    if res2[-1] > 0:
-                        new_alphas[:, :] = res2[-1]
+            if res2[-1] > 0:
+                new_alphas[:, :] = res2[-1]
                         
     new_log_mu[new_log_mu > max_log_rdr] = max_log_rdr
     new_log_mu[new_log_mu < min_log_rdr] = min_log_rdr
@@ -934,22 +858,14 @@ def update_emission_params_bb_sitewise_uniqvalues(
                             unique_values[s][idx_nonzero, 1],
                         ),
                     )
-                    res = model.fit(disp=0, maxiter=1500, xtol=1e-4, ftol=1e-4)
-                    new_p_binom[i, s] = res[0]
-                    if not (start_p_binom is None):
-                        res2 = model.fit(
-                            disp=0,
-                            maxiter=1500,
-                            start_params=np.array(start_p_binom[i, s]),
-                            xtol=1e-4,
-                            ftol=1e-4,
-                        )
-                        new_p_binom[i, s] = (
-                            res[0]
-                            if model.nloglikeobs(res)
-                            < model.nloglikeobs(res2)
-                            else res2[0]
-                        )
+                    res2 = model.fit(
+                        disp=0,
+                        maxiter=1500,
+                        start_params=np.array(start_p_binom[i, s]),
+                        xtol=1e-4,
+                        ftol=1e-4,
+                    )
+                    new_p_binom[i, s] = res2[0]
     else:
         if not shared_BB_dispersion:
             for s in np.arange(len(unique_values)):
@@ -977,31 +893,18 @@ def update_emission_params_bb_sitewise_uniqvalues(
                                 unique_values[s][idx_nonzero, 1],
                             ),
                         )
-                        res = model.fit(disp=0, maxiter=1500, xtol=1e-4, ftol=1e-4)
-                        new_p_binom[i, s] = res[0]
-                        new_taus[i, s] = res[-1]
-                        if not (start_p_binom is None):
-                            res2 = model.fit(
-                                disp=0,
-                                maxiter=1500,
-                                start_params=np.append(
-                                    [start_p_binom[i, s]], [taus[i, s]]
-                                ),
-                                xtol=1e-4,
-                                ftol=1e-4,
-                            )
-                            new_p_binom[i, s] = (
-                                res[0]
-                                if model.nloglikeobs(res)
-                                < model.nloglikeobs(res2)
-                                else res2[0]
-                            )
-                            new_taus[i, s] = (
-                                res[-1]
-                                if model.nloglikeobs(res)
-                                < model.nloglikeobs(res2)
-                                else res2[-1]
-                            )
+
+                        res2 = model.fit(
+                            disp=0,
+                            maxiter=1500,
+                            start_params=np.append(
+                                [start_p_binom[i, s]], [taus[i, s]]
+                            ),
+                            xtol=1e-4,
+                            ftol=1e-4,
+                        )
+                        new_p_binom[i, s] = res2[0]
+                        new_taus[i, s] = res2[-1]
         else:
             exposure = []
             y = []
@@ -1063,45 +966,28 @@ def update_emission_params_bb_sitewise_uniqvalues(
             features = scipy.linalg.block_diag(*features)
             
             model = Weighted_BetaBinom(y, features, weights=weights, exposure=exposure)
-            
-            res = model.fit(disp=0, maxiter=1_500, xtol=1e-4, ftol=1e-4)
-            
+
+            res2 = model.fit(
+                disp=0,
+                maxiter=1500,
+                start_params=np.concatenate(
+                    [
+                        start_p_binom[idx_state_posweight, s]
+                        for s, idx_state_posweight in enumerate(state_posweights)
+                    ]
+                    + [np.ones(1) * taus[0, s]]
+                ),
+                xtol=1e-4,
+                ftol=1e-4,
+            )
+
             for s, idx_state_posweight in enumerate(state_posweights):
                 l1 = int(np.sum([len(x) for x in state_posweights[:s]]))
                 l2 = int(np.sum([len(x) for x in state_posweights[: (s + 1)]]))
-                new_p_binom[idx_state_posweight, s] = res[l1:l2]
+                new_p_binom[idx_state_posweight, s] = res2[l1:l2]
                 
-            if res[-1] > 0:
-                new_taus[:, :] = res[-1]
-                
-            if not (start_p_binom is None):
-                res2 = model.fit(
-                    disp=0,
-                    maxiter=1500,
-                    start_params=np.concatenate(
-                        [
-                            start_p_binom[idx_state_posweight, s]
-                            for s, idx_state_posweight in enumerate(state_posweights)
-                        ]
-                        + [np.ones(1) * taus[0, s]]
-                    ),
-                    xtol=1e-4,
-                    ftol=1e-4,
-                )
-
-                nloglikeobs2 = model.nloglikeobs(res2)
-                nloglikeobs = model.nloglikeobs(res)
-
-                logger.info(f"Comparing loglike for Beta Binomial with custom start {nloglikeobs2:.6e} to default start {nloglikeobs:.6e}.")
-                
-                if nloglikeobs2 < nloglikeobs:
-                    for s, idx_state_posweight in enumerate(state_posweights):
-                        l1 = int(np.sum([len(x) for x in state_posweights[:s]]))
-                        l2 = int(np.sum([len(x) for x in state_posweights[: (s + 1)]]))
-                        new_p_binom[idx_state_posweight, s] = res2[l1:l2]
-                        
-                    if res2[-1] > 0:
-                        new_taus[:, :] = res2[-1]
+            if res2[-1] > 0:
+                new_taus[:, :] = res2[-1]
                         
     new_p_binom[new_p_binom < min_binom_prob] = min_binom_prob
     new_p_binom[new_p_binom > max_binom_prob] = max_binom_prob
@@ -1185,22 +1071,14 @@ def update_emission_params_bb_sitewise_uniqvalues_mix(
                         tumor_prop=this_tp,
                     )
                     # tumor_prop=tumor_prop[s] )
-                    res = model.fit(disp=0, maxiter=1500, xtol=1e-4, ftol=1e-4,)
-                    new_p_binom[i, s] = res[0]
-                    if not (start_p_binom is None):
-                        res2 = model.fit(
-                            disp=0,
-                            maxiter=1500,
-                            start_params=np.array([start_p_binom[i, s]]),
-                            xtol=1e-4,
-                            ftol=1e-4,
-                        )
-                        new_p_binom[i, s] = (
-                            res[0]
-                            if model.nloglikeobs(res)
-                            < model.nloglikeobs(res2)
-                            else res2[0]
-                        )
+                    res2 = model.fit(
+                        disp=0,
+                        maxiter=1500,
+                        start_params=np.array([start_p_binom[i, s]]),
+                        xtol=1e-4,
+                        ftol=1e-4,
+                    )
+                    new_p_binom[i, s] = res2[0]
     else:
         if not shared_BB_dispersion:
             for s in np.arange(n_spots):
@@ -1236,31 +1114,17 @@ def update_emission_params_bb_sitewise_uniqvalues_mix(
                             tumor_prop=this_tp,
                         )
                         # tumor_prop=tumor_prop )
-                        res = model.fit(disp=0, maxiter=1500, xtol=1e-4, ftol=1e-4,)
-                        new_p_binom[i, s] = res[0]
-                        new_taus[i, s] = res[-1]
-                        if not (start_p_binom is None):
-                            res2 = model.fit(
-                                disp=0,
-                                maxiter=1500,
-                                start_params=np.append(
-                                    [start_p_binom[i, s]], [taus[i, s]]
-                                ),
-                                xtol=1e-4,
-                                ftol=1e-4,
-                            )
-                            new_p_binom[i, s] = (
-                                res[0]
-                                if model.nloglikeobs(res)
-                                < model.nloglikeobs(res2)
-                                else res2[0]
-                            )
-                            new_taus[i, s] = (
-                                res[-1]
-                                if model.nloglikeobs(res)
-                                < model.nloglikeobs(res2)
-                                else res2[-1]
-                            )
+                        res2 = model.fit(
+                            disp=0,
+                            maxiter=1500,
+                            start_params=np.append(
+                                [start_p_binom[i, s]], [taus[i, s]]
+                            ),
+                            xtol=1e-4,
+                            ftol=1e-4,
+                        )
+                        new_p_binom[i, s] = res2[0]
+                        new_taus[i, s] = res2[-1]
         else:
             exposure = []
             y = []
@@ -1334,45 +1198,28 @@ def update_emission_params_bb_sitewise_uniqvalues_mix(
             model = Weighted_BetaBinom_mix(
                 y, features, weights=weights, exposure=exposure, tumor_prop=tp
             )
-            
-            res = model.fit(disp=0, maxiter=1500, xtol=1e-4, ftol=1e-4,)
-            
+                          
+            res2 = model.fit(
+                disp=0,
+                maxiter=1500,
+                start_params=np.concatenate(
+                    [
+                        start_p_binom[idx_state_posweight, s]
+                        for s, idx_state_posweight in enumerate(state_posweights)
+                    ]
+                    + [np.ones(1) * taus[0, s]]
+                ),
+                xtol=1e-4,
+                ftol=1e-4,
+            )
+
             for s, idx_state_posweight in enumerate(state_posweights):
                 l1 = int(np.sum([len(x) for x in state_posweights[:s]]))
                 l2 = int(np.sum([len(x) for x in state_posweights[: (s + 1)]]))
-                new_p_binom[idx_state_posweight, s] = res[l1:l2]
+                new_p_binom[idx_state_posweight, s] = res2[l1:l2]
                 
-            if res[-1] > 0:
-                new_taus[:, :] = res[-1]
-                
-            if not (start_p_binom is None):                
-                res2 = model.fit(
-                    disp=0,
-                    maxiter=1500,
-                    start_params=np.concatenate(
-                        [
-                            start_p_binom[idx_state_posweight, s]
-                            for s, idx_state_posweight in enumerate(state_posweights)
-                        ]
-                        + [np.ones(1) * taus[0, s]]
-                    ),
-                    xtol=1e-4,
-                    ftol=1e-4,
-                )
-
-                nloglikeobs2 = model.nloglikeobs(res2)
-                nloglikeobs = model.nloglikeobs(res)
-
-                logger.info(f"Comparing loglike for Beta Binomial Mix with custom start {nloglikeobs2:.6e} to default start {nloglikeobs:.6e}.")
-                
-                if nloglikeobs2 < nloglikeobs:
-                    for s, idx_state_posweight in enumerate(state_posweights):
-                        l1 = int(np.sum([len(x) for x in state_posweights[:s]]))
-                        l2 = int(np.sum([len(x) for x in state_posweights[: (s + 1)]]))
-                        new_p_binom[idx_state_posweight, s] = res2[l1:l2]
-                        
-                    if res2[-1] > 0:
-                        new_taus[:, :] = res2[-1]
+            if res2[-1] > 0:
+                new_taus[:, :] = res2[-1]
                         
     new_p_binom[new_p_binom < min_binom_prob] = min_binom_prob
     new_p_binom[new_p_binom > max_binom_prob] = max_binom_prob
@@ -1495,21 +1342,14 @@ def update_emission_params_nb_nophasing_uniqvalues(
                     exposure=unique_values[s][idx_nonzero, 1],
                     var_weights=tmp[i, idx_nonzero],
                 )
-                res = model.fit(disp=0, maxiter=1500, xtol=1e-4, ftol=1e-4)
-                new_log_mu[i, s] = res[0]
-                if not (start_log_mu is None):
-                    res2 = model.fit(
-                        disp=0,
-                        maxiter=1500,
-                        start_params=np.array([start_log_mu[i, s]]),
-                        xtol=1e-4,
-                        ftol=1e-4,
-                    )
-                    new_log_mu[i, s] = (
-                        res[0]
-                        if -model.loglike(res) < -model.loglike(res2)
-                        else res2[0]
-                    )
+                res2 = model.fit(
+                    disp=0,
+                    maxiter=1500,
+                    start_params=np.array([start_log_mu[i, s]]),
+                    xtol=1e-4,
+                    ftol=1e-4,
+                )
+                new_log_mu[i, s] = res2[0]
     else:
         if not shared_NB_dispersion:
             for s in range(n_spots):
@@ -1523,31 +1363,17 @@ def update_emission_params_nb_nophasing_uniqvalues(
                         exposure=unique_values[s][idx_nonzero, 1],
                         penalty=0,
                     )
-                    res = model.fit(disp=0, maxiter=1500, xtol=1e-4, ftol=1e-4)
-                    new_log_mu[i, s] = res[0]
-                    new_alphas[i, s] = res[-1]
-                    if not (start_log_mu is None):
-                        res2 = model.fit(
-                            disp=0,
-                            maxiter=1500,
-                            start_params=np.append(
-                                [start_log_mu[i, s]], [alphas[i, s]]
-                            ),
-                            xtol=1e-4,
-                            ftol=1e-4,
-                        )
-                        new_log_mu[i, s] = (
-                            res[0]
-                            if model.nloglikeobs(res)
-                            < model.nloglikeobs(res2)
-                            else res2[0]
-                        )
-                        new_alphas[i, s] = (
-                            res[-1]
-                            if model.nloglikeobs(res)
-                            < model.nloglikeobs(res2)
-                            else res2[-1]
-                        )
+                    res2 = model.fit(
+                        disp=0,
+                        maxiter=1500,
+                        start_params=np.append(
+                            [start_log_mu[i, s]], [alphas[i, s]]
+                        ),
+                        xtol=1e-4,
+                        ftol=1e-4,
+                    )
+                    new_log_mu[i, s] = res2[0]
+                    new_alphas[i, s] = res2[-1]
         else:
             exposure = []
             y = []
@@ -1595,42 +1421,27 @@ def update_emission_params_nb_nophasing_uniqvalues(
                 y, features, weights=weights, exposure=exposure
             )
             
-            res = model.fit(disp=0, maxiter=1500, xtol=1e-4, ftol=1e-4)
-            
+            res2 = model.fit(
+                disp=0,
+                maxiter=1500,
+                start_params=np.concatenate(
+                    [
+                        start_log_mu[idx_state_posweight, s]
+                        for s, idx_state_posweight in enumerate(state_posweights)
+                    ]
+                    + [np.ones(1) * alphas[0, s]]
+                ),
+                xtol=1e-4,
+                ftol=1e-4,
+            )
+
             for s, idx_state_posweight in enumerate(state_posweights):
                 l1 = int(np.sum([len(x) for x in state_posweights[:s]]))
                 l2 = int(np.sum([len(x) for x in state_posweights[: (s + 1)]]))
-                new_log_mu[idx_state_posweight, s] = res[l1:l2]
+                new_log_mu[idx_state_posweight, s] = res2[l1:l2]
                 
-            if res[-1] > 0:
-                new_alphas[:, :] = res[-1]
-                
-            if not (start_log_mu is None):
-                res2 = model.fit(
-                    disp=0,
-                    maxiter=1500,
-                    start_params=np.concatenate(
-                        [
-                            start_log_mu[idx_state_posweight, s]
-                            for s, idx_state_posweight in enumerate(state_posweights)
-                        ]
-                        + [np.ones(1) * alphas[0, s]]
-                    ),
-                    xtol=1e-4,
-                    ftol=1e-4,
-                )
-
-                nloglikeobs2 = model.nloglikeobs(res2)
-                nloglikeobs = model.nloglikeobs(res)
-                
-                if nloglikeobs2 < nloglikeobs:
-                    for s, idx_state_posweight in enumerate(state_posweights):
-                        l1 = int(np.sum([len(x) for x in state_posweights[:s]]))
-                        l2 = int(np.sum([len(x) for x in state_posweights[: (s + 1)]]))
-                        new_log_mu[idx_state_posweight, s] = res2[l1:l2]
-                        
-                    if res2[-1] > 0:
-                        new_alphas[:, :] = res2[-1]
+            if res2[-1] > 0:
+                new_alphas[:, :] = res2[-1]
                         
     new_log_mu[new_log_mu > max_log_rdr] = max_log_rdr
     new_log_mu[new_log_mu < min_log_rdr] = min_log_rdr
@@ -1692,21 +1503,14 @@ def update_emission_params_nb_nophasing_uniqvalues_mix(
                     exposure=unique_values[s][idx_nonzero, 1],
                     var_weights=tmp[i, idx_nonzero],
                 )
-                res = model.fit(disp=0, maxiter=1500, xtol=1e-4, ftol=1e-4)
-                new_log_mu[i, s] = res[0]
-                if not (start_log_mu is None):
-                    res2 = model.fit(
-                        disp=0,
-                        maxiter=1500,
-                        start_params=np.array([start_log_mu[i, s]]),
-                        xtol=1e-4,
-                        ftol=1e-4,
-                    )
-                    new_log_mu[i, s] = (
-                        res[0]
-                        if -model.loglike(res) < -model.loglike(res2)
-                        else res2[0]
-                    )
+                res2 = model.fit(
+                    disp=0,
+                    maxiter=1500,
+                    start_params=np.array([start_log_mu[i, s]]),
+                    xtol=1e-4,
+                    ftol=1e-4,
+                )
+                new_log_mu[i, s] = res2[0]
     else:
         if not shared_NB_dispersion:
             for s in range(n_spots):
@@ -1726,31 +1530,17 @@ def update_emission_params_nb_nophasing_uniqvalues_mix(
                         tumor_prop=this_tp,
                     )
                     # tumor_prop=tumor_prop[s], penalty=0)
-                    res = model.fit(disp=0, maxiter=1500, xtol=1e-4, ftol=1e-4)
-                    new_log_mu[i, s] = res[0]
-                    new_alphas[i, s] = res[-1]
-                    if not (start_log_mu is None):
-                        res2 = model.fit(
-                            disp=0,
-                            maxiter=1500,
-                            start_params=np.append(
-                                [start_log_mu[i, s]], [alphas[i, s]]
-                            ),
-                            xtol=1e-4,
-                            ftol=1e-4,
-                        )
-                        new_log_mu[i, s] = (
-                            res[0]
-                            if model.nloglikeobs(res)
-                            < model.nloglikeobs(res2)
-                            else res2[0]
-                        )
-                        new_alphas[i, s] = (
-                            res[-1]
-                            if model.nloglikeobs(res)
-                            < model.nloglikeobs(res2)
-                            else res2[-1]
-                        )
+                    res2 = model.fit(
+                        disp=0,
+                        maxiter=1500,
+                        start_params=np.append(
+                            [start_log_mu[i, s]], [alphas[i, s]]
+                        ),
+                        xtol=1e-4,
+                        ftol=1e-4,
+                    )
+                    new_log_mu[i, s] = res2[0]
+                    new_alphas[i, s] = res2[-1]
         else:
             exposure = []
             y = []
@@ -1814,44 +1604,27 @@ def update_emission_params_nb_nophasing_uniqvalues_mix(
                 penalty=0,
             )
             
-            res = model.fit(disp=0, maxiter=1500, xtol=1e-4, ftol=1e-4)
-            
+            res2 = model.fit(
+                disp=0,
+                maxiter=1500,
+                start_params=np.concatenate(
+                    [
+                        start_log_mu[idx_state_posweight, s]
+                        for s, idx_state_posweight in enumerate(state_posweights)
+                    ]
+                    + [np.ones(1) * alphas[0, s]]
+                ),
+                xtol=1e-4,
+                ftol=1e-4,
+            )
+
             for s, idx_state_posweight in enumerate(state_posweights):
                 l1 = int(np.sum([len(x) for x in state_posweights[:s]]))
                 l2 = int(np.sum([len(x) for x in state_posweights[: (s + 1)]]))
-                new_log_mu[idx_state_posweight, s] = res[l1:l2]
+                new_log_mu[idx_state_posweight, s] = res2[l1:l2]
                 
-            if res[-1] > 0:
-                new_alphas[:, :] = res[-1]
-                
-            if not (start_log_mu is None):
-                res2 = model.fit(
-                    disp=0,
-                    maxiter=1500,
-                    start_params=np.concatenate(
-                        [
-                            start_log_mu[idx_state_posweight, s]
-                            for s, idx_state_posweight in enumerate(state_posweights)
-                        ]
-                        + [np.ones(1) * alphas[0, s]]
-                    ),
-                    xtol=1e-4,
-                    ftol=1e-4,
-                )
-
-                nloglikeobs2 = model.nloglikeobs(res2)
-                nloglikeobs = model.nloglikeobs(res)
-
-                logger.info(f"Comparing loglike for Negative Binomial Mix with custom start {nloglikeobs2:.6e} to default start {nloglikeobs:.6e}.")
-                
-                if nloglikeobs2 < nloglikeobs:
-                    for s, idx_state_posweight in enumerate(state_posweights):
-                        l1 = int(np.sum([len(x) for x in state_posweights[:s]]))
-                        l2 = int(np.sum([len(x) for x in state_posweights[: (s + 1)]]))
-                        new_log_mu[idx_state_posweight, s] = res2[l1:l2]
-                        
-                    if res2[-1] > 0:
-                        new_alphas[:, :] = res2[-1]
+            if res2[-1] > 0:
+                new_alphas[:, :] = res2[-1]
                         
     new_log_mu[new_log_mu > max_log_rdr] = max_log_rdr
     new_log_mu[new_log_mu < min_log_rdr] = min_log_rdr
@@ -1914,22 +1687,14 @@ def update_emission_params_bb_nophasing_uniqvalues(
                         weights=tmp[i, idx_nonzero],
                         exposure=unique_values[s][idx_nonzero, 1],
                     )
-                    res = model.fit(disp=0, maxiter=1500, xtol=1e-4, ftol=1e-4,)
-                    new_p_binom[i, s] = res[0]
-                    if not (start_p_binom is None):
-                        res2 = model.fit(
-                            disp=0,
-                            maxiter=1500,
-                            start_params=np.array(start_p_binom[i, s]),
-                            xtol=1e-4,
-                            ftol=1e-4,
-                        )
-                        new_p_binom[i, s] = (
-                            res[0]
-                            if model.nloglikeobs(res)
-                            < model.nloglikeobs(res2)
-                            else res2[0]
-                        )
+                    res2 = model.fit(
+                        disp=0,
+                        maxiter=1500,
+                        start_params=np.array(start_p_binom[i, s]),
+                        xtol=1e-4,
+                        ftol=1e-4,
+                    )
+                    new_p_binom[i, s] = res2[0]
     else:
         if not shared_BB_dispersion:
             for s in np.arange(len(unique_values)):
@@ -1944,31 +1709,17 @@ def update_emission_params_bb_nophasing_uniqvalues(
                             weights=tmp[i, idx_nonzero],
                             exposure=unique_values[s][idx_nonzero, 1],
                         )
-                        res = model.fit(disp=0, maxiter=1500, xtol=1e-4, ftol=1e-4,)
-                        new_p_binom[i, s] = res[0]
-                        new_taus[i, s] = res[-1]
-                        if not (start_p_binom is None):
-                            res2 = model.fit(
-                                disp=0,
-                                maxiter=1500,
-                                start_params=np.append(
-                                    [start_p_binom[i, s]], [taus[i, s]]
-                                ),
-                                xtol=1e-4,
-                                ftol=1e-4,
-                            )
-                            new_p_binom[i, s] = (
-                                res[0]
-                                if model.nloglikeobs(res)
-                                < model.nloglikeobs(res2)
-                                else res2[0]
-                            )
-                            new_taus[i, s] = (
-                                res[-1]
-                                if model.nloglikeobs(res)
-                                < model.nloglikeobs(res2)
-                                else res2[-1]
-                            )
+                        res2 = model.fit(
+                            disp=0,
+                            maxiter=1500,
+                            start_params=np.append(
+                                [start_p_binom[i, s]], [taus[i, s]]
+                            ),
+                            xtol=1e-4,
+                            ftol=1e-4,
+                        )
+                        new_p_binom[i, s] = res2[0]
+                        new_taus[i, s] = res2[-1]
         else:
             exposure = []
             y = []
@@ -2015,44 +1766,27 @@ def update_emission_params_bb_nophasing_uniqvalues(
 
             model = Weighted_BetaBinom(y, features, weights=weights, exposure=exposure)
 
-            res = model.fit(disp=0, maxiter=1500, xtol=1e-4, ftol=1e-4,)
-            
+            res2 = model.fit(
+                disp=0,
+                maxiter=1500,
+                start_params=np.concatenate(
+                    [
+                        start_p_binom[idx_state_posweight, s]
+                        for s, idx_state_posweight in enumerate(state_posweights)
+                    ]
+                    + [np.ones(1) * taus[0, s]]
+                ),
+                xtol=1e-4,
+                ftol=1e-4,
+            )
+
             for s, idx_state_posweight in enumerate(state_posweights):
                 l1 = int(np.sum([len(x) for x in state_posweights[:s]]))
                 l2 = int(np.sum([len(x) for x in state_posweights[: (s + 1)]]))
-                new_p_binom[idx_state_posweight, s] = res[l1:l2]
+                new_p_binom[idx_state_posweight, s] = res2[l1:l2]
                 
-            if res[-1] > 0:
-                new_taus[:, :] = res[-1]
-
-            if not (start_p_binom is None):
-                res2 = model.fit(
-                    disp=0,
-                    maxiter=1500,
-                    start_params=np.concatenate(
-                        [
-                            start_p_binom[idx_state_posweight, s]
-                            for s, idx_state_posweight in enumerate(state_posweights)
-                        ]
-                        + [np.ones(1) * taus[0, s]]
-                    ),
-                    xtol=1e-4,
-                    ftol=1e-4,
-                )
-
-                nloglikeobs2 = model.nloglikeobs(res2)
-                nloglikeobs = model.nloglikeobs(res)
-
-                logger.info(f"Comparing loglike for Beta Binomial with custom start {nloglikeobs2:.6e} to default start {nloglikeobs:.6e}.")
-                
-                if nloglikeobs2 < nloglikeobs:
-                    for s, idx_state_posweight in enumerate(state_posweights):
-                        l1 = int(np.sum([len(x) for x in state_posweights[:s]]))
-                        l2 = int(np.sum([len(x) for x in state_posweights[: (s + 1)]]))
-                        new_p_binom[idx_state_posweight, s] = res2[l1:l2]
-                        
-                    if res2[-1] > 0:
-                        new_taus[:, :] = res2[-1]
+            if res2[-1] > 0:
+                new_taus[:, :] = res2[-1]
 
     new_p_binom[new_p_binom < min_binom_prob] = min_binom_prob
     new_p_binom[new_p_binom > max_binom_prob] = max_binom_prob
@@ -2124,22 +1858,14 @@ def update_emission_params_bb_nophasing_uniqvalues_mix(
                         tumor_prop=this_tp,
                     )
                     # tumor_prop=tumor_prop[s] )
-                    res = model.fit(disp=0, maxiter=1500, xtol=1e-4, ftol=1e-4,)
-                    new_p_binom[i, s] = res[0]
-                    if not (start_p_binom is None):
-                        res2 = model.fit(
-                            disp=0,
-                            maxiter=1500,
-                            start_params=np.array([start_p_binom[i, s]]),
-                            xtol=1e-4,
-                            ftol=1e-4,
-                        )
-                        new_p_binom[i, s] = (
-                            res[0]
-                            if model.nloglikeobs(res)
-                            < model.nloglikeobs(res2)
-                            else res2[0]
-                        )
+                    res2 = model.fit(
+                        disp=0,
+                        maxiter=1500,
+                        start_params=np.array([start_p_binom[i, s]]),
+                        xtol=1e-4,
+                        ftol=1e-4,
+                    )
+                    new_p_binom[i, s] = res2[0]
     else:
         if not shared_BB_dispersion:
             for s in np.arange(n_spots):
@@ -2162,31 +1888,17 @@ def update_emission_params_bb_nophasing_uniqvalues_mix(
                             tumor_prop=this_tp,
                         )
                         # tumor_prop=tumor_prop[s] )
-                        res = model.fit(disp=0, maxiter=1500, xtol=1e-4, ftol=1e-4,)
-                        new_p_binom[i, s] = res[0]
-                        new_taus[i, s] = res[-1]
-                        if not (start_p_binom is None):
-                            res2 = model.fit(
-                                disp=0,
-                                maxiter=1500,
-                                start_params=np.append(
-                                    [start_p_binom[i, s]], [taus[i, s]]
-                                ),
-                                xtol=1e-4,
-                                ftol=1e-4,
-                            )
-                            new_p_binom[i, s] = (
-                                res[0]
-                                if model.nloglikeobs(res)
-                                < model.nloglikeobs(res2)
-                                else res2[0]
-                            )
-                            new_taus[i, s] = (
-                                res[-1]
-                                if model.nloglikeobs(res)
-                                < model.nloglikeobs(res2)
-                                else res2[-1]
-                            )
+                        res2 = model.fit(
+                            disp=0,
+                            maxiter=1500,
+                            start_params=np.append(
+                                [start_p_binom[i, s]], [taus[i, s]]
+                            ),
+                            xtol=1e-4,
+                            ftol=1e-4,
+                        )
+                        new_p_binom[i, s] = res2[0]
+                        new_taus[i, s] = res2[-1]
         else:
             exposure = []
             y = []
@@ -2245,44 +1957,27 @@ def update_emission_params_bb_nophasing_uniqvalues_mix(
                 y, features, weights=weights, exposure=exposure, tumor_prop=tp
             )
 
-            res = model.fit(disp=0, maxiter=1500, xtol=1e-4, ftol=1e-4,)
-            
+            res2 = model.fit(
+                disp=0,
+                maxiter=1500,
+                start_params=np.concatenate(
+                    [
+                        start_p_binom[idx_state_posweight, s]
+                        for s, idx_state_posweight in enumerate(state_posweights)
+                    ]
+                    + [np.ones(1) * taus[0, s]]
+                ),
+                xtol=1e-4,
+                ftol=1e-4,
+            )
+
             for s, idx_state_posweight in enumerate(state_posweights):
                 l1 = int(np.sum([len(x) for x in state_posweights[:s]]))
                 l2 = int(np.sum([len(x) for x in state_posweights[: (s + 1)]]))
-                new_p_binom[idx_state_posweight, s] = res[l1:l2]
+                new_p_binom[idx_state_posweight, s] = res2[l1:l2]
                 
-            if res[-1] > 0:
-                new_taus[:, :] = res[-1]
-                
-            if not (start_p_binom is None):
-                res2 = model.fit(
-                    disp=0,
-                    maxiter=1500,
-                    start_params=np.concatenate(
-                        [
-                            start_p_binom[idx_state_posweight, s]
-                            for s, idx_state_posweight in enumerate(state_posweights)
-                        ]
-                        + [np.ones(1) * taus[0, s]]
-                    ),
-                    xtol=1e-4,
-                    ftol=1e-4,
-                )
-
-                nloglikeobs2 = model.nloglikeobs(res2)
-                nloglikeobs = model.nloglikeobs(res)
-
-                logger.info(f"Comparing loglike for Beta Binomial Mix with custom start {nloglikeobs2:.6e} to default start {nloglikeobs:.6e}.")
-                
-                if nloglikeobs2 < nloglikeobs:
-                    for s, idx_state_posweight in enumerate(state_posweights):
-                        l1 = int(np.sum([len(x) for x in state_posweights[:s]]))
-                        l2 = int(np.sum([len(x) for x in state_posweights[: (s + 1)]]))
-                        new_p_binom[idx_state_posweight, s] = res2[l1:l2]
-                        
-                    if res2[-1] > 0:
-                        new_taus[:, :] = res2[-1]
+            if res2[-1] > 0:
+                new_taus[:, :] = res2[-1]
                         
     new_p_binom[new_p_binom < min_binom_prob] = min_binom_prob
     new_p_binom[new_p_binom > max_binom_prob] = max_binom_prob
