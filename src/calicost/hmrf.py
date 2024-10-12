@@ -531,23 +531,32 @@ def merge_by_minspots(
     else:
         tmp_single_tumor_prop = single_tumor_prop
     unique_assignment = np.unique(new_assignment)
+    # number of spots per clone and number of allele counts per clone
+    n_spots_per_clone = np.array([np.sum(new_assignment[tmp_single_tumor_prop > threshold] == c) for c in unique_assignment])
+    n_allele_counts_per_clone = np.array([np.sum(single_total_bb_RD[:, (new_assignment == c) & (tmp_single_tumor_prop > threshold)]) for c in unique_assignment])
     # find entries in unique_assignment such that either min_spots_thresholds or min_umicount_thresholds is not satisfied
     failed_clones = [
-        c
-        for c in unique_assignment
-        if (
-            np.sum(new_assignment[tmp_single_tumor_prop > threshold] == c)
-            < min_spots_thresholds
-        )
-        or (
-            np.sum(
-                single_total_bb_RD[
-                    :, (new_assignment == c) & (tmp_single_tumor_prop > threshold)
-                ]
-            )
-            < min_umicount_thresholds
-        )
+        c for c in range(len(unique_assignment)) if (n_spots_per_clone[c] < min_spots_thresholds) or (n_allele_counts_per_clone[c] < min_umicount_thresholds)
     ]
+    # if all clones failed
+    if len(failed_clones) == len(unique_assignment):
+        failed_clones = np.argsort(n_allele_counts_per_clone)[:-1]
+    # failed_clones = [
+    #     c
+    #     for c in unique_assignment
+    #     if (
+    #         np.sum(new_assignment[tmp_single_tumor_prop > threshold] == c)
+    #         < min_spots_thresholds
+    #     )
+    #     or (
+    #         np.sum(
+    #             single_total_bb_RD[
+    #                 :, (new_assignment == c) & (tmp_single_tumor_prop > threshold)
+    #             ]
+    #         )
+    #         < min_umicount_thresholds
+    #     )
+    # ]
     # find the remaining unique_assigment that satisfies both thresholds
     successful_clones = [c for c in unique_assignment if not c in failed_clones]
     # initial merging groups: each successful clone is its own group
@@ -1739,21 +1748,21 @@ def hmrfmix_reassignment_posterior_concatenate(
     for i in trange(N):
         idx = smooth_mat[i, :].nonzero()[1]
         idx = idx[~np.isnan(single_tumor_prop[idx])]
-        for c in range(n_clones):
-            tmp_log_emission_rdr, tmp_log_emission_baf = (
-                hmmclass.compute_emission_probability_nb_betabinom_mix(
-                    np.sum(single_X[:, :, idx], axis=2, keepdims=True),
-                    np.sum(single_base_nb_mean[:, idx], axis=1, keepdims=True),
-                    res["new_log_mu"],
-                    res["new_alphas"],
-                    np.sum(single_total_bb_RD[:, idx], axis=1, keepdims=True),
-                    res["new_p_binom"],
-                    res["new_taus"],
-                    np.ones((n_obs, 1)) * np.mean(single_tumor_prop[idx]),
-                    **kwargs,
-                )
+        tmp_log_emission_rdr, tmp_log_emission_baf = (
+            hmmclass.compute_emission_probability_nb_betabinom_mix(
+                np.sum(single_X[:, :, idx], axis=2, keepdims=True),
+                np.sum(single_base_nb_mean[:, idx], axis=1, keepdims=True),
+                res["new_log_mu"],
+                res["new_alphas"],
+                np.sum(single_total_bb_RD[:, idx], axis=1, keepdims=True),
+                res["new_p_binom"],
+                res["new_taus"],
+                np.ones((n_obs, 1)) * np.mean(single_tumor_prop[idx]),
+                **kwargs,
             )
-
+        )
+        
+        for c in range(n_clones):
             if (
                 np.sum(single_base_nb_mean[:, i : (i + 1)] > 0) > 0
                 and np.sum(single_total_bb_RD[:, i : (i + 1)] > 0) > 0
@@ -2247,17 +2256,20 @@ def hmrfmix_concatenate_pipeline(
         last_taus = res["new_taus"]
         last_assignment = res["new_assignment"]
         log_persample_weights = np.ones((X.shape[2], n_samples)) * (-np.log(X.shape[2]))
-        for sidx in range(n_samples):
-            index = np.where(sample_ids == sidx)[0]
-            this_persample_weight = np.bincount(
-                res["new_assignment"][index], minlength=X.shape[2]
-            ) / len(index)
-            log_persample_weights[:, sidx] = np.where(
-                this_persample_weight > 0, np.log(this_persample_weight), -50
-            )
-            log_persample_weights[:, sidx] = log_persample_weights[
-                :, sidx
-            ] - scipy.special.logsumexp(log_persample_weights[:, sidx])
+        log_persample_weights[:, :] = np.bincount(res["new_assignment"], minlength=X.shape[2]).reshape((-1,1)) / len(res["new_assignment"])
+        log_persample_weights = np.where(log_persample_weights > 0, np.log(log_persample_weights), -50)
+        log_persample_weights = log_persample_weights - scipy.special.logsumexp(log_persample_weights, axis=0, keepdims=True)
+        # for sidx in range(n_samples):
+        #     index = np.where(sample_ids == sidx)[0]
+        #     this_persample_weight = np.bincount(
+        #         res["new_assignment"][index], minlength=X.shape[2]
+        #     ) / len(index)
+        #     log_persample_weights[:, sidx] = np.where(
+        #         this_persample_weight > 0, np.log(this_persample_weight), -50
+        #     )
+        #     log_persample_weights[:, sidx] = log_persample_weights[
+        #         :, sidx
+        #     ] - scipy.special.logsumexp(log_persample_weights[:, sidx])
 
 
 ############################################################
