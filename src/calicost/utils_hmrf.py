@@ -231,7 +231,7 @@ def multislice_adjacency(
     return adjacency_mat, smooth_mat
 
 
-def rectangle_initialize_initial_clone(coords, n_clones, random_state=0):
+def rectangle_initialize_initial_clone(coords, n_clones, random_state=0, EPS=1e-8):
     """
     Initialize clone assignment by partition space into p * p blocks (s.t. p * p >= n_clones), and assign each block a clone id.
 
@@ -252,17 +252,18 @@ def rectangle_initialize_initial_clone(coords, n_clones, random_state=0):
     p = int(np.ceil(np.sqrt(n_clones)))
     # partition the range of x and y axes
     px = np.random.dirichlet(np.ones(p) * 10)
-    px[-1] += 1e-4
-    xrange = [np.percentile(coords[:, 0], 5), np.percentile(coords[:, 0], 95)]
-    xboundary = xrange[0] + (xrange[1] - xrange[0]) * np.cumsum(px)
+    px[-1] -= EPS
+    xboundary = np.percentile(coords[:, 0], 100 * np.cumsum(px))
     xboundary[-1] = np.max(coords[:, 0]) + 1
     xdigit = np.digitize(coords[:, 0], xboundary, right=True)
-    py = np.random.dirichlet(np.ones(p) * 10)
-    py[-1] += 1e-4
-    yrange = [np.percentile(coords[:, 1], 5), np.percentile(coords[:, 1], 95)]
-    yboundary = yrange[0] + (yrange[1] - yrange[0]) * np.cumsum(py)
-    yboundary[-1] = np.max(coords[:, 1]) + 1
-    ydigit = np.digitize(coords[:, 1], yboundary, right=True)
+    ydigit = np.zeros(coords.shape[0], dtype=int)
+    for x in range(p):
+        idx_xbin = np.where(xdigit == x)[0]
+        py = np.random.dirichlet(np.ones(p) * 10)
+        py[-1] -= EPS
+        yboundary = np.percentile(coords[idx_xbin, 1], 100 * np.cumsum(py))
+        yboundary[-1] = np.max(coords[:, 1]) + 1
+        ydigit[idx_xbin] = np.digitize(coords[idx_xbin, 1], yboundary, right=True)
     block_id = xdigit * p + ydigit
     # assigning blocks to clone (note that if sqrt(n_clone) is not an integer, multiple blocks can be assigneed to one clone)
     # block_clone_map = np.random.randint(low=0, high=n_clones, size=p**2)
