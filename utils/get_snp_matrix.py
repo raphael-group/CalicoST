@@ -44,8 +44,8 @@ def process_snp_phasing(cellsnp_folder, eagle_folder, outputfile):
     rows, cols = DP.nonzero()
     cell = sample_list[cols]
     snp_id = snp_list[rows]
-    DP_df = DP[DP.nonzero()].A.flatten()
-    AD_df = AD[DP.nonzero()].A.flatten()
+    DP_df = DP[DP.nonzero()].toarray().flatten()
+    AD_df = AD[DP.nonzero()].toarray().flatten()
     GT = [snp_gt_map[x] for x in snp_id]
     df = pd.DataFrame({"cell":cell, "snp_id":snp_id, "DP":DP_df, "AD":AD_df, \
                        "CHROM":[int(x.split("_")[0]) for x in snp_id], "POS":[int(x.split("_")[1]) for x in snp_id], "GT":GT})
@@ -94,7 +94,7 @@ def cell_by_gene_lefthap_counts(cellsnp_folder, eagle_folder, barcode_list):
     AD = AD[is_phased,:]
 
     # phasing
-    phased_AD = np.where( (df_snp.GT.values == "0|1").reshape(-1,1), AD.A, (DP-AD).A )
+    phased_AD = np.where( (df_snp.GT.values == "0|1").reshape(-1,1), AD.toarray(), (DP-AD).toarray() )
     phased_AD = scipy.sparse.csr_matrix(phased_AD)
 
     # re-order based on barcode_list

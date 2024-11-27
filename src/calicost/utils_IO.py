@@ -41,7 +41,7 @@ def load_data(
 
         raise RuntimeError()
 
-    adata.layers["count"] = adata.X.A.astype(int)
+    adata.layers["count"] = adata.X.toarray().astype(int)
     cell_snp_Aallele = scipy.sparse.load_npz(f"{snp_dir}/cell_snp_Aallele.npz")
     cell_snp_Ballele = scipy.sparse.load_npz(f"{snp_dir}/cell_snp_Ballele.npz")
     unique_snp_ids = np.load(f"{snp_dir}/unique_snp_ids.npy", allow_pickle=True)
@@ -100,8 +100,8 @@ def load_data(
 
     # filter out spots with too small number of SNP-covering UMIs
     indicator = (
-        np.sum(cell_snp_Aallele, axis=1).A.flatten()
-        + np.sum(cell_snp_Ballele, axis=1).A.flatten()
+        np.asarray(np.sum(cell_snp_Aallele, axis=1)).flatten()
+        + np.asarray(np.sum(cell_snp_Ballele, axis=1)).flatten()
         >= min_snpumis
     )
     adata = adata[indicator, :]
@@ -109,9 +109,9 @@ def load_data(
     cell_snp_Ballele = cell_snp_Ballele[indicator, :]
 
     # filter out genes that are expressed in <0.5% cells
-    indicator = (
+    indicator = np.asarray(
         np.sum(adata.X > 0, axis=0) >= min_percent_expressed_spots * adata.shape[0]
-    ).A.flatten()
+    ).flatten()
     genenames = set(list(adata.var.index[indicator]))
     adata = adata[:, indicator]
     logger.info(adata)
@@ -180,7 +180,7 @@ def load_data(
         adata.obs["tumor_annotation"][adata.obs.index.isin(normal_barcodes)] = "normal"
         logger.info(adata.obs["tumor_annotation"].value_counts())
 
-    return adata, cell_snp_Aallele.A, cell_snp_Ballele.A, unique_snp_ids
+    return adata, cell_snp_Aallele.toarray(), cell_snp_Ballele.toarray(), unique_snp_ids
 
 
 def load_joint_data(
@@ -247,7 +247,7 @@ def load_joint_data(
             )
             raise RuntimeError()
 
-        adatatmp.layers["count"] = adatatmp.X.A
+        adatatmp.layers["count"] = adatatmp.X.toarray()
         # reorder anndata spots to have the same order as df_this_barcode
         idx_argsort = pd.Categorical(
             adatatmp.obs.index, categories=list(df_this_barcode.barcode), ordered=True
@@ -356,8 +356,8 @@ def load_joint_data(
 
     # filter out spots with too small number of SNP-covering UMIs
     indicator = (
-        np.sum(cell_snp_Aallele, axis=1).A.flatten()
-        + np.sum(cell_snp_Ballele, axis=1).A.flatten()
+        np.asarray(np.sum(cell_snp_Aallele, axis=1)).flatten()
+        + np.asarray(np.sum(cell_snp_Ballele, axis=1)).flatten()
         >= min_snpumis
     )
     adata = adata[indicator, :]
@@ -369,9 +369,9 @@ def load_joint_data(
         ]
 
     # filter out genes that are expressed in <min_percent_expressed_spots cells
-    indicator = (
+    indicator = np.asarray(
         np.sum(adata.X > 0, axis=0) >= min_percent_expressed_spots * adata.shape[0]
-    ).A.flatten()
+    ).flatten()
     genenames = set(list(adata.var.index[indicator]))
     adata = adata[:, indicator]
     logger.info(adata)
@@ -441,8 +441,8 @@ def load_joint_data(
 
     return (
         adata,
-        cell_snp_Aallele.A,
-        cell_snp_Ballele.A,
+        cell_snp_Aallele.toarray(),
+        cell_snp_Ballele.toarray(),
         unique_snp_ids,
         across_slice_adjacency_mat,
     )
@@ -546,7 +546,7 @@ def filter_genes_barcodes_hatchetblock(
     # filter out genes that are expressed in <0.5% cells
     indicator = (
         np.sum(adata.X > 0, axis=0) >= min_spot_percent * adata.shape[0]
-    ).A.flatten()
+    ).toarray().flatten()
     genenames = set(list(adata.var.index[indicator]))
     adata = adata[:, indicator]
     logger.info(adata)
@@ -663,7 +663,7 @@ def load_slidedna_readcount(
         )
     )
     tmpdf = pd.read_csv(bead_file, header=0, sep=",", index_col=0)
-    tmpdf = tmpdf.join(pd.DataFrame(counts.A, index=tmpdf.index))
+    tmpdf = tmpdf.join(pd.DataFrame(counts.toarray(), index=tmpdf.index))
     # keep only the spots in retained_barcodes
     tmpdf = tmpdf[tmpdf.index.isin(retained_barcodes)]
     # reorder by retained_barcodes

@@ -85,7 +85,7 @@ def choose_adjacency_by_readcounts(
             coords, unit_xsquared, unit_ysquared, ratio * base_ratio
         )
         smooth_mat.setdiag(1)
-        if np.median(np.sum(smooth_mat > 0, axis=0).A.flatten()) > maxspots_pooling:
+        if np.median(np.asarray(np.sum(smooth_mat > 0, axis=0)).flatten()) > maxspots_pooling:
             s_ratio = ratio - 1
             break
         s_ratio = ratio
@@ -105,7 +105,7 @@ def choose_adjacency_by_readcounts(
         adjacency_mat = adjacency_mat - smooth_mat
         adjacency_mat[adjacency_mat < 0] = 0
         
-        if np.median(np.sum(adjacency_mat, axis=0).A.flatten()) >= 6:
+        if np.median(np.asarray(np.sum(adjacency_mat, axis=0)).flatten()) >= 6:
             logger.info(f"Bandwidth={bandwidth}")
             break
         
@@ -220,8 +220,8 @@ def multislice_adjacency(
         else:
             raise ("Unknown adjacency construction method")
         # tmpsmooth_mat, tmpadjacency_mat = choose_adjacency_by_readcounts_slidedna(this_coords, maxspots_pooling=config["maxspots_pooling"])
-        adjacency_mat.append(tmpadjacency_mat.A)
-        smooth_mat.append(tmpsmooth_mat.A)
+        adjacency_mat.append(tmpadjacency_mat.toarray())
+        smooth_mat.append(tmpsmooth_mat.toarray())
     adjacency_mat = scipy.linalg.block_diag(*adjacency_mat)
     adjacency_mat = scipy.sparse.csr_matrix(adjacency_mat)
     if not across_slice_adjacency_mat is None:
@@ -231,7 +231,7 @@ def multislice_adjacency(
     return adjacency_mat, smooth_mat
 
 
-def rectangle_initialize_initial_clone(coords, n_clones, random_state=0):
+def rectangle_initialize_initial_clone(coords, n_clones, random_state=0, EPS=1e-8):
     """
     Initialize clone assignment by partition space into p * p blocks (s.t. p * p >= n_clones), and assign each block a clone id.
 
@@ -252,17 +252,18 @@ def rectangle_initialize_initial_clone(coords, n_clones, random_state=0):
     p = int(np.ceil(np.sqrt(n_clones)))
     # partition the range of x and y axes
     px = np.random.dirichlet(np.ones(p) * 10)
-    px[-1] += 1e-4
-    xrange = [np.percentile(coords[:, 0], 5), np.percentile(coords[:, 0], 95)]
-    xboundary = xrange[0] + (xrange[1] - xrange[0]) * np.cumsum(px)
+    px[-1] -= EPS
+    xboundary = np.percentile(coords[:, 0], 100 * np.cumsum(px))
     xboundary[-1] = np.max(coords[:, 0]) + 1
     xdigit = np.digitize(coords[:, 0], xboundary, right=True)
-    py = np.random.dirichlet(np.ones(p) * 10)
-    py[-1] += 1e-4
-    yrange = [np.percentile(coords[:, 1], 5), np.percentile(coords[:, 1], 95)]
-    yboundary = yrange[0] + (yrange[1] - yrange[0]) * np.cumsum(py)
-    yboundary[-1] = np.max(coords[:, 1]) + 1
-    ydigit = np.digitize(coords[:, 1], yboundary, right=True)
+    ydigit = np.zeros(coords.shape[0], dtype=int)
+    for x in range(p):
+        idx_xbin = np.where(xdigit == x)[0]
+        py = np.random.dirichlet(np.ones(p) * 10)
+        py[-1] -= EPS
+        yboundary = np.percentile(coords[idx_xbin, 1], 100 * np.cumsum(py))
+        yboundary[-1] = np.max(coords[:, 1]) + 1
+        ydigit[idx_xbin] = np.digitize(coords[idx_xbin, 1], yboundary, right=True)
     block_id = xdigit * p + ydigit
     # assigning blocks to clone (note that if sqrt(n_clone) is not an integer, multiple blocks can be assigneed to one clone)
     # block_clone_map = np.random.randint(low=0, high=n_clones, size=p**2)
