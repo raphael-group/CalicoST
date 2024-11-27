@@ -15,4 +15,3 @@ from simple_sctransform import *
 
 import warnings
 from statsmodels.tools.sm_exceptions import ValueWarning
-
