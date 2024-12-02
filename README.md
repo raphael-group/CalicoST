@@ -72,7 +72,7 @@ Replace the following paths `config.yaml`:
 
 Then you can run preprocessing pipeline by
 ```
-snakemake --cores <number threads> --configfile config.yaml --snakefile calicost.smk all
+snakemake --cores <number threads> --configfile config.yaml --snakefile calicost.smk --keep-incomplete all
 ```
 
 ### Inferring tumor purity per spot (optional)
@@ -125,7 +125,7 @@ To avoid falling into local maxima in CalicoST's optimization objective, we reco
 Then run CalicoST by
 ```
 cd <directory of downloaded example data>
-snakemake --cores 5 --configfile example_config.yaml --snakefile <calicost_dir>/calicost.smk --keep-incomplete all
+snakemake --cores 5 --configfile example_config.yaml --snakefile <calicost_dir>/calicost.smk all
 ```
 
 CalicoST takes about 69 minutes to finish on this example using 5 cores on an HPC. -->
