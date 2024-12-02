@@ -1,6 +1,7 @@
 import numpy as np
 import pandas as pd
 import scipy
+from pathlib import Path
 import calicost.arg_parse
 import calicost.parse_input
 
@@ -23,6 +24,13 @@ rule link_or_merge_bam:
         "{outputdir}/logs/link_or_merge_bam.log"
     run:
         if "bamlist" in config:
+            # check all file exists:
+            df_entries = pd.read_csv(config["bamlist"], sep='\t', index_col=None, header=None)
+            for i in range(df_entries.shape[0]):
+                assert Path(f"{df_entries.iloc[i,2]}/filtered_feature_bc_matrix/barcodes.tsv.gz").exists() or Path(f"{df_entries.iloc[i,2]}/filtered_feature_bc_matrix/barcodes.tsv").exists(), f"{df_entries.iloc[i,2]}/filtered_feature_bc_matrix/barcodes.tsv(.gz) doesn't exist!"
+                assert Path(f"{df_entries.iloc[i,2]}/possorted_genome_bam.bam").exists(), f"{df_entries.iloc[i,2]}/possorted_genome_bam.bam doesn't exist!"
+                assert Path(f"{df_entries.iloc[i,2]}/possorted_genome_bam.bam.bai").exists(), f"{df_entries.iloc[i,2]}/possorted_genome_bam.bam.bai doesn't exist!"
+
             # merged BAM file
             shell(f"python {config['calicost_dir']}/utils/merge_bamfile.py -b {config['bamlist']} -o {params.outputdir}/ >> {log} 2>&1")
             shell(f"samtools sort -m {params.samtools_sorting_mem} -o {output.bam} {params.outputdir}/unsorted_possorted_genome_bam.bam >> {log} 2>&1")
@@ -30,22 +38,32 @@ rule link_or_merge_bam:
             shell(f"rm -fr {params.outputdir}/unsorted_possorted_genome_bam.bam")
             
             # merged barcodes
-            df_entries = pd.read_csv(config["bamlist"], sep='\t', index_col=None, header=None)
             df_barcodes = []
             for i in range(df_entries.shape[0]):
-                tmpdf = pd.read_csv(f"{df_entries.iloc[i,2]}/filtered_feature_bc_matrix/barcodes.tsv.gz", header=None, index_col=None)
+                if Path(f"{df_entries.iloc[i,2]}/filtered_feature_bc_matrix/barcodes.tsv.gz").exists():
+                    tmpdf = pd.read_csv(f"{df_entries.iloc[i,2]}/filtered_feature_bc_matrix/barcodes.tsv.gz", header=None, index_col=None)
+                else:
+                    tmpdf = pd.read_csv(f"{df_entries.iloc[i,2]}/filtered_feature_bc_matrix/barcodes.tsv", header=None, index_col=None)
                 tmpdf.iloc[:,0] = [f"{x}_{df_entries.iloc[i,1]}" for x in tmpdf.iloc[:,0]]
                 df_barcodes.append( tmpdf )
             df_barcodes = pd.concat(df_barcodes, ignore_index=True)
             df_barcodes.to_csv(f"{output.barcodefile}", sep='\t', index=False, header=False)
         else:
+            # check all file exists:
+            assert Path(f"{config['spaceranger_dir']}/filtered_feature_bc_matrix/barcodes.tsv.gz").exists() or Path(f"{config['spaceranger_dir']}/filtered_feature_bc_matrix/barcodes.tsv").exists(), f"{config['spaceranger_dir']}/filtered_feature_bc_matrix/barcodes.tsv(.gz) doesn't exist!"
+            assert Path(f"{config['spaceranger_dir']}/possorted_genome_bam.bam").exists(), f"{config['spaceranger_dir']}/possorted_genome_bam.bam doesn't exist!"
+            assert Path(f"{config['spaceranger_dir']}/possorted_genome_bam.bam.bai").exists(), f"{config['spaceranger_dir']}/possorted_genome_bam.bam.bai doesn't exist!"
+
             # BAM file
             assert "spaceranger_dir" in config
             print("softlink of possorted_genome_bam.bam")
             shell(f"ln -sf -T {config['spaceranger_dir']}/possorted_genome_bam.bam {output.bam}")
             shell(f"ln -sf -T {config['spaceranger_dir']}/possorted_genome_bam.bam.bai {output.bai}")
             # barcodes
-            shell(f"gunzip -c {config['spaceranger_dir']}/filtered_feature_bc_matrix/barcodes.tsv.gz > {output.barcodefile}")
+            if Path(f"{config['spaceranger_dir']}/filtered_feature_bc_matrix/barcodes.tsv.gz").exists():
+                shell(f"gunzip -c {config['spaceranger_dir']}/filtered_feature_bc_matrix/barcodes.tsv.gz > {output.barcodefile}")
+            else:
+                shell(f"cp {config['spaceranger_dir']}/filtered_feature_bc_matrix/barcodes.tsv > {output.barcodefile}")
 
 
 

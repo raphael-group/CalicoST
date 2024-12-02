@@ -125,7 +125,7 @@ To avoid falling into local maxima in CalicoST's optimization objective, we reco
 Then run CalicoST by
 ```
 cd <directory of downloaded example data>
-snakemake --cores 5 --configfile example_config.yaml --snakefile <calicost_dir>/calicost.smk all
+snakemake --cores 5 --configfile example_config.yaml --snakefile <calicost_dir>/calicost.smk --keep-incomplete all
 ```
 
 CalicoST takes about 69 minutes to finish on this example using 5 cores on an HPC. -->
