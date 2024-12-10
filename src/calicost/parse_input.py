@@ -96,7 +96,7 @@ def parse_visium(config):
     cell_snp_Aallele = cell_snp_Aallele[:, idx_snps_within]
     cell_snp_Ballele = cell_snp_Ballele[:, idx_snps_within]
     unique_snp_ids = unique_snp_ids[idx_snps_within]
-    df_gene_snp = create_haplotype_block_ranges(df_gene_snp, adata, cell_snp_Aallele, cell_snp_Ballele, unique_snp_ids)
+    df_gene_snp = create_haplotype_block_ranges(df_gene_snp, adata, cell_snp_Aallele, cell_snp_Ballele, unique_snp_ids, initial_min_umi=config['initial_min_umi'])
     # lengths, single_X, single_base_nb_mean, single_total_bb_RD, log_sitewise_transmat = summarize_counts_for_blocks(df_gene_snp, \
     #         adata, cell_snp_Aallele, cell_snp_Ballele, unique_snp_ids, nu=config['nu'], logphase_shift=config['logphase_shift'], geneticmap_file=config['geneticmap_file'])
     # # infer an initial phase using pseudobulk
