@@ -26,6 +26,7 @@ def load_default_config():
         "supervision_clone_file" : None,
         "filtergenelist_file" : None,
         "filterregion_file" : None,
+        "initial_min_umi" : 15,
         "secondary_min_umi" : 300,
         "min_snpumi_perspot" : 50,
         'min_percent_expressed_spots' : 0.005,
@@ -86,6 +87,7 @@ def load_default_config():
         "supervision_clone_file" : "str",
         "filtergenelist_file" : "str",
         "filterregion_file" : "str",
+        "initial_min_umi" : "int",
         "secondary_min_umi" : "int",
         "min_snpumi_perspot" : "int",
         'min_percent_expressed_spots' : "float",
@@ -130,7 +132,7 @@ def load_default_config():
 
     category_names = ["", "# supporting files and preprocessing arguments", "# phase switch probability", "# HMRF configurations", "# HMM configurations", "# integer copy number"]
     category_elements = [["input_filelist", "spaceranger_dir", "snp_dir", "output_dir"], \
-                         ["geneticmap_file", "hgtable_file", "normalidx_file", "tumorprop_file", "alignment_files", "supervision_clone_file", "filtergenelist_file", "filterregion_file", "secondary_min_umi", "min_snpumi_perspot", "min_percent_expressed_spots", "bafonly"], \
+                         ["geneticmap_file", "hgtable_file", "normalidx_file", "tumorprop_file", "alignment_files", "supervision_clone_file", "filtergenelist_file", "filterregion_file", "initial_min_umi", "secondary_min_umi", "min_snpumi_perspot", "min_percent_expressed_spots", "bafonly"], \
                          ["nu", "logphase_shift", "npart_phasing"], \
                          ["n_clones", "n_clones_rdr", "min_spots_per_clone", "min_avgumi_per_clone", "maxspots_pooling", "tumorprop_threshold",  "max_iter_outer", "nodepotential", "initialization_method", "num_hmrf_initialization_start",  "num_hmrf_initialization_end", "spatial_weight", "construct_adjacency_method", "construct_adjacency_w"], \
                          ["n_states", "params", "t", "t_phaseing", "fix_NB_dispersion", "shared_NB_dispersion", "fix_BB_dispersion", "shared_BB_dispersion", "max_iter", "tol", "gmm_random_state", "np_threshold", "np_eventminlen"], \
