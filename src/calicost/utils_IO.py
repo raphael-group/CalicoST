@@ -28,7 +28,6 @@ def load_data(spaceranger_dir, snp_dir, filtergenelist_file, filterregion_file, 
     else:
         logging.error(f"{spaceranger_dir} directory doesn't have a filtered_feature_bc_matrix.h5 or filtered_feature_bc_matrix.h5ad file!")
 
-    adata.layers["count"] = adata.X.A.astype(int)
     cell_snp_Aallele = scipy.sparse.load_npz(f"{snp_dir}/cell_snp_Aallele.npz")
     cell_snp_Ballele = scipy.sparse.load_npz(f"{snp_dir}/cell_snp_Ballele.npz")
     unique_snp_ids = np.load(f"{snp_dir}/unique_snp_ids.npy", allow_pickle=True)
@@ -63,7 +62,7 @@ def load_data(spaceranger_dir, snp_dir, filtergenelist_file, filterregion_file, 
     adata = adata[ pd.Categorical(adata.obs.index, categories=list(snp_barcodes.barcodes), ordered=True).argsort(), : ]
 
     # filter out spots with too small number of UMIs
-    indicator = (np.sum(adata.layers["count"], axis=1) > min_snpumis)
+    indicator = (np.sum(adata.X, axis=1).A.flatten() > min_snpumis)
     adata = adata[indicator, :]
     cell_snp_Aallele = cell_snp_Aallele[indicator, :]
     cell_snp_Ballele = cell_snp_Ballele[indicator, :]
@@ -79,7 +78,7 @@ def load_data(spaceranger_dir, snp_dir, filtergenelist_file, filterregion_file, 
     genenames = set(list(adata.var.index[indicator]))
     adata = adata[:, indicator]
     print(adata)
-    print("median UMI after filtering out genes < 0.5% of cells = {}".format( np.median(np.sum(adata.layers["count"], axis=1)) ))
+    print("median UMI after filtering out genes < 0.5% of cells = {}".format( np.median(np.sum(adata.X, axis=1).A.flatten()) ))
 
     # remove genes in filtergenelist_file
     # ig_gene_list = pd.read_csv("/n/fs/ragr-data/users/congma/references/cellranger_refdata-gex-GRCh38-2020-A/genes/ig_gene_list.txt", header=None)
@@ -88,7 +87,7 @@ def load_data(spaceranger_dir, snp_dir, filtergenelist_file, filterregion_file, 
         filter_gene_list = set(list( filter_gene_list.iloc[:,0] ))
         indicator_filter = np.array([ (not x in filter_gene_list) for x in adata.var.index ])
         adata = adata[:, indicator_filter]
-        print("median UMI after filtering out genes in filtergenelist_file = {}".format( np.median(np.sum(adata.layers["count"], axis=1)) ))
+        print("median UMI after filtering out genes in filtergenelist_file = {}".format( np.median(np.sum(adata.X, axis=1).A.flatten()) ))
 
     if not filterregion_file is None:
         regions = pd.read_csv(filterregion_file, header=None, sep="\t", names=["Chrname", "Start", "End"])
@@ -111,8 +110,8 @@ def load_data(spaceranger_dir, snp_dir, filtergenelist_file, filterregion_file, 
         unique_snp_ids = unique_snp_ids[indicator_filter]
 
     clf = LocalOutlierFactor(n_neighbors=200)
-    label = clf.fit_predict( np.sum(adata.layers["count"], axis=0).reshape(-1,1) )
-    adata.layers["count"][:, np.where(label==-1)[0]] = 0
+    label = clf.fit_predict( np.sum(adata.X, axis=0).A.flatten().reshape(-1,1) )
+    adata.X[:, np.where(label==-1)[0]] = 0
     print("filter out {} outlier genes.".format( np.sum(label==-1) ))
 
     if not normalidx_file is None:
@@ -121,7 +120,7 @@ def load_data(spaceranger_dir, snp_dir, filtergenelist_file, filterregion_file, 
         adata.obs["tumor_annotation"][adata.obs.index.isin(normal_barcodes)] = "normal"
         print( adata.obs["tumor_annotation"].value_counts() )
     
-    return adata, cell_snp_Aallele.A, cell_snp_Ballele.A, unique_snp_ids
+    return adata, cell_snp_Aallele, cell_snp_Ballele, unique_snp_ids
 
 
 def load_joint_data(input_filelist, snp_dir, alignment_files, filtergenelist_file, filterregion_file, normalidx_file, min_snpumis=50, min_percent_expressed_spots=0.005):
@@ -157,7 +156,6 @@ def load_joint_data(input_filelist, snp_dir, alignment_files, filtergenelist_fil
         else:
             logging.error(f"{df_meta['spaceranger_dir'].iloc[i]} directory doesn't have a filtered_feature_bc_matrix.h5 or filtered_feature_bc_matrix.h5ad file!")
 
-        adatatmp.layers["count"] = adatatmp.X.A
         # reorder anndata spots to have the same order as df_this_barcode
         idx_argsort = pd.Categorical(adatatmp.obs.index, categories=list(df_this_barcode.barcode), ordered=True).argsort()
         adatatmp = adatatmp[idx_argsort, :]
@@ -187,9 +185,9 @@ def load_joint_data(input_filelist, snp_dir, alignment_files, filtergenelist_fil
             adata = adatatmp
         else:
             adata = anndata.concat([adata, adatatmp], join="outer")
-    # replace nan with 0
-    adata.layers["count"][np.isnan(adata.layers["count"])] = 0
-    adata.layers["count"] = adata.layers["count"].astype(int)
+    # # replace nan with 0
+    # adata.layers["count"][np.isnan(adata.layers["count"])] = 0
+    # adata.layers["count"] = adata.layers["count"].astype(int)
 
     # shared barcodes between adata and SNPs
     shared_barcodes = set(list(snp_barcodes.barcodes)) & set(list(adata.obs.index))
@@ -228,7 +226,7 @@ def load_joint_data(input_filelist, snp_dir, alignment_files, filtergenelist_fil
         across_slice_adjacency_mat += across_slice_adjacency_mat.T
     
     # filter out spots with too small number of UMIs
-    indicator = (np.sum(adata.layers["count"], axis=1) >= min_snpumis)
+    indicator = (np.sum(adata.X, axis=1).A.flatten() >= min_snpumis)
     adata = adata[indicator, :]
     cell_snp_Aallele = cell_snp_Aallele[indicator, :]
     cell_snp_Ballele = cell_snp_Ballele[indicator, :]
@@ -248,14 +246,14 @@ def load_joint_data(input_filelist, snp_dir, alignment_files, filtergenelist_fil
     genenames = set(list(adata.var.index[indicator]))
     adata = adata[:, indicator]
     print(adata)
-    print("median UMI after filtering out genes < 0.5% of cells = {}".format( np.median(np.sum(adata.layers["count"], axis=1)) ))
+    print("median UMI after filtering out genes < 0.5% of cells = {}".format( np.median(np.sum(adata.X, axis=1).A.flatten()) ))
 
     if not filtergenelist_file is None:
         filter_gene_list = pd.read_csv(filtergenelist_file, header=None)
         filter_gene_list = set(list( filter_gene_list.iloc[:,0] ))
         indicator_filter = np.array([ (not x in filter_gene_list) for x in adata.var.index ])
         adata = adata[:, indicator_filter]
-        print("median UMI after filtering out genes in filtergenelist_file = {}".format( np.median(np.sum(adata.layers["count"], axis=1)) ))
+        print("median UMI after filtering out genes in filtergenelist_file = {}".format( np.median(np.sum(adata.X, axis=1).A.flatten()) ))
 
     if not filterregion_file is None:
         regions = pd.read_csv(filterregion_file, header=None, sep="\t", names=["Chrname", "Start", "End"])
@@ -278,8 +276,8 @@ def load_joint_data(input_filelist, snp_dir, alignment_files, filtergenelist_fil
         unique_snp_ids = unique_snp_ids[indicator_filter]
         
     clf = LocalOutlierFactor(n_neighbors=200)
-    label = clf.fit_predict( np.sum(adata.layers["count"], axis=0).reshape(-1,1) )
-    adata.layers["count"][:, np.where(label==-1)[0]] = 0
+    label = clf.fit_predict( np.sum(adata.X, axis=0).A.flatten().reshape(-1,1) )
+    adata.X[:, np.where(label==-1)[0]] = 0
     print("filter out {} outlier genes.".format( np.sum(label==-1) ))
 
     if not normalidx_file is None:
@@ -288,7 +286,7 @@ def load_joint_data(input_filelist, snp_dir, alignment_files, filtergenelist_fil
         adata.obs["tumor_annotation"][adata.obs.index.isin(normal_barcodes)] = "normal"
         print( adata.obs["tumor_annotation"].value_counts() )
 
-    return adata, cell_snp_Aallele.A, cell_snp_Ballele.A, unique_snp_ids, across_slice_adjacency_mat
+    return adata, cell_snp_Aallele, cell_snp_Ballele, unique_snp_ids, across_slice_adjacency_mat
 
 
 def load_slidedna_data(snp_dir, bead_file, filterregion_bedfile):
@@ -344,7 +342,7 @@ def taking_shared_barcodes(snp_barcodes, cell_snp_Aallele, cell_snp_Ballele, ada
 
 def filter_genes_barcodes_hatchetblock(adata, cell_snp_Aallele, cell_snp_Ballele, snp_barcodes, unique_snp_ids, config, min_umi=100, min_spot_percent=0.005, ordered_chr=[str(c) for c in range(1,23)]):
     # filter out spots with too small number of UMIs
-    indicator = (np.sum(adata.layers["count"], axis=1) > min_umi)
+    indicator = (np.sum(adata.X, axis=1).A.flatten() > min_umi)
     adata = adata[indicator, :]
     cell_snp_Aallele = cell_snp_Aallele[indicator, :]
     cell_snp_Ballele = cell_snp_Ballele[indicator, :]
@@ -354,14 +352,14 @@ def filter_genes_barcodes_hatchetblock(adata, cell_snp_Aallele, cell_snp_Ballele
     genenames = set(list(adata.var.index[indicator]))
     adata = adata[:, indicator]
     print(adata)
-    print("median UMI after filtering out genes < 0.5% of cells = {}".format( np.median(np.sum(adata.layers["count"], axis=1)) ))
+    print("median UMI after filtering out genes < 0.5% of cells = {}".format( np.median(np.sum(adata.X, axis=1).A.flatten()) ))
 
     if not config["filtergenelist_file"] is None:
         filter_gene_list = pd.read_csv(config["filtergenelist_file"], header=None)
         filter_gene_list = set(list( filter_gene_list.iloc[:,0] ))
         indicator_filter = np.array([ (not x in filter_gene_list) for x in adata.var.index ])
         adata = adata[:, indicator_filter]
-        print("median UMI after filtering out genes in filtergenelist_file = {}".format( np.median(np.sum(adata.layers["count"], axis=1)) ))
+        print("median UMI after filtering out genes in filtergenelist_file = {}".format( np.median(np.sum(adata.X, axis=1).A.flatten()) ))
 
     if not config["filterregion_file"] is None:
         regions = pd.read_csv(config["filterregion_file"], header=None, sep="\t", names=["Chrname", "Start", "End"])
@@ -517,23 +515,51 @@ def combine_gene_snps(unique_snp_ids, hgtable_file, adata):
 
     # check the what gene each SNP belongs to
     # for each SNP (with not null snp_id), find the previous gene (is_interval == True) such that the SNP start position is within the gene start and end interval
-    vec_is_interval = df_gene_snp.is_interval.values
+    # vector of chr, start, and end for genes
+    gene_names = df_gene_snp[df_gene_snp.is_interval].gene.values
+    gene_chr = df_gene_snp[df_gene_snp.is_interval].CHR.values
+    gene_start = df_gene_snp[df_gene_snp.is_interval].START.values
+    gene_end = df_gene_snp[df_gene_snp.is_interval].END.values
+    # vector of chr, start for all
     vec_chr = df_gene_snp.CHR.values
     vec_start = df_gene_snp.START.values
-    vec_end = df_gene_snp.END.values
+    vec_genes = df_gene_snp.gene.values
+    last_j = 0
     for i in np.where(df_gene_snp.gene.isnull())[0]:
         if i == 0:
             continue
         this_pos = vec_start[i]
-        j = i - 1
-        while j >= 0 and j >= i-50 and vec_chr[i] == vec_chr[j]:
-            if vec_is_interval[j] and vec_start[j] <= this_pos and vec_end[j] > this_pos:
-                df_gene_snp.iloc[i, 4] = df_gene_snp.iloc[j]["gene"]
+        j = last_j
+        while j < len(gene_chr) and (gene_chr[j] < vec_chr[i] or (gene_chr[j] == vec_chr[i] and gene_end[j] <= this_pos)):
+            j += 1
+        while j < len(gene_chr) and j >= last_j and gene_chr[j] == vec_chr[i]:
+            if gene_chr[j] == vec_chr[i] and gene_start[j] <= this_pos and gene_end[j] > this_pos:
+                vec_genes[i] = gene_names[j]
+                last_j = j
                 break
-            j -= 1
+            j += 1
+
+    df_gene_snp["gene"] = vec_genes
+
+    # # check the what gene each SNP belongs to
+    # # for each SNP (with not null snp_id), find the previous gene (is_interval == True) such that the SNP start position is within the gene start and end interval
+    # vec_is_interval = df_gene_snp.is_interval.values
+    # vec_chr = df_gene_snp.CHR.values
+    # vec_start = df_gene_snp.START.values
+    # vec_end = df_gene_snp.END.values
+    # for i in np.where(df_gene_snp.gene.isnull())[0]:
+    #     if i == 0:
+    #         continue
+    #     this_pos = vec_start[i]
+    #     j = i - 1
+    #     while j >= 0 and j >= i-50 and vec_chr[i] == vec_chr[j]:
+    #         if vec_is_interval[j] and vec_start[j] <= this_pos and vec_end[j] > this_pos:
+    #             df_gene_snp.iloc[i, 4] = df_gene_snp.iloc[j]["gene"]
+    #             break
+    #         j -= 1
     
     # remove SNPs that have no corresponding genes
-    df_gene_snp = df_gene_snp[~df_gene_snp.gene.isnull()]
+    # df_gene_snp = df_gene_snp[~df_gene_snp.gene.isnull()]
     return df_gene_snp
 
 
@@ -557,57 +583,99 @@ def create_haplotype_block_ranges(df_gene_snp, adata, cell_snp_Aallele, cell_snp
             block_genome_intervals.append(x)
     # get block_ranges in the index of df_gene_snp
     block_ranges = []
+    last_s = 0
+    chr_start_end = list(zip(df_gene_snp.CHR.values, df_gene_snp.START.values, df_gene_snp.END.values))
     for x in block_genome_intervals:
-        indexes = np.where((df_gene_snp.CHR.values == x[0]) & \
-                           (np.maximum(df_gene_snp.START.values, x[1]) < np.minimum(df_gene_snp.END.values, x[2])) )[0]
-        block_ranges.append( (indexes[0], indexes[-1]+1) )
-    assert np.all( np.array(np.array([x[1] for x in block_ranges[:-1]])) == np.array(np.array([x[0] for x in block_ranges[1:]])) )
+        t = next((i for i in range(last_s, len(chr_start_end)) if chr_start_end[i][0] > x[0] or chr_start_end[i][1] >= x[2]), len(chr_start_end))
+        block_ranges.append( (last_s, t) )
+        last_s = t
+    # for x in block_genome_intervals:
+    #     indexes = np.where((df_gene_snp.CHR.values == x[0]) & \
+    #                        (np.maximum(df_gene_snp.START.values, x[1]) < np.minimum(df_gene_snp.END.values, x[2])) )[0]
+    #     block_ranges.append( (indexes[0], indexes[-1]+1) )
+    # assert np.all( np.array(np.array([x[1] for x in block_ranges[:-1]])) == np.array(np.array([x[0] for x in block_ranges[1:]])) )
     # record the initial block id in df_gene_snps
-    df_gene_snp["initial_block_id"] = 0
+    initial_block_id = np.zeros(df_gene_snp.shape[0], dtype=int)
     for i,x in enumerate(block_ranges):
-        df_gene_snp.iloc[x[0]:x[1], -1] = i
+        initial_block_id[x[0]:x[1]] = i
+    df_gene_snp["initial_block_id"] = initial_block_id
 
     # second level: group the first level blocks into haplotype blocks such that the minimum SNP-covering UMI counts >= initial_min_umi
-    map_snp_index = {x:i for i,x in enumerate(unique_snp_ids)}
-    initial_block_chr = df_gene_snp.CHR.values[ np.array([x[0] for x in block_ranges]) ]
+    snpumi = np.zeros(df_gene_snp.shape[0], dtype=int)
+    snpumi[~df_gene_snp.is_interval] = np.sum(cell_snp_Aallele, axis=0).A.flatten() + np.sum(cell_snp_Ballele, axis=0).A.flatten()
+    cumsum_snpumi = np.append(0, np.cumsum(snpumi))
     block_ranges_new = []
     s = 0
-    while s < len(block_ranges):
-        t = s
-        while t <= len(block_ranges):
-            t += 1
-            reach_end = (t == len(block_ranges))
-            change_chr = (initial_block_chr[s] != initial_block_chr[t-1])
-            # count SNP-covering UMI
-            involved_snps_ids = df_gene_snp[ (df_gene_snp.initial_block_id>=s) & (df_gene_snp.initial_block_id<t) ].snp_id
-            involved_snps_ids = involved_snps_ids[~involved_snps_ids.isnull()].values
-            involved_snp_idx = np.array([map_snp_index[x] for x in involved_snps_ids])
-            this_snp_umis = 0 if len(involved_snp_idx) == 0 else np.sum(cell_snp_Aallele[:, involved_snp_idx]) + np.sum(cell_snp_Ballele[:, involved_snp_idx])
+    while s < df_gene_snp.shape[0]:
+        s_initial_block = df_gene_snp.initial_block_id.values[s]
+        t_initial_block = s_initial_block + 1
+        t = next((s + i for i in range(len(initial_block_id[s:])) if initial_block_id[s+i] >= t_initial_block), df_gene_snp.shape[0])
+        while t_initial_block <= len(block_ranges):
+            # t = s + np.where(initial_block_id[s:] < t_initial_block)[0][-1] + 1
+            reach_end = (t_initial_block == len(block_ranges))
+            change_chr = (df_gene_snp.CHR.values[s] != df_gene_snp.CHR.values[t-1])
+            # check snp UMIs
+            this_snp_umis = cumsum_snpumi[t] - cumsum_snpumi[s]
             if reach_end:
                 break
             if change_chr:
-                t -= 1
-                # re-count SNP-covering UMIs
-                involved_snps_ids = df_gene_snp.snp_id.iloc[block_ranges[s][0]:block_ranges[t-1][1]]
-                involved_snps_ids = involved_snps_ids[~involved_snps_ids.isnull()].values
-                involved_snp_idx = np.array([map_snp_index[x] for x in involved_snps_ids])
-                this_snp_umis = 0 if len(involved_snp_idx) == 0 else np.sum( cell_snp_Aallele[:, involved_snp_idx]) + np.sum(cell_snp_Ballele[:, involved_snp_idx])
+                t_initial_block -= 1
+                # t = np.where(initial_block_id < t_initial_block)[0][-1] + 1
+                t = next((s + i for i in range(len(initial_block_id[s:])) if initial_block_id[s+i] >= t_initial_block), df_gene_snp.shape[0])
+                this_snp_umis = cumsum_snpumi[t] - cumsum_snpumi[s]
                 break
             if this_snp_umis >= initial_min_umi:
                 break
+            t_initial_block += 1
+            t = next((s + i for i in range(len(initial_block_id[s:])) if initial_block_id[s+i] >= t_initial_block), df_gene_snp.shape[0])
         #
-        if this_snp_umis < initial_min_umi and s > 0 and initial_block_chr[s-1] == initial_block_chr[s]:
-            indexes = np.where(df_gene_snp.initial_block_id.isin(np.arange(s, t)))[0]
-            block_ranges_new[-1] = (block_ranges_new[-1][0], indexes[-1]+1)
+        if this_snp_umis < initial_min_umi and s > 0 and df_gene_snp.CHR.values[s-1] == df_gene_snp.CHR.values[s]:
+            block_ranges_new[-1] = (block_ranges_new[-1][0], t)
         else:
-            indexes = np.where(df_gene_snp.initial_block_id.isin(np.arange(s, t)))[0]
-            block_ranges_new.append( (indexes[0], indexes[-1]+1) )
+            block_ranges_new.append( (s, t) )
         s = t
+        
+    # map_snp_index = {x:i for i,x in enumerate(unique_snp_ids)}
+    # initial_block_chr = df_gene_snp.CHR.values[ np.array([x[0] for x in block_ranges]) ]
+    # block_ranges_new = []
+    # s = 0
+    # while s < len(block_ranges):
+    #     t = s
+    #     while t <= len(block_ranges):
+    #         t += 1
+    #         reach_end = (t == len(block_ranges))
+    #         change_chr = (initial_block_chr[s] != initial_block_chr[t-1])
+    #         # count SNP-covering UMI
+    #         involved_snps_ids = df_gene_snp[ (df_gene_snp.initial_block_id>=s) & (df_gene_snp.initial_block_id<t) ].snp_id
+    #         involved_snps_ids = involved_snps_ids[~involved_snps_ids.isnull()].values
+    #         involved_snp_idx = np.array([map_snp_index[x] for x in involved_snps_ids])
+    #         this_snp_umis = 0 if len(involved_snp_idx) == 0 else np.sum(cell_snp_Aallele[:, involved_snp_idx]) + np.sum(cell_snp_Ballele[:, involved_snp_idx])
+    #         if reach_end:
+    #             break
+    #         if change_chr:
+    #             t -= 1
+    #             # re-count SNP-covering UMIs
+    #             involved_snps_ids = df_gene_snp.snp_id.iloc[block_ranges[s][0]:block_ranges[t-1][1]]
+    #             involved_snps_ids = involved_snps_ids[~involved_snps_ids.isnull()].values
+    #             involved_snp_idx = np.array([map_snp_index[x] for x in involved_snps_ids])
+    #             this_snp_umis = 0 if len(involved_snp_idx) == 0 else np.sum( cell_snp_Aallele[:, involved_snp_idx]) + np.sum(cell_snp_Ballele[:, involved_snp_idx])
+    #             break
+    #         if this_snp_umis >= initial_min_umi:
+    #             break
+    #     #
+    #     if this_snp_umis < initial_min_umi and s > 0 and initial_block_chr[s-1] == initial_block_chr[s]:
+    #         indexes = np.where(df_gene_snp.initial_block_id.isin(np.arange(s, t)))[0]
+    #         block_ranges_new[-1] = (block_ranges_new[-1][0], indexes[-1]+1)
+    #     else:
+    #         indexes = np.where(df_gene_snp.initial_block_id.isin(np.arange(s, t)))[0]
+    #         block_ranges_new.append( (indexes[0], indexes[-1]+1) )
+    #     s = t
     
     # record the block id in df_gene_snps
-    df_gene_snp["block_id"] = 0
+    block_id = np.zeros(df_gene_snp.shape[0], dtype=int)
     for i,x in enumerate(block_ranges_new):
-        df_gene_snp.iloc[x[0]:x[1], -1] = i
+        block_id[x[0]:x[1]] = i
+    df_gene_snp["block_id"] = block_id
 
     df_gene_snp = df_gene_snp.drop(columns=["initial_block_id"])
     return df_gene_snp
@@ -625,36 +693,35 @@ def summarize_counts_for_blocks(df_gene_snp, adata, cell_snp_Aallele, cell_snp_B
     lengths : array, (n_chromosomes,)
         Number of blocks per chromosome.
 
-    single_X : array, (n_blocks, 2, n_spots)
-        Transcript counts and B allele count per block per cell.
+    sp_single_X_rdr : array, (n_blocks, n_spots)
+        Transcript counts per block per cell in csr matrix.
 
-    single_base_nb_mean : array, (n_blocks, n_spots)
-        Baseline transcript counts in normal diploid per block per cell.
+    sp_single_X_b : array, (n_blocks, n_spots)
+        B allele count per block per cell.
     
-    single_total_bb_RD : array, (n_blocks, n_spots)
+    sp_single_total_bb_RD : array, (n_blocks, n_spots)
         Total allele count per block per cell.
 
     log_sitewise_transmat : array, (n_blocks,)
         Log phase switch probability between each pair of adjacent blocks.
     """
     blocks = df_gene_snp.block_id.unique()
-    single_X = np.zeros((len(blocks), 2, adata.shape[0]), dtype=int)
-    single_base_nb_mean = np.zeros((len(blocks), adata.shape[0]))
-    single_total_bb_RD = np.zeros((len(blocks), adata.shape[0]), dtype=int)
-    # summarize counts of involved genes and SNPs within each block
-    map_snp_index = {x:i for i,x in enumerate(unique_snp_ids)}
-    df_block_contents = df_gene_snp.groupby('block_id').agg({"snp_id":list, "gene":list})
-    for b in range(df_block_contents.shape[0]):
-        # BAF (SNPs)
-        involved_snps_ids = [x for x in df_block_contents.snp_id.values[b] if not x is None]
-        involved_snp_idx = np.array([map_snp_index[x] for x in involved_snps_ids])
-        if len(involved_snp_idx) > 0:
-            single_X[b, 1, :] = np.sum( cell_snp_Aallele[:, involved_snp_idx], axis=1 )
-            single_total_bb_RD[b, :] = np.sum( cell_snp_Aallele[:, involved_snp_idx], axis=1 ) + np.sum( cell_snp_Ballele[:, involved_snp_idx], axis=1 )
-        # RDR (genes)
-        involved_genes = list(set([x for x in df_block_contents.gene.values[b] if not x is None]))
-        if len(involved_genes) > 0:
-            single_X[b, 0, :] = np.sum( adata.layers['count'][:, adata.var.index.isin(involved_genes)], axis=1 )
+
+    # transcript count
+    adata.var['row_num'] = np.arange(adata.shape[1])
+    idx_row = adata.var.loc[df_gene_snp[df_gene_snp.is_interval].gene.values].row_num
+    idx_col = df_gene_snp[df_gene_snp.is_interval].block_id.values
+    rdr_mul = scipy.sparse.csr_matrix(( np.ones(len(idx_row)), (idx_row, idx_col) ), shape=(adata.shape[1], len(blocks)))
+    sp_single_X_rdr = (adata.X @ rdr_mul).T
+    adata.var.drop(columns=['row_num'], inplace=True)
+
+    # B count and total count
+    idx_row = np.arange(cell_snp_Aallele.shape[1])
+    idx_col = df_gene_snp[~df_gene_snp.is_interval].block_id.values
+    assert len(idx_row) == len(idx_col)
+    baf_mul = scipy.sparse.csr_matrix(( np.ones(len(idx_row)), (idx_row, idx_col) ), shape=(cell_snp_Aallele.shape[1], len(blocks)))
+    sp_single_X_b = (cell_snp_Aallele @ baf_mul).T
+    sp_single_total_bb_RD = ((cell_snp_Aallele + cell_snp_Ballele) @ baf_mul).T
 
     # lengths
     lengths = np.zeros(len(df_gene_snp.CHR.unique()), dtype=int)
@@ -674,7 +741,71 @@ def summarize_counts_for_blocks(df_gene_snp, adata, cell_snp_Aallele, cell_snp_B
     # log_sitewise_transmat = log_sitewise_transmat[np.arange(0, len(log_sitewise_transmat), 2)]
     log_sitewise_transmat = log_sitewise_transmat[np.arange(1, len(log_sitewise_transmat), 2)]
 
-    return lengths, single_X, single_base_nb_mean, single_total_bb_RD, log_sitewise_transmat
+    return lengths, sp_single_X_rdr, sp_single_X_b, sp_single_total_bb_RD, log_sitewise_transmat
+
+
+# def summarize_counts_for_blocks(df_gene_snp, adata, cell_snp_Aallele, cell_snp_Ballele, unique_snp_ids, nu, logphase_shift, geneticmap_file):
+#     """
+#     Attributes:
+#     ----------
+#     df_gene_snp : pd.DataFrame
+#         Contain "block_id" column to indicate which genes/snps belong to which block.
+
+#     Returns
+#     ----------
+#     lengths : array, (n_chromosomes,)
+#         Number of blocks per chromosome.
+
+#     single_X : array, (n_blocks, 2, n_spots)
+#         Transcript counts and B allele count per block per cell.
+
+#     single_base_nb_mean : array, (n_blocks, n_spots)
+#         Baseline transcript counts in normal diploid per block per cell.
+    
+#     single_total_bb_RD : array, (n_blocks, n_spots)
+#         Total allele count per block per cell.
+
+#     log_sitewise_transmat : array, (n_blocks,)
+#         Log phase switch probability between each pair of adjacent blocks.
+#     """
+#     blocks = df_gene_snp.block_id.unique()
+#     single_X = np.zeros((len(blocks), 2, adata.shape[0]), dtype=int)
+#     single_base_nb_mean = np.zeros((len(blocks), adata.shape[0]))
+#     single_total_bb_RD = np.zeros((len(blocks), adata.shape[0]), dtype=int)
+#     # summarize counts of involved genes and SNPs within each block
+#     map_snp_index = {x:i for i,x in enumerate(unique_snp_ids)}
+#     df_block_contents = df_gene_snp.groupby('block_id').agg({"snp_id":list, "gene":list})
+#     for b in range(df_block_contents.shape[0]):
+#         # BAF (SNPs)
+#         involved_snps_ids = [x for x in df_block_contents.snp_id.values[b] if not x is None]
+#         involved_snp_idx = np.array([map_snp_index[x] for x in involved_snps_ids])
+#         if len(involved_snp_idx) > 0:
+#             single_X[b, 1, :] = np.sum( cell_snp_Aallele[:, involved_snp_idx], axis=1 ).A.flatten()
+#             single_total_bb_RD[b, :] = np.sum( cell_snp_Aallele[:, involved_snp_idx], axis=1 ).A.flatten() + np.sum( cell_snp_Ballele[:, involved_snp_idx], axis=1 ).A.flatten()
+#         # RDR (genes)
+#         involved_genes = list(set([x for x in df_block_contents.gene.values[b] if not x is None]))
+#         if len(involved_genes) > 0:
+#             single_X[b, 0, :] = np.sum( adata.layers['count'][:, adata.var.index.isin(involved_genes)], axis=1 )
+
+#     # lengths
+#     lengths = np.zeros(len(df_gene_snp.CHR.unique()), dtype=int)
+#     for i,c in enumerate( df_gene_snp.CHR.unique() ):
+#         lengths[i] = len( df_gene_snp[df_gene_snp.CHR == c].block_id.unique() )
+
+#     # phase switch probability from genetic distance
+#     sorted_chr_pos_first = df_gene_snp.groupby('block_id').agg({'CHR': 'first', 'START': 'first'})
+#     sorted_chr_pos_first = list(zip(sorted_chr_pos_first.CHR.values, sorted_chr_pos_first.START.values))
+#     sorted_chr_pos_last = df_gene_snp.groupby('block_id').agg({'CHR': 'last', 'END': 'last'})
+#     sorted_chr_pos_last = list(zip(sorted_chr_pos_last.CHR.values, sorted_chr_pos_last.END.values))
+#     #
+#     tmp_sorted_chr_pos = [val for pair in zip(sorted_chr_pos_first, sorted_chr_pos_last) for val in pair]
+#     position_cM = get_position_cM_table( tmp_sorted_chr_pos, geneticmap_file )
+#     phase_switch_prob = compute_phase_switch_probability_position(position_cM, tmp_sorted_chr_pos, nu)
+#     log_sitewise_transmat = np.minimum(np.log(0.5), np.log(phase_switch_prob) - logphase_shift)
+#     # log_sitewise_transmat = log_sitewise_transmat[np.arange(0, len(log_sitewise_transmat), 2)]
+#     log_sitewise_transmat = log_sitewise_transmat[np.arange(1, len(log_sitewise_transmat), 2)]
+
+#     return lengths, single_X, single_base_nb_mean, single_total_bb_RD, log_sitewise_transmat
 
 
 def choose_umithreshold_given_nbins(single_total_bb_RD, refined_lengths, expected_nbins):
@@ -906,7 +1037,8 @@ def create_bin_ranges(df_gene_snp, single_total_bb_RD, refined_lengths, secondar
     return df_gene_snp
 
 
-def summarize_counts_for_bins(df_gene_snp, adata, single_X, single_total_bb_RD, phase_indicator, nu, logphase_shift, geneticmap_file):
+# def summarize_counts_for_bins(df_gene_snp, adata, single_X, single_total_bb_RD, phase_indicator, nu, logphase_shift, geneticmap_file):
+def summarize_counts_for_bins(df_gene_snp, sp_single_X_rdr, sp_single_X_b, sp_single_total_bb_RD, phase_indicator, nu, logphase_shift, geneticmap_file):
     """
     Attributes:
     ----------
@@ -930,21 +1062,30 @@ def summarize_counts_for_bins(df_gene_snp, adata, single_X, single_total_bb_RD, 
     log_sitewise_transmat : array, (n_blocks,)
         Log phase switch probability between each pair of adjacent blocks.
     """
-    bins = df_gene_snp.bin_id.unique()
-    bin_single_X = np.zeros((len(bins), 2, adata.shape[0]), dtype=int)
-    bin_single_base_nb_mean = np.zeros((len(bins), adata.shape[0]))
-    bin_single_total_bb_RD = np.zeros((len(bins), adata.shape[0]), dtype=int)
-    # summarize counts of involved genes and SNPs within each block
-    df_bin_contents = df_gene_snp[~df_gene_snp.bin_id.isnull()].groupby('bin_id').agg({"block_id":set, "gene":set})
-    for b in range(df_bin_contents.shape[0]):
-        # BAF (SNPs)
-        involved_blocks = [x for x in df_bin_contents.block_id.values[b] if not x is None]
-        this_phased = np.where(phase_indicator[involved_blocks].reshape(-1,1), single_X[involved_blocks, 1, :], single_total_bb_RD[involved_blocks, :] - single_X[involved_blocks, 1, :])
-        bin_single_X[b, 1, :] = np.sum(this_phased, axis=0)
-        bin_single_total_bb_RD[b, :] = np.sum( single_total_bb_RD[involved_blocks, :], axis=0 )
-        # RDR (genes)
-        involved_genes = [x for x in df_bin_contents.gene.values[b] if not x is None]
-        bin_single_X[b, 0, :] = np.sum( adata.layers['count'][:, adata.var.index.isin(involved_genes)], axis=1 )
+    # bins = df_gene_snp.bin_id.unique()
+    # bin_single_X = np.zeros((len(bins), 2, adata.shape[0]), dtype=int)
+    # bin_single_base_nb_mean = np.zeros((len(bins), adata.shape[0]))
+    # bin_single_total_bb_RD = np.zeros((len(bins), adata.shape[0]), dtype=int)
+    # # summarize counts of involved genes and SNPs within each block
+    # df_bin_contents = df_gene_snp[~df_gene_snp.bin_id.isnull()].groupby('bin_id').agg({"block_id":set, "gene":set})
+    # for b in range(df_bin_contents.shape[0]):
+    #     # BAF (SNPs)
+    #     involved_blocks = [x for x in df_bin_contents.block_id.values[b] if not x is None]
+    #     this_phased = np.where(phase_indicator[involved_blocks].reshape(-1,1), single_X[involved_blocks, 1, :], single_total_bb_RD[involved_blocks, :] - single_X[involved_blocks, 1, :])
+    #     bin_single_X[b, 1, :] = np.sum(this_phased, axis=0)
+    #     bin_single_total_bb_RD[b, :] = np.sum( single_total_bb_RD[involved_blocks, :], axis=0 )
+    #     # RDR (genes)
+    #     involved_genes = [x for x in df_bin_contents.gene.values[b] if not x is None]
+    #     bin_single_X[b, 0, :] = np.sum( adata.layers['count'][:, adata.var.index.isin(involved_genes)], axis=1 )
+
+    n_bins = len(df_gene_snp.bin_id.unique())
+    N = sp_single_X_rdr.shape[1]
+    mul = scipy.sparse.csr_matrix((np.ones(df_gene_snp.shape[0]), (df_gene_snp.bin_id, df_gene_snp.block_id)) )
+    bin_single_X = np.zeros((n_bins, 2, N))
+    bin_single_X[:,0,:] = (mul @ sp_single_X_rdr).toarray()
+    bin_single_X[:,1,:] = (mul @ sp_single_X_b).toarray()
+    bin_single_total_bb_RD = (mul @ sp_single_total_bb_RD).toarray()
+    bin_single_base_nb_mean = np.zeros(bin_single_total_bb_RD.shape)
 
     # lengths
     lengths = np.zeros(len(df_gene_snp.CHR.unique()), dtype=int)
@@ -1018,77 +1159,19 @@ def bin_selection_basedon_normal(df_gene_snp, single_X, single_base_nb_mean, sin
     return lengths, single_X, single_base_nb_mean, single_total_bb_RD, log_sitewise_transmat, df_gene_snp
 
 
-def filter_de_genes(exp_counts, x_gene_list, normal_candidate, sample_list=None, sample_ids=None, logfcthreshold=4, quantile_threshold=80):
-    adata = anndata.AnnData(exp_counts)
-    adata.layers["count"] = exp_counts.values
-    adata.obs["normal_candidate"] = normal_candidate
-    #
-    map_gene_adatavar = {}
-    map_gene_umi = {}
-    list_gene_umi = np.sum(adata.layers["count"], axis=0)
-    for i,x in enumerate(adata.var.index):
-        map_gene_adatavar[x] = i
-        map_gene_umi[x] = list_gene_umi[i]
-    #
-    if sample_list is None:
-        sample_list = [None]
-    #
-    filtered_out_set = set()
-    for s,sname in enumerate(sample_list):
-        if sname is None:
-            index = np.arange(adata.shape[0])
-        else:
-            index = np.where(sample_ids == s)[0]
-        tmpadata = adata[index, :].copy()
-        #
-        umi_threshold = np.percentile( np.sum(tmpadata.layers["count"], axis=0), quantile_threshold )
-        #
-        sc.pp.filter_cells(tmpadata, min_genes=200)
-        sc.pp.filter_genes(tmpadata, min_cells=10)
-        med = np.median( np.sum(tmpadata.layers["count"], axis=1) )
-        # sc.pp.normalize_total(tmpadata, target_sum=1e4)
-        sc.pp.normalize_total(tmpadata, target_sum=med)
-        sc.pp.log1p(tmpadata)
-        # new added
-        sc.pp.pca(tmpadata, n_comps=4)
-        kmeans = KMeans(n_clusters=2, random_state=0).fit(tmpadata.obsm["X_pca"])
-        kmeans_labels = kmeans.predict(tmpadata.obsm["X_pca"])
-        idx_kmeans_label = np.argmax(np.bincount( kmeans_labels[tmpadata.obs["normal_candidate"]], minlength=2 ))
-        clone = np.array(["normal"] * tmpadata.shape[0])
-        clone[ (kmeans_labels != idx_kmeans_label) & (~tmpadata.obs["normal_candidate"]) ] = "tumor"
-        tmpadata.obs["clone"] = clone
-        # end added
-        sc.tl.rank_genes_groups(tmpadata, 'clone', groups=["tumor"], reference="normal", method='wilcoxon')
-        genenames = np.array([ x[0] for x in tmpadata.uns["rank_genes_groups"]["names"] ])
-        logfc = np.array([ x[0] for x in tmpadata.uns["rank_genes_groups"]["logfoldchanges"] ])
-        geneumis = np.array([ map_gene_umi[x] for x in genenames])
-        this_filtered_out_set = set(list(genenames[ (np.abs(logfc) > logfcthreshold) & (geneumis > umi_threshold) ]))
-        filtered_out_set = filtered_out_set | this_filtered_out_set
-        print(f"Filter out {len(filtered_out_set)} DE genes")
-    #
-    new_single_X_rdr = np.zeros((len(x_gene_list), adata.shape[0]))
-    for i,x in enumerate(x_gene_list):
-        g_list = [z for z in x.split() if z != ""]
-        idx_genes = np.array([ map_gene_adatavar[g] for g in g_list if (not g in filtered_out_set) and (g in map_gene_adatavar)])
-        if len(idx_genes) > 0:
-            new_single_X_rdr[i, :] = np.sum(adata.layers["count"][:, idx_genes], axis=1)
-    return new_single_X_rdr, filtered_out_set
 
-
-def filter_de_genes_tri(exp_counts, df_bininfo, normal_candidate, sample_list=None, sample_ids=None, logfcthreshold_u=2, logfcthreshold_t=4, quantile_threshold=80):
+def filter_de_genes_tri(adata, df_bininfo, normal_candidate, sample_list=None, sample_ids=None, logfcthreshold_u=2, logfcthreshold_t=4, quantile_threshold=80):
     """
     Attributes
     ----------
     df_bininfo : pd.DataFrame
         Contains columns ['CHR', 'START', 'END', 'INCLUDED_GENES', 'INCLUDED_SNP_IDS'], 'INCLUDED_GENES' contains space-delimited gene names.
     """
-    adata = anndata.AnnData(exp_counts)
-    adata.layers["count"] = exp_counts.values
     adata.obs["normal_candidate"] = normal_candidate
     #
     map_gene_adatavar = {}
     map_gene_umi = {}
-    list_gene_umi = np.sum(adata.layers["count"], axis=0)
+    list_gene_umi = np.sum(adata.X, axis=0).A.flatten()
     for i,x in enumerate(adata.var.index):
         map_gene_adatavar[x] = i
         map_gene_umi[x] = list_gene_umi[i]
@@ -1103,14 +1186,14 @@ def filter_de_genes_tri(exp_counts, df_bininfo, normal_candidate, sample_list=No
         else:
             index = np.where(sample_ids == s)[0]
         tmpadata = adata[index, :].copy()
-        if np.sum(tmpadata.layers["count"][tmpadata.obs["normal_candidate"], :]) < tmpadata.shape[1] * 10:
+        if np.sum(tmpadata.X[tmpadata.obs["normal_candidate"], :]) < tmpadata.shape[1] * 10:
             continue
         #
-        umi_threshold = np.percentile( np.sum(tmpadata.layers["count"], axis=0), quantile_threshold )
+        umi_threshold = np.percentile( np.sum(tmpadata.X, axis=0).A.flatten(), quantile_threshold )
         #
         # sc.pp.filter_cells(tmpadata, min_genes=200)
         sc.pp.filter_genes(tmpadata, min_cells=10)
-        med = np.median( np.sum(tmpadata.layers["count"], axis=1) )
+        med = np.median( np.sum(tmpadata.X, axis=1).A.flatten() )
         # sc.pp.normalize_total(tmpadata, target_sum=1e4)
         sc.pp.normalize_total(tmpadata, target_sum=med)
         sc.pp.log1p(tmpadata)
@@ -1136,7 +1219,7 @@ def filter_de_genes_tri(exp_counts, df_bininfo, normal_candidate, sample_list=No
         # geneumis_u = np.array([ map_gene_umi[x] for x in genenames_u])
         # this_filtered_out_set = set(list(genenames_t[ (np.abs(logfc_t) > logfcthreshold) & (geneumis_t > umi_threshold) ])) | set(list(genenames_u[ (np.abs(logfc_u) > logfcthreshold) & (geneumis_u > umi_threshold) ]))
         #
-        agg_counts = np.vstack([ np.sum(tmpadata.layers["count"][tmpadata.obs['clone']==c,:], axis=0) for c in ['normal', 'unsure', 'tumor'] ])
+        agg_counts = np.vstack([ np.sum(tmpadata.X[tmpadata.obs['clone']==c,:], axis=0).A.flatten() for c in ['normal', 'unsure', 'tumor'] ])
         agg_counts = agg_counts / np.sum(agg_counts, axis=1, keepdims=True) * 1e6
         geneumis = np.array([ map_gene_umi[x] for x in tmpadata.var.index])
         logfc_u = np.where( ((agg_counts[1,:]==0) | (agg_counts[0,:]==0)), 10, np.log2(agg_counts[1,:] / agg_counts[0,:]) )
@@ -1150,7 +1233,7 @@ def filter_de_genes_tri(exp_counts, df_bininfo, normal_candidate, sample_list=No
     for b,genestr in enumerate(df_bininfo.INCLUDED_GENES.values):
         # RDR (genes)
         involved_genes = set(genestr.split(" ")) - filtered_out_set
-        new_single_X_rdr[b, :] = np.sum( adata.layers['count'][:, adata.var.index.isin(involved_genes)], axis=1 )
+        new_single_X_rdr[b, :] = np.sum( adata.X[:, adata.var.index.isin(involved_genes)], axis=1 ).A.flatten()
 
     return new_single_X_rdr, filtered_out_set
 
