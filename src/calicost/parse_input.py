@@ -3,6 +3,7 @@ import numpy as np
 import scipy
 import pandas as pd
 from pathlib import Path
+import pickle
 from sklearn.metrics import adjusted_rand_score
 import scanpy as sc
 import anndata
@@ -60,8 +61,42 @@ def parse_visium(config):
     smooth_mat : array, (n_spots, n_spots)
         KNN smoothing matrix.
     """
-    if "input_filelist" in config:
-        adata, cell_snp_Aallele, cell_snp_Ballele, unique_snp_ids, across_slice_adjacency_mat = load_joint_data(config["input_filelist"], config["snp_dir"], config["alignment_files"], config["filtergenelist_file"], config["filterregion_file"], config["normalidx_file"], config['min_snpumi_perspot'], config['min_percent_expressed_spots'])
+    if not Path( f"{config['output_dir']}/parsed_inputs/exp_adata.h5ad" ).exists():
+        if "input_filelist" in config:
+            adata, cell_snp_Aallele, cell_snp_Ballele, unique_snp_ids, across_slice_adjacency_mat = load_joint_data(config["input_filelist"], config["snp_dir"], config["alignment_files"], config["filtergenelist_file"], config["filterregion_file"], config["normalidx_file"], config['min_snpumi_perspot'], config['min_percent_expressed_spots'])
+            sample_list = [adata.obs["sample"][0]]
+            for i in range(1, adata.shape[0]):
+                if adata.obs["sample"][i] != sample_list[-1]:
+                    sample_list.append( adata.obs["sample"][i] )
+            # convert sample name to index
+            sample_ids = np.zeros(adata.shape[0], dtype=int)
+            for s,sname in enumerate(sample_list):
+                index = np.where(adata.obs["sample"] == sname)[0]
+                sample_ids[index] = s
+        else:
+            adata, cell_snp_Aallele, cell_snp_Ballele, unique_snp_ids = load_data(config["spaceranger_dir"], config["snp_dir"], config["filtergenelist_file"], config["filterregion_file"], config["normalidx_file"], config['min_snpumi_perspot'], config['min_percent_expressed_spots'])
+            adata.obs["sample"] = "unique_sample"
+            sample_list = [adata.obs["sample"][0]]
+            sample_ids = np.zeros(adata.shape[0], dtype=int)
+            across_slice_adjacency_mat = None
+
+        adata.write( f"{config['output_dir']}/parsed_inputs/exp_adata.h5ad" )
+        scipy.sparse.save_npz( f"{config['output_dir']}/parsed_inputs/filtered_cell_snp_Aallele.npz", cell_snp_Aallele )
+        scipy.sparse.save_npz( f"{config['output_dir']}/parsed_inputs/filtered_cell_snp_Ballele.npz", cell_snp_Ballele )
+        np.save( f"{config['output_dir']}/parsed_inputs/filtered_unique_snp_ids.npy", unique_snp_ids )
+        if not across_slice_adjacency_mat is None:
+            scipy.sparse.save_npz( f"{config['output_dir']}/parsed_inputs/across_slice_adjacency_mat.npz", across_slice_adjacency_mat )
+        coords = adata.obsm["X_pos"]
+    else:
+        adata = sc.read_h5ad( f"{config['output_dir']}/parsed_inputs/exp_adata.h5ad" )
+        cell_snp_Aallele = scipy.sparse.load_npz( f"{config['output_dir']}/parsed_inputs/filtered_cell_snp_Aallele.npz" )
+        cell_snp_Ballele = scipy.sparse.load_npz( f"{config['output_dir']}/parsed_inputs/filtered_cell_snp_Ballele.npz" )
+        unique_snp_ids = np.load( f"{config['output_dir']}/parsed_inputs/filtered_unique_snp_ids.npy", allow_pickle=True )
+        across_slice_adjacency_mat = None
+        if Path( f"{config['output_dir']}/parsed_inputs/across_slice_adjacency_mat.npz" ).exists():
+            across_slice_adjacency_mat = scipy.sparse.load_npz( f"{config['output_dir']}/parsed_inputs/across_slice_adjacency_mat.npz" )
+        coords = adata.obsm["X_pos"]
+
         sample_list = [adata.obs["sample"][0]]
         for i in range(1, adata.shape[0]):
             if adata.obs["sample"][i] != sample_list[-1]:
@@ -71,14 +106,6 @@ def parse_visium(config):
         for s,sname in enumerate(sample_list):
             index = np.where(adata.obs["sample"] == sname)[0]
             sample_ids[index] = s
-    else:
-        adata, cell_snp_Aallele, cell_snp_Ballele, unique_snp_ids = load_data(config["spaceranger_dir"], config["snp_dir"], config["filtergenelist_file"], config["filterregion_file"], config["normalidx_file"], config['min_snpumi_perspot'], config['min_percent_expressed_spots'])
-        adata.obs["sample"] = "unique_sample"
-        sample_list = [adata.obs["sample"][0]]
-        sample_ids = np.zeros(adata.shape[0], dtype=int)
-        across_slice_adjacency_mat = None
-
-    coords = adata.obsm["X_pos"]
 
     if not config["tumorprop_file"] is None:
         df_tumorprop = pd.read_csv(config["tumorprop_file"], sep="\t", header=0, index_col=0)
@@ -90,13 +117,25 @@ def parse_visium(config):
         single_tumor_prop = None
     
     # read original data
-    df_gene_snp = combine_gene_snps(unique_snp_ids, config['hgtable_file'], adata)
+    if not Path(f"{config['output_dir']}/parsed_inputs/df_gene_snp_combinegenesnps.pkl").exists():
+        df_gene_snp = combine_gene_snps(unique_snp_ids, config['hgtable_file'], adata)
+        # save temp output
+        df_gene_snp.to_pickle(f"{config['output_dir']}/parsed_inputs/df_gene_snp_combinegenesnps.pkl")
+    else:
+        df_gene_snp = pd.read_pickle(f"{config['output_dir']}/parsed_inputs/df_gene_snp_combinegenesnps.pkl")
+
     idx_snps_within = np.where(df_gene_snp[~df_gene_snp.is_interval].gene.notnull())[0]
     df_gene_snp = df_gene_snp[df_gene_snp.gene.notnull()]
     cell_snp_Aallele = cell_snp_Aallele[:, idx_snps_within]
     cell_snp_Ballele = cell_snp_Ballele[:, idx_snps_within]
     unique_snp_ids = unique_snp_ids[idx_snps_within]
-    df_gene_snp = create_haplotype_block_ranges(df_gene_snp, adata, cell_snp_Aallele, cell_snp_Ballele, unique_snp_ids, initial_min_umi=config['initial_min_umi'])
+
+    if not Path(f"{config['output_dir']}/parsed_inputs/df_gene_snp_haplotypeblock.pkl").exists():
+        df_gene_snp = create_haplotype_block_ranges(df_gene_snp, adata, cell_snp_Aallele, cell_snp_Ballele, unique_snp_ids, initial_min_umi=config['initial_min_umi'])
+        # save temp output
+        df_gene_snp.to_pickle(f"{config['output_dir']}/parsed_inputs/df_gene_snp_haplotypeblock.pkl")
+    else:
+        df_gene_snp = pd.read_pickle(f"{config['output_dir']}/parsed_inputs/df_gene_snp_haplotypeblock.pkl")
     # lengths, single_X, single_base_nb_mean, single_total_bb_RD, log_sitewise_transmat = summarize_counts_for_blocks(df_gene_snp, \
     #         adata, cell_snp_Aallele, cell_snp_Ballele, unique_snp_ids, nu=config['nu'], logphase_shift=config['logphase_shift'], geneticmap_file=config['geneticmap_file'])
     # # infer an initial phase using pseudobulk
@@ -111,8 +150,13 @@ def parse_visium(config):
     #     tmp = dict(np.load(f"{config['output_dir']}/initial_phase.npz"))
     #     phase_indicator, refined_lengths = tmp["phase_indicator"], tmp["refined_lengths"]
     
-    lengths, sp_single_X_rdr, sp_single_X_b, sp_single_total_bb_RD, log_sitewise_transmat = summarize_counts_for_blocks(df_gene_snp, \
-            adata, cell_snp_Aallele, cell_snp_Ballele, unique_snp_ids, nu=config['nu'], logphase_shift=config['logphase_shift'], geneticmap_file=config['geneticmap_file'])
+    if not Path(f"{config['output_dir']}/parsed_inputs/counts_haplotypeblocks.pkl").exists():
+        lengths, sp_single_X_rdr, sp_single_X_b, sp_single_total_bb_RD, log_sitewise_transmat = summarize_counts_for_blocks(df_gene_snp, \
+                adata, cell_snp_Aallele, cell_snp_Ballele, unique_snp_ids, nu=config['nu'], logphase_shift=config['logphase_shift'], geneticmap_file=config['geneticmap_file'])
+        pickle.dump( (lengths, sp_single_X_rdr, sp_single_X_b, sp_single_total_bb_RD, log_sitewise_transmat), open(f"{config['output_dir']}/parsed_inputs/counts_haplotypeblocks.pkl", "wb") )
+    else:
+        lengths, sp_single_X_rdr, sp_single_X_b, sp_single_total_bb_RD, log_sitewise_transmat = pickle.load( open(f"{config['output_dir']}/parsed_inputs/counts_haplotypeblocks.pkl", "rb") )
+
     # infer an initial phase using pseudobulk
     if not Path(f"{config['output_dir']}/initial_phase.npz").exists():
         initial_clone_for_phasing = perform_partition(coords, sample_ids, x_part=config["npart_phasing"], y_part=config["npart_phasing"], single_tumor_prop=single_tumor_prop, threshold=config["tumorprop_threshold"])
@@ -126,8 +170,13 @@ def parse_visium(config):
         phase_indicator, refined_lengths = tmp["phase_indicator"], tmp["refined_lengths"]
 
     # binning
-    # df_gene_snp = create_bin_ranges(df_gene_snp, single_total_bb_RD, refined_lengths, config['secondary_min_umi'])
-    df_gene_snp = create_bin_ranges(df_gene_snp, sp_single_total_bb_RD, refined_lengths, config['secondary_min_umi'])
+    if not Path(f"{config['output_dir']}/parsed_inputs/df_gene_snp_binned.pkl").exists():
+        # df_gene_snp = create_bin_ranges(df_gene_snp, single_total_bb_RD, refined_lengths, config['secondary_min_umi'])
+        df_gene_snp = create_bin_ranges(df_gene_snp, sp_single_total_bb_RD, refined_lengths, config['secondary_min_umi'])
+        # save temp output
+        df_gene_snp.to_pickle(f"{config['output_dir']}/parsed_inputs/df_gene_snp_binned.pkl")
+    else:
+        df_gene_snp = pd.read_pickle(f"{config['output_dir']}/parsed_inputs/df_gene_snp_binned.pkl")
     # lengths, single_X, single_base_nb_mean, single_total_bb_RD, log_sitewise_transmat = summarize_counts_for_bins(df_gene_snp, \
     #         adata, single_X, single_total_bb_RD, phase_indicator, nu=config['nu'], logphase_shift=config['logphase_shift'], geneticmap_file=config['geneticmap_file'])
     lengths, single_X, single_base_nb_mean, single_total_bb_RD, log_sitewise_transmat = summarize_counts_for_bins(df_gene_snp, \
@@ -150,7 +199,7 @@ def parse_visium(config):
     #     assert single_X.shape[0] == len(log_sitewise_transmat)
 
     # expression count dataframe
-    exp_counts = adata.X.copy()
+    exp_counts = copy.deepcopy(adata.X)
 
     # smooth and adjacency matrix for each sample
     adjacency_mat, smooth_mat = multislice_adjacency(sample_ids, sample_list, coords, single_total_bb_RD, exp_counts, 
@@ -257,13 +306,12 @@ def run_parse_n_load(config):
                              Path(f"{config['output_dir']}/parsed_inputs/smooth_mat.npz").exists(), \
                              Path(f"{config['output_dir']}/parsed_inputs/exp_adata.h5ad").exists() ])
     if not np.all(file_exists):
+        # create directory
+        Path(f"{config['output_dir']}/parsed_inputs").mkdir(parents=True, exist_ok=True)
+
         # process to tables
         table_bininfo, table_rdrbaf, table_meta, adata, adjacency_mat, smooth_mat, df_gene_snp = parse_visium(config)
         # table_bininfo, table_rdrbaf, table_meta, exp_counts, adjacency_mat, smooth_mat = parse_hatchetblock(config, cellsnplite_dir, bb_file)
-
-        # save file
-        p = subprocess.Popen(f"mkdir -p {config['output_dir']}/parsed_inputs", stdout=subprocess.PIPE, stderr=subprocess.PIPE, shell=True)
-        out,err = p.communicate()
         
         table_bininfo.to_csv( f"{config['output_dir']}/parsed_inputs/table_bininfo.csv.gz", header=True, index=False, sep="\t" )
         table_rdrbaf.to_csv( f"{config['output_dir']}/parsed_inputs/table_rdrbaf.csv.gz", header=True, index=False, sep="\t" )
