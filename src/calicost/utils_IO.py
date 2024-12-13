@@ -22,7 +22,7 @@ import subprocess
 def load_data(spaceranger_dir, snp_dir, filtergenelist_file, filterregion_file, normalidx_file, min_snpumis=50, min_percent_expressed_spots=0.005):
     ##### read raw UMI count matrix #####
     if Path(f"{spaceranger_dir}/filtered_feature_bc_matrix.h5").exists():
-        adata = sc.read_10x_h5(f"{spaceranger_dir}/filtered_feature_bc_matrix.h5")
+        adata = sc.read_10x_h5(f"{spaceranger_dir}/filtered_feature_bc_matrix.h5", gex_only=False)
     elif Path(f"{spaceranger_dir}/filtered_feature_bc_matrix.h5ad").exists():
         adata = sc.read_h5ad(f"{spaceranger_dir}/filtered_feature_bc_matrix.h5ad")
     else:
@@ -150,7 +150,7 @@ def load_joint_data(input_filelist, snp_dir, alignment_files, filtergenelist_fil
         df_this_barcode.index = df_this_barcode.barcode
         # read adata count info
         if Path(f"{df_meta['spaceranger_dir'].iloc[i]}/filtered_feature_bc_matrix.h5").exists():
-            adatatmp = sc.read_10x_h5(f"{df_meta['spaceranger_dir'].iloc[i]}/filtered_feature_bc_matrix.h5")
+            adatatmp = sc.read_10x_h5(f"{df_meta['spaceranger_dir'].iloc[i]}/filtered_feature_bc_matrix.h5", gex_only=False)
         elif Path(f"{df_meta['spaceranger_dir'].iloc[i]}/filtered_feature_bc_matrix.h5ad").exists():
             adatatmp = sc.read_h5ad(f"{df_meta['spaceranger_dir'].iloc[i]}/filtered_feature_bc_matrix.h5ad")
         else:
