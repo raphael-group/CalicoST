@@ -104,21 +104,32 @@ def main(configuration_file):
         if config["tumorprop_file"] is None:
             logger.info(f"Initializing clones ignoring tumor proportion.")
 
-            initial_clone_index = rectangle_initialize_initial_clone(
-                coords, config["n_clones"], random_state=r_hmrf_initialization
-            )
+            if config['initialization_method'] == 'rectangle':
+                initial_clone_index = rectangle_initialize_initial_clone(
+                    coords, config["n_clones"], random_state=r_hmrf_initialization
+                )
+            elif config['initialization_method'] == 'independent':
+                np.random.seed(r_hmrf_initialization)
+                initial_assignment = np.random.randint(0, config["n_clones"], single_X.shape[2])
+                initial_clone_index = [np.where(initial_assignment == c)[0] for c in range(config["n_clones"])]
+
         else:
             logger.info(
                 f"Initializing clones based on tumor proportion: {config['tumorprop_file']}"
             )
 
-            initial_clone_index = rectangle_initialize_initial_clone_mix(
-                coords,
-                config["n_clones"],
-                single_tumor_prop,
-                threshold=config["tumorprop_threshold"],
-                random_state=r_hmrf_initialization,
-            )
+            if config['initialization_method'] == 'rectangle':
+                initial_clone_index = rectangle_initialize_initial_clone_mix(
+                    coords,
+                    config["n_clones"],
+                    single_tumor_prop,
+                    threshold=config["tumorprop_threshold"],
+                    random_state=r_hmrf_initialization,
+                )
+            elif config['initialization_method'] == 'independent':
+                np.random.seed(r_hmrf_initialization)
+                initial_assignment = np.random.randint(0, config["n_clones"], single_X.shape[2])
+                initial_clone_index = [np.where(initial_assignment == c)[0] for c in range(config["n_clones"])]
 
         # NB save clone initialization to npz file
         prefix = "allspots"
@@ -495,16 +506,18 @@ def main(configuration_file):
                     continue
 
                 # NB initialize sub-clones within initial, merged BAF clone.
+                n_clones_rdr = config["n_clones_rdr"] if np.median(single_total_bb_RD[:, idx_spots].sum(axis=1)) >= config['min_avgumi_per_clone'] else 1
+
                 if config["tumorprop_file"] is None:
                     initial_clone_index = rectangle_initialize_initial_clone(
                         coords[idx_spots],
-                        config["n_clones_rdr"],
+                        n_clones_rdr,
                         random_state=r_hmrf_initialization,
                     )
                 else:
                     initial_clone_index = rectangle_initialize_initial_clone_mix(
                         coords[idx_spots],
-                        config["n_clones_rdr"],
+                        n_clones_rdr,
                         single_tumor_prop[idx_spots],
                         threshold=config["tumorprop_threshold"],
                         random_state=r_hmrf_initialization,
