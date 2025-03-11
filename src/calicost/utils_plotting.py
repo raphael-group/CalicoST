@@ -3212,10 +3212,10 @@ def plot_individual_spots_in_space(
     )
     if "clone 0" in final_clone_ids:
         colorlist = ["lightgrey"] + seaborn.color_palette(
-            "Set2", n_final_clones - 1
+            palette, n_final_clones - 1
         ).as_hex()
     else:
-        colorlist = seaborn.color_palette("Set2", n_final_clones).as_hex()
+        colorlist = seaborn.color_palette(palette, n_final_clones).as_hex()
 
     for c, cid in enumerate(final_clone_ids):
         idx = np.where((assignment.values == cid))[0]
