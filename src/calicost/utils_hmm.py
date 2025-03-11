@@ -180,6 +180,8 @@ def initialization_by_gmm(
     only_minor=True,
     min_binom_prob=0.1,
     max_binom_prob=0.9,
+    min_logmu = -2,
+    max_logmu = 2
 ):
     # prepare gmm input of RDR and BAF separately
     X_gmm_rdr = None
@@ -189,6 +191,7 @@ def initialization_by_gmm(
             X_gmm_rdr = np.vstack(
                 [np.log(X[:, 0, s] / base_nb_mean[:, s]) for s in range(X.shape[2])]
             ).T
+            X_gmm_rdr = np.maximum( np.minimum(X_gmm_rdr, max_logmu), min_logmu )
             offset = np.mean(X_gmm_rdr[(~np.isnan(X_gmm_rdr)) & (~np.isinf(X_gmm_rdr))])
             normalizetomax1 = np.max(
                 X_gmm_rdr[(~np.isnan(X_gmm_rdr)) & (~np.isinf(X_gmm_rdr))]
@@ -198,6 +201,7 @@ def initialization_by_gmm(
             X_gmm_rdr = np.vstack(
                 [X[:, 0, s] / base_nb_mean[:, s] for s in range(X.shape[2])]
             ).T
+            X_gmm_rdr = np.maximum( np.minimum(X_gmm_rdr, np.exp(max_logmu)), np.exp(min_logmu) )
             offset = 0
             normalizetomax1 = np.max(
                 X_gmm_rdr[(~np.isnan(X_gmm_rdr)) & (~np.isinf(X_gmm_rdr))]
@@ -207,8 +211,7 @@ def initialization_by_gmm(
         X_gmm_baf = np.vstack(
             [X[:, 1, s] / total_bb_RD[:, s] for s in range(X.shape[2])]
         ).T
-        X_gmm_baf[X_gmm_baf < min_binom_prob] = min_binom_prob
-        X_gmm_baf[X_gmm_baf > max_binom_prob] = max_binom_prob
+        X_gmm_baf = np.maximum( np.minimum(X_gmm_baf, max_binom_prob), min_binom_prob )
     # combine RDR and BAF
     if ("m" in params) and ("p" in params):
         # indexes = np.where(X_gmm_baf[:,0] > 0.5)[0]
@@ -510,7 +513,6 @@ def update_emission_params_nb_sitewise_uniqvalues(
                         np.ones(len(idx_nonzero)).reshape(-1, 1),
                         weights=tmp[i, idx_nonzero] + tmp[i + n_states, idx_nonzero],
                         exposure=unique_values[s][idx_nonzero, 1],
-                        penalty=0,
                     )
                     res2 = model.fit(
                         disp=0,
@@ -684,7 +686,6 @@ def update_emission_params_nb_sitewise_uniqvalues_mix(
                         exposure=unique_values[s][idx_nonzero, 1],
                         tumor_prop=this_tp,
                     )
-                    # tumor_prop=tumor_prop[s], penalty=0)
                     res2 = model.fit(
                         disp=0,
                         maxiter=1500,
@@ -759,7 +760,6 @@ def update_emission_params_nb_sitewise_uniqvalues_mix(
                 weights=weights,
                 exposure=exposure,
                 tumor_prop=tp,
-                penalty=0,
             )
 
             res2 = model.fit(
@@ -1361,7 +1361,6 @@ def update_emission_params_nb_nophasing_uniqvalues(
                         np.ones(len(idx_nonzero)).reshape(-1, 1),
                         weights=tmp[i, idx_nonzero],
                         exposure=unique_values[s][idx_nonzero, 1],
-                        penalty=0,
                     )
                     res2 = model.fit(
                         disp=0,
@@ -1529,7 +1528,6 @@ def update_emission_params_nb_nophasing_uniqvalues_mix(
                         exposure=unique_values[s][idx_nonzero, 1],
                         tumor_prop=this_tp,
                     )
-                    # tumor_prop=tumor_prop[s], penalty=0)
                     res2 = model.fit(
                         disp=0,
                         maxiter=1500,
@@ -1601,7 +1599,6 @@ def update_emission_params_nb_nophasing_uniqvalues_mix(
                 weights=weights,
                 exposure=exposure,
                 tumor_prop=tp,
-                penalty=0,
             )
             
             res2 = model.fit(

@@ -317,7 +317,7 @@ class Weighted_NegativeBinomial(WeightedModel):
         return np.append(0.1 * np.ones(self.exog.shape[1]), 0.01)
     
     def get_default_bounds(self):
-        return [(None, None)] * self.exog.shape[1] + [(0.001, None)]
+        return [(-2, 2)] * self.exog.shape[1] + [(0.001, 10)]
 
     def get_ext_param_name(self):
         return "alpha"
@@ -348,7 +348,7 @@ class Weighted_NegativeBinomial_mix(WeightedModel):
         return np.append(0.1 * np.ones(self.nparams), 0.01)
     
     def get_default_bounds(self):
-        return [(None, None)] * self.exog.shape[1] + [(0.001, None)]
+        return [(-2, 2)] * self.exog.shape[1] + [(0.001, 10)]
 
     def get_ext_param_name(self):
         return "alpha"
@@ -385,7 +385,7 @@ class Weighted_BetaBinom(WeightedModel):
         return np.append(0.5 / np.sum(self.exog.shape[1]) * np.ones(self.nparams), 1)
     
     def get_default_bounds(self):
-        return [(0.01, 0.99)] * self.exog.shape[1] + [(0.001, None)]
+        return [(0.01, 0.99)] * self.exog.shape[1] + [(0.001, 100)]
 
     def get_ext_param_name(self):
         return "tau"
@@ -420,7 +420,7 @@ class Weighted_BetaBinom_mix(WeightedModel):
         return np.append(0.5 / np.sum(self.exog.shape[1]) * np.ones(self.nparams), 1)
     
     def get_default_bounds(self):
-        return [(0.01, 0.99)] * self.exog.shape[1] + [(0.001, None)]
+        return [(0.01, 0.99)] * self.exog.shape[1] + [(0.001, 100)]
 
     def get_ext_param_name(self):
         return "tau"
