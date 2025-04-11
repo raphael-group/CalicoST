@@ -291,6 +291,186 @@ def load_joint_data(input_filelist, snp_dir, alignment_files, filtergenelist_fil
     return adata, cell_snp_Aallele.A, cell_snp_Ballele.A, unique_snp_ids, across_slice_adjacency_mat
 
 
+def load_data_exp_only(spaceranger_dir, filtergenelist_file, filterregion_file, normalidx_file, min_snpumis=50, min_percent_expressed_spots=0.005):
+    ##### read raw UMI count matrix #####
+    if Path(f"{spaceranger_dir}/filtered_feature_bc_matrix.h5").exists():
+        adata = sc.read_10x_h5(f"{spaceranger_dir}/filtered_feature_bc_matrix.h5")
+    elif Path(f"{spaceranger_dir}/filtered_feature_bc_matrix.h5ad").exists():
+        adata = sc.read_h5ad(f"{spaceranger_dir}/filtered_feature_bc_matrix.h5ad")
+    else:
+        logging.error(f"{spaceranger_dir} directory doesn't have a filtered_feature_bc_matrix.h5 or filtered_feature_bc_matrix.h5ad file!")
+
+    adata.layers["count"] = adata.X.A.astype(int)
+    adata.var_names_make_unique()
+
+    # add position
+    if Path(f"{spaceranger_dir}/spatial/tissue_positions.csv").exists():
+        df_pos = pd.read_csv(f"{spaceranger_dir}/spatial/tissue_positions.csv", sep=",", header=0, \
+                        names=["barcode", "in_tissue", "x", "y", "pixel_row", "pixel_col"])
+    elif Path(f"{spaceranger_dir}/spatial/tissue_positions_list.csv").exists():
+        df_pos = pd.read_csv(f"{spaceranger_dir}/spatial/tissue_positions_list.csv", sep=",", header=None, \
+                        names=["barcode", "in_tissue", "x", "y", "pixel_row", "pixel_col"])
+    else:
+        raise Exception("No spatial coordinate file!")
+    df_pos = df_pos[df_pos.in_tissue == True]
+    # assert set(list(df_pos.barcode)) == set(list(adata.obs.index))
+    # only keep shared barcodes
+    shared_barcodes = set(list(df_pos.barcode)) & set(list(adata.obs.index))
+    adata = adata[adata.obs.index.isin(shared_barcodes), :]
+    df_pos = df_pos[df_pos.barcode.isin(shared_barcodes)]
+    # sort and match
+    df_pos.barcode = pd.Categorical(df_pos.barcode, categories=list(adata.obs.index), ordered=True)
+    df_pos.sort_values(by="barcode", inplace=True)
+    adata.obsm["X_pos"] = np.vstack([df_pos.x, df_pos.y]).T
+
+    # filter out spots with too small number of UMIs
+    indicator = (np.sum(adata.layers["count"], axis=1) > min_snpumis)
+    adata = adata[indicator, :]
+
+    # filter out genes that are expressed in <0.5% cells
+    indicator = (np.sum(adata.X > 0, axis=0) >= min_percent_expressed_spots * adata.shape[0]).A.flatten()
+    genenames = set(list(adata.var.index[indicator]))
+    adata = adata[:, indicator]
+    print(adata)
+    print("median UMI after filtering out genes < 0.5% of cells = {}".format( np.median(np.sum(adata.layers["count"], axis=1)) ))
+
+    # remove genes in filtergenelist_file
+    # ig_gene_list = pd.read_csv("/n/fs/ragr-data/users/congma/references/cellranger_refdata-gex-GRCh38-2020-A/genes/ig_gene_list.txt", header=None)
+    if not filtergenelist_file is None:
+        filter_gene_list = pd.read_csv(filtergenelist_file, header=None)
+        filter_gene_list = set(list( filter_gene_list.iloc[:,0] ))
+        indicator_filter = np.array([ (not x in filter_gene_list) for x in adata.var.index ])
+        adata = adata[:, indicator_filter]
+        print("median UMI after filtering out genes in filtergenelist_file = {}".format( np.median(np.sum(adata.layers["count"], axis=1)) ))
+
+    clf = LocalOutlierFactor(n_neighbors=200)
+    label = clf.fit_predict( np.sum(adata.layers["count"], axis=0).reshape(-1,1) )
+    adata.layers["count"][:, np.where(label==-1)[0]] = 0
+    print("filter out {} outlier genes.".format( np.sum(label==-1) ))
+
+    if not normalidx_file is None:
+        normal_barcodes = pd.read_csv(normalidx_file, header=None).iloc[:,0].values
+        adata.obs["tumor_annotation"] = "tumor"
+        adata.obs["tumor_annotation"][adata.obs.index.isin(normal_barcodes)] = "normal"
+        print( adata.obs["tumor_annotation"].value_counts() )
+    
+    return adata
+
+
+def load_joint_data_exp_only(input_filelist, alignment_files, filtergenelist_file, filterregion_file, normalidx_file, min_snpumis=50, min_percent_expressed_spots=0.005):
+    ##### read meta sample info #####
+    df_meta = pd.read_csv(input_filelist, sep="\t", header=None)
+    df_meta.rename(columns=dict(zip( df_meta.columns[:3], ["bam", "sample_id", "spaceranger_dir"] )), inplace=True)
+    logger.info(f"Input spaceranger file list {input_filelist} contains:")
+    logger.info(df_meta)
+
+    assert (len(alignment_files) == 0) or (len(alignment_files) + 1 == df_meta.shape[0])
+
+    ##### read anndata and coordinate #####
+    # add position
+    adata = None
+    for i,sname in enumerate(df_meta.sample_id.values):
+        # read adata count info
+        if Path(f"{df_meta['spaceranger_dir'].iloc[i]}/filtered_feature_bc_matrix.h5").exists():
+            adatatmp = sc.read_10x_h5(f"{df_meta['spaceranger_dir'].iloc[i]}/filtered_feature_bc_matrix.h5")
+        elif Path(f"{df_meta['spaceranger_dir'].iloc[i]}/filtered_feature_bc_matrix.h5ad").exists():
+            adatatmp = sc.read_h5ad(f"{df_meta['spaceranger_dir'].iloc[i]}/filtered_feature_bc_matrix.h5ad")
+        else:
+            logging.error(f"{df_meta['spaceranger_dir'].iloc[i]} directory doesn't have a filtered_feature_bc_matrix.h5 or filtered_feature_bc_matrix.h5ad file!")
+
+        adatatmp.layers["count"] = adatatmp.X.A
+        # read position info
+        if Path(f"{df_meta['spaceranger_dir'].iloc[i]}/spatial/tissue_positions.csv").exists():
+            df_this_pos = pd.read_csv(f"{df_meta['spaceranger_dir'].iloc[i]}/spatial/tissue_positions.csv", sep=",", header=0, \
+                        names=["barcode", "in_tissue", "x", "y", "pixel_row", "pixel_col"])
+        elif Path(f"{df_meta['spaceranger_dir'].iloc[i]}/spatial/tissue_positions_list.csv").exists():
+            df_this_pos = pd.read_csv(f"{df_meta['spaceranger_dir'].iloc[i]}/spatial/tissue_positions_list.csv", sep=",", header=None, \
+                        names=["barcode", "in_tissue", "x", "y", "pixel_row", "pixel_col"])
+        else:
+            raise Exception("No spatial coordinate file!")
+        df_this_pos = df_this_pos[df_this_pos.in_tissue == True]
+        # only keep shared barcodes
+        shared_barcodes = set(list(df_this_pos.barcode)) & set(list(adatatmp.obs.index))
+        adatatmp = adatatmp[adatatmp.obs.index.isin(shared_barcodes), :]
+        df_this_pos = df_this_pos[df_this_pos.barcode.isin(shared_barcodes)]
+        #
+        # df_this_pos.barcode = pd.Categorical(df_this_pos.barcode, categories=list(df_this_barcode.barcode), ordered=True)
+        df_this_pos.barcode = pd.Categorical(df_this_pos.barcode, categories=list(adatatmp.obs.index), ordered=True)
+        df_this_pos.sort_values(by="barcode", inplace=True)
+        adatatmp.obsm["X_pos"] = np.vstack([df_this_pos.x, df_this_pos.y]).T
+        adatatmp.obs["sample"] = sname
+        adatatmp.obs.index = [f"{x}_{sname}" for x in adatatmp.obs.index]
+        adatatmp.var_names_make_unique()
+        if adata is None:
+            adata = adatatmp
+        else:
+            adata = anndata.concat([adata, adatatmp], join="outer")
+    # replace nan with 0
+    adata.layers["count"][np.isnan(adata.layers["count"])] = 0
+    adata.layers["count"] = adata.layers["count"].astype(int)
+
+    ##### load pairwise alignments #####
+    # TBD: directly convert to big "adjacency" matrix
+    across_slice_adjacency_mat = None
+    if len(alignment_files) > 0:
+        EPS = 1e-6
+        row_ind = []
+        col_ind = []
+        dat = []
+        offset = 0
+        for i,f in enumerate(alignment_files):
+            pi = np.load(f)
+            # normalize p such that max( rowsum(pi), colsum(pi) ) = 1, max alignment weight = 1
+            pi = pi / np.max( np.append(np.sum(pi,axis=0), np.sum(pi,axis=1)) )
+            sname1 = df_meta.sample_id.values[i]
+            sname2 = df_meta.sample_id.values[i+1]
+            assert pi.shape[0] == np.sum(adata.obs["sample"] == sname1) # double check whether this is correct
+            assert pi.shape[1] == np.sum(adata.obs["sample"] == sname2) # or the dimension should be flipped
+            # for each spot s in sname1, select {t: spot t in sname2 and pi[s,t] >= np.max(pi[s,:])} as the corresponding spot in the other slice
+            for row in range(pi.shape[0]):
+                cutoff = np.max(pi[row,:]) if np.max(pi[row,:]) > EPS else 1+EPS
+                list_cols = np.where(pi[row, :] >= cutoff - EPS)[0]
+                row_ind += [offset + row] * len(list_cols)
+                col_ind += list( offset + pi.shape[0] + list_cols )
+                dat += list(pi[row, list_cols])
+            offset += pi.shape[0]
+        across_slice_adjacency_mat = scipy.sparse.csr_matrix((dat, (row_ind, col_ind) ), shape=(adata.shape[0], adata.shape[0]))
+        across_slice_adjacency_mat += across_slice_adjacency_mat.T
+    
+    # filter out spots with too small number of UMIs
+    indicator = (np.sum(adata.layers["count"], axis=1) >= min_snpumis)
+    adata = adata[indicator, :]
+    if not (across_slice_adjacency_mat is None):
+        across_slice_adjacency_mat = across_slice_adjacency_mat[indicator,:][:,indicator]
+
+    # filter out genes that are expressed in <min_percent_expressed_spots cells
+    indicator = (np.sum(adata.X > 0, axis=0) >= min_percent_expressed_spots * adata.shape[0]).A.flatten()
+    genenames = set(list(adata.var.index[indicator]))
+    adata = adata[:, indicator]
+    print(adata)
+    print("median UMI after filtering out genes < 0.5% of cells = {}".format( np.median(np.sum(adata.layers["count"], axis=1)) ))
+
+    if not filtergenelist_file is None:
+        filter_gene_list = pd.read_csv(filtergenelist_file, header=None)
+        filter_gene_list = set(list( filter_gene_list.iloc[:,0] ))
+        indicator_filter = np.array([ (not x in filter_gene_list) for x in adata.var.index ])
+        adata = adata[:, indicator_filter]
+        print("median UMI after filtering out genes in filtergenelist_file = {}".format( np.median(np.sum(adata.layers["count"], axis=1)) ))
+        
+    clf = LocalOutlierFactor(n_neighbors=200)
+    label = clf.fit_predict( np.sum(adata.layers["count"], axis=0).reshape(-1,1) )
+    adata.layers["count"][:, np.where(label==-1)[0]] = 0
+    print("filter out {} outlier genes.".format( np.sum(label==-1) ))
+
+    if not normalidx_file is None:
+        normal_barcodes = pd.read_csv(normalidx_file, header=None).iloc[:,0].values
+        adata.obs["tumor_annotation"] = "tumor"
+        adata.obs["tumor_annotation"][adata.obs.index.isin(normal_barcodes)] = "normal"
+        print( adata.obs["tumor_annotation"].value_counts() )
+
+    return adata, across_slice_adjacency_mat
+
+
 def load_slidedna_data(snp_dir, bead_file, filterregion_bedfile):
     cell_snp_Aallele = scipy.sparse.load_npz(f"{snp_dir}/cell_snp_Aallele.npz")
     cell_snp_Ballele = scipy.sparse.load_npz(f"{snp_dir}/cell_snp_Ballele.npz")
@@ -537,6 +717,18 @@ def combine_gene_snps(unique_snp_ids, hgtable_file, adata):
     return df_gene_snp
 
 
+def create_genetable_exp_only(hgtable_file, adata):
+    # read gene info and keep only chr1-chr22 and genes appearing in adata
+    df_hgtable = pd.read_csv(hgtable_file, header=0, index_col=0, sep="\t")
+    df_hgtable = df_hgtable[df_hgtable.chrom.isin( [f"chr{i}" for i in range(1, 23)] )]
+    df_hgtable = df_hgtable.drop_duplicates(subset=['name2'], keep='first')
+    df_hgtable = df_hgtable[df_hgtable.name2.isin(adata.var.index)]
+    # a data frame including both gene and SNP info: CHR, START, END, snp_id, gene, is_interval
+    df_gene_snp = pd.DataFrame({"CHR":[int(x[3:]) for x in df_hgtable.chrom.values], "START":df_hgtable.cdsStart.values, "END":df_hgtable.cdsEnd.values, \
+                                "snp_id":None, "gene":df_hgtable.name2.values, "is_interval":True})
+    return df_gene_snp
+
+
 def create_haplotype_block_ranges(df_gene_snp, adata, cell_snp_Aallele, cell_snp_Ballele, unique_snp_ids, initial_min_umi=15):
     """
     Initially block SNPs along genome.
@@ -662,17 +854,20 @@ def summarize_counts_for_blocks(df_gene_snp, adata, cell_snp_Aallele, cell_snp_B
         lengths[i] = len( df_gene_snp[df_gene_snp.CHR == c].block_id.unique() )
 
     # phase switch probability from genetic distance
-    sorted_chr_pos_first = df_gene_snp.groupby('block_id').agg({'CHR': 'first', 'START': 'first'})
-    sorted_chr_pos_first = list(zip(sorted_chr_pos_first.CHR.values, sorted_chr_pos_first.START.values))
-    sorted_chr_pos_last = df_gene_snp.groupby('block_id').agg({'CHR': 'last', 'END': 'last'})
-    sorted_chr_pos_last = list(zip(sorted_chr_pos_last.CHR.values, sorted_chr_pos_last.END.values))
-    #
-    tmp_sorted_chr_pos = [val for pair in zip(sorted_chr_pos_first, sorted_chr_pos_last) for val in pair]
-    position_cM = get_position_cM_table( tmp_sorted_chr_pos, geneticmap_file )
-    phase_switch_prob = compute_phase_switch_probability_position(position_cM, tmp_sorted_chr_pos, nu)
-    log_sitewise_transmat = np.minimum(np.log(0.5), np.log(phase_switch_prob) - logphase_shift)
-    # log_sitewise_transmat = log_sitewise_transmat[np.arange(0, len(log_sitewise_transmat), 2)]
-    log_sitewise_transmat = log_sitewise_transmat[np.arange(1, len(log_sitewise_transmat), 2)]
+    if (~df_gene_snp.is_interval).sum() > 0:
+        sorted_chr_pos_first = df_gene_snp.groupby('block_id').agg({'CHR': 'first', 'START': 'first'})
+        sorted_chr_pos_first = list(zip(sorted_chr_pos_first.CHR.values, sorted_chr_pos_first.START.values))
+        sorted_chr_pos_last = df_gene_snp.groupby('block_id').agg({'CHR': 'last', 'END': 'last'})
+        sorted_chr_pos_last = list(zip(sorted_chr_pos_last.CHR.values, sorted_chr_pos_last.END.values))
+        #
+        tmp_sorted_chr_pos = [val for pair in zip(sorted_chr_pos_first, sorted_chr_pos_last) for val in pair]
+        position_cM = get_position_cM_table( tmp_sorted_chr_pos, geneticmap_file )
+        phase_switch_prob = compute_phase_switch_probability_position(position_cM, tmp_sorted_chr_pos, nu)
+        log_sitewise_transmat = np.minimum(np.log(0.5), np.log(phase_switch_prob) - logphase_shift)
+        # log_sitewise_transmat = log_sitewise_transmat[np.arange(0, len(log_sitewise_transmat), 2)]
+        log_sitewise_transmat = log_sitewise_transmat[np.arange(1, len(log_sitewise_transmat), 2)]
+    else:
+        log_sitewise_transmat = np.ones(single_X.shape[0]) * np.log(0.5)
 
     return lengths, single_X, single_base_nb_mean, single_total_bb_RD, log_sitewise_transmat
 
@@ -903,6 +1098,55 @@ def create_bin_ranges(df_gene_snp, single_total_bb_RD, refined_lengths, secondar
     # append bin_ids to df_gene_snp
     df_gene_snp["bin_id"] = df_gene_snp.block_id.map({i:x for i,x in enumerate(bin_ids)})
     
+    return df_gene_snp
+
+
+def create_bin_ranges_exp_only(df_gene_snp, adata, min_genes, secondary_min_umi):
+    """
+    Partition the genes into bins based on UMI counts.
+
+    Attributes
+    ----------
+    df_gene_snp : data frame, (CHR, START, END, snp_id, gene, is_interval)
+        Gene and SNP info combined into a single data frame sorted by genomic positions. "is_interval" suggest whether the entry is a gene or a SNP. "gene" column either contain gene name if the entry is a gene, or the gene a SNP belongs to if the entry is a SNP.
+
+    adata : anndata, (n_spots, n_genes)
+        Transcript count matrix.
+
+    min_genes : int
+        Minimum number of genes per bin.
+
+    secondary_min_umi : int
+        Minimum UMI count per bin aggregated across all spots.
+
+    Returns
+    -------
+    df_gene_snp : data frame, (CHR, START, END, snp_id, gene, is_interval, block_id)
+        The newly added bin_id column indicates which bin each gene or SNP belongs to.
+    """
+    # aggregate UMI counts across spots from adata, and order genes by df_gene_snp
+    umi_counts = np.sum(adata[:, df_gene_snp.gene].layers['count'], axis=0)
+    cumul_umi_counts = np.append(0, np.cumsum(umi_counts))
+    # initialize block id
+    block_ids = -1 * np.ones(df_gene_snp.shape[0], dtype=int)
+    chr_vec = df_gene_snp.CHR.values
+    s = 0
+    while s < df_gene_snp.shape[0]:
+        t = next((i for i in np.arange(s+1, min(s+min_genes, df_gene_snp.shape[0])) if chr_vec[s] != chr_vec[i]), min(s+min_genes, df_gene_snp.shape[0]))
+        if chr_vec[s] != chr_vec[t-1]:
+            t -= 1
+        if t - s < min_genes and s > 0:
+            block_ids[s:t] = block_ids[s-1]
+            s = t
+            continue
+        while t < df_gene_snp.shape[0] + 1 and (t == df_gene_snp.shape[0] or chr_vec[s] == chr_vec[t]) and \
+        cumul_umi_counts[t] - cumul_umi_counts[s] < secondary_min_umi:
+            t += 1
+        block_ids[s:t] = block_ids[s-1] + 1 if s > 0 else 0
+        s = t
+    df_gene_snp["block_id"] = block_ids
+    # without SNPs, bin_id is the same as block_id
+    df_gene_snp["bin_id"] = block_ids
     return df_gene_snp
 
 
