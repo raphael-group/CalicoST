@@ -69,15 +69,15 @@ def initial_phase_given_partition(sp_single_X_b, lengths, sp_single_total_bb_RD,
         base_nb_mean = np.zeros(total_bb_RD.shape)
         tumor_prop = None
     else:
-        filtered_initial_clone_index = [ x[sintle_tumor_prop[x] > threshold] for x in initial_clone_index ]
+        filtered_initial_clone_index = [ x[single_tumor_prop[x] > threshold] for x in initial_clone_index ]
         idx_row = np.concatenate(filtered_initial_clone_index)
         idx_col = np.concatenate([ [i] * len(x) for i,x in enumerate(filtered_initial_clone_index) ])
-        mul = scipy.sparse.csr_matrix((np.ones(sp_single_X_b.shape[1]), (idx_row, idx_col)), shape=(sp_single_X_b.shape[1], len(initial_clone_index)))
-        X = np.zeros((sp_single_X_b.shape[0], 2, len(initial_clone_index)))
-        X[:,1,:] = sp_single_X_b @ mul
-        total_bb_RD = sp_single_total_bb_RD @ mul
+        mul = scipy.sparse.csr_matrix((np.ones(len(idx_row)), (idx_row, idx_col)), shape=(sp_single_X_b.shape[1], len(filtered_initial_clone_index)))
+        X = np.zeros((sp_single_X_b.shape[0], 2, len(filtered_initial_clone_index)))
+        X[:,1,:] = (sp_single_X_b @ mul).toarray()
+        total_bb_RD = (sp_single_total_bb_RD @ mul).toarray()
         base_nb_mean = np.zeros(total_bb_RD.shape)
-        tumor_prop = single_tumor_prop @ mul
+        tumor_prop = single_tumor_prop.values @ mul
 
     # pseudobulk HMM for phase_prob
     baf_profiles = np.zeros((X.shape[2], X.shape[0]))

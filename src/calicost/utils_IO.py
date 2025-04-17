@@ -52,6 +52,7 @@ def load_data(spaceranger_dir, snp_dir, filtergenelist_file, filterregion_file, 
     df_pos.barcode = pd.Categorical(df_pos.barcode, categories=list(adata.obs.index), ordered=True)
     df_pos.sort_values(by="barcode", inplace=True)
     adata.obsm["X_pos"] = np.vstack([df_pos.x, df_pos.y]).T
+    adata.var_names_make_unique()
 
     # shared barcodes between adata and SNPs
     shared_barcodes = set(list(snp_barcodes.barcodes)) & set(list(adata.obs.index))
@@ -529,10 +530,9 @@ def combine_gene_snps(unique_snp_ids, hgtable_file, adata):
         if i == 0:
             continue
         this_pos = vec_start[i]
+        last_j = next((j for j in range(last_j, len(gene_chr)) if gene_chr[j] > vec_chr[i] or (gene_chr[j] == vec_chr[i] and gene_end[j] > this_pos)), len(gene_chr))
         j = last_j
-        while j < len(gene_chr) and (gene_chr[j] < vec_chr[i] or (gene_chr[j] == vec_chr[i] and gene_end[j] <= this_pos)):
-            j += 1
-        while j < len(gene_chr) and j >= last_j and gene_chr[j] == vec_chr[i]:
+        while j < len(gene_chr) and gene_chr[j] == vec_chr[i] and gene_start[j] <= this_pos:
             if gene_chr[j] == vec_chr[i] and gene_start[j] <= this_pos and gene_end[j] > this_pos:
                 vec_genes[i] = gene_names[j]
                 last_j = j
@@ -563,7 +563,7 @@ def combine_gene_snps(unique_snp_ids, hgtable_file, adata):
     return df_gene_snp
 
 
-def create_haplotype_block_ranges(df_gene_snp, adata, cell_snp_Aallele, cell_snp_Ballele, unique_snp_ids, initial_min_umi=15):
+def create_haplotype_block_ranges(df_gene_snp, adata, cell_snp_Aallele, cell_snp_Ballele, unique_snp_ids, htblock_min_snps=1, htblock_min_umi=15):
     """
     Initially block SNPs along genome.
 
@@ -573,7 +573,8 @@ def create_haplotype_block_ranges(df_gene_snp, adata, cell_snp_Aallele, cell_snp
         Gene and SNP info combined into a single data frame sorted by genomic positions. "is_interval" suggest whether the entry is a gene or a SNP. "gene" column either contain gene name if the entry is a gene, or the gene a SNP belongs to if the entry is a SNP.
     """
     # first level: partition of genome: by gene regions (if two genes overlap, they are grouped to one region)
-    tmp_block_genome_intervals = list(zip( df_gene_snp[df_gene_snp.is_interval].CHR.values, df_gene_snp[df_gene_snp.is_interval].START.values, df_gene_snp[df_gene_snp.is_interval].END.values ))
+    # tmp_block_genome_intervals = list(zip( df_gene_snp[df_gene_snp.is_interval].CHR.values, df_gene_snp[df_gene_snp.is_interval].START.values, df_gene_snp[df_gene_snp.is_interval].END.values ))
+    tmp_block_genome_intervals = list(zip( df_gene_snp.CHR.values, df_gene_snp.START.values, df_gene_snp.END.values ))
     block_genome_intervals = [tmp_block_genome_intervals[0]]
     for x in tmp_block_genome_intervals[1:]:
         # check whether overlap with previous block
@@ -598,17 +599,22 @@ def create_haplotype_block_ranges(df_gene_snp, adata, cell_snp_Aallele, cell_snp
     initial_block_id = np.zeros(df_gene_snp.shape[0], dtype=int)
     for i,x in enumerate(block_ranges):
         initial_block_id[x[0]:x[1]] = i
+    if not np.all(initial_block_id[:-1] <= initial_block_id[1:]):
+        i = np.where(initial_block_id[:-1] > initial_block_id[1:])[0][0]
+        logger.error(f"Not all genes/SNPs are assigned to initial blocks properly. {df_gene_snp.iloc[i:(i+2),:]}, {initial_block_id[i:(i+2)]}")
     df_gene_snp["initial_block_id"] = initial_block_id
 
-    # second level: group the first level blocks into haplotype blocks such that the minimum SNP-covering UMI counts >= initial_min_umi
+    # second level: group the first level blocks into haplotype blocks such that the minimum SNP-covering UMI counts >= htblock_min_umi
     snpumi = np.zeros(df_gene_snp.shape[0], dtype=int)
     snpumi[~df_gene_snp.is_interval] = np.sum(cell_snp_Aallele, axis=0).A.flatten() + np.sum(cell_snp_Ballele, axis=0).A.flatten()
     cumsum_snpumi = np.append(0, np.cumsum(snpumi))
+    count_num_snps = np.append(0, np.cumsum((~df_gene_snp.is_interval).values))
     block_ranges_new = []
     s = 0
     while s < df_gene_snp.shape[0]:
         s_initial_block = df_gene_snp.initial_block_id.values[s]
         t_initial_block = s_initial_block + 1
+        # t_initial_block = s_initial_block + htblock_min_snps
         t = next((s + i for i in range(len(initial_block_id[s:])) if initial_block_id[s+i] >= t_initial_block), df_gene_snp.shape[0])
         while t_initial_block <= len(block_ranges):
             # t = s + np.where(initial_block_id[s:] < t_initial_block)[0][-1] + 1
@@ -616,6 +622,7 @@ def create_haplotype_block_ranges(df_gene_snp, adata, cell_snp_Aallele, cell_snp
             change_chr = (df_gene_snp.CHR.values[s] != df_gene_snp.CHR.values[t-1])
             # check snp UMIs
             this_snp_umis = cumsum_snpumi[t] - cumsum_snpumi[s]
+            this_num_snps = count_num_snps[t] - count_num_snps[s]
             if reach_end:
                 break
             if change_chr:
@@ -623,13 +630,14 @@ def create_haplotype_block_ranges(df_gene_snp, adata, cell_snp_Aallele, cell_snp
                 # t = np.where(initial_block_id < t_initial_block)[0][-1] + 1
                 t = next((s + i for i in range(len(initial_block_id[s:])) if initial_block_id[s+i] >= t_initial_block), df_gene_snp.shape[0])
                 this_snp_umis = cumsum_snpumi[t] - cumsum_snpumi[s]
+                this_num_snps = count_num_snps[t] - count_num_snps[s]
                 break
-            if this_snp_umis >= initial_min_umi:
+            if this_snp_umis >= htblock_min_umi and this_num_snps >= htblock_min_snps:
                 break
             t_initial_block += 1
             t = next((s + i for i in range(len(initial_block_id[s:])) if initial_block_id[s+i] >= t_initial_block), df_gene_snp.shape[0])
         #
-        if this_snp_umis < initial_min_umi and s > 0 and df_gene_snp.CHR.values[s-1] == df_gene_snp.CHR.values[s]:
+        if this_snp_umis < htblock_min_umi and s > 0 and df_gene_snp.CHR.values[s-1] == df_gene_snp.CHR.values[s]:
             block_ranges_new[-1] = (block_ranges_new[-1][0], t)
         else:
             block_ranges_new.append( (s, t) )
@@ -660,10 +668,10 @@ def create_haplotype_block_ranges(df_gene_snp, adata, cell_snp_Aallele, cell_snp
     #             involved_snp_idx = np.array([map_snp_index[x] for x in involved_snps_ids])
     #             this_snp_umis = 0 if len(involved_snp_idx) == 0 else np.sum( cell_snp_Aallele[:, involved_snp_idx]) + np.sum(cell_snp_Ballele[:, involved_snp_idx])
     #             break
-    #         if this_snp_umis >= initial_min_umi:
+    #         if this_snp_umis >= htblock_min_umi:
     #             break
     #     #
-    #     if this_snp_umis < initial_min_umi and s > 0 and initial_block_chr[s-1] == initial_block_chr[s]:
+    #     if this_snp_umis < htblock_min_umi and s > 0 and initial_block_chr[s-1] == initial_block_chr[s]:
     #         indexes = np.where(df_gene_snp.initial_block_id.isin(np.arange(s, t)))[0]
     #         block_ranges_new[-1] = (block_ranges_new[-1][0], indexes[-1]+1)
     #     else:
@@ -733,7 +741,7 @@ def summarize_counts_for_blocks(df_gene_snp, adata, cell_snp_Aallele, cell_snp_B
     sorted_chr_pos_first = list(zip(sorted_chr_pos_first.CHR.values, sorted_chr_pos_first.START.values))
     sorted_chr_pos_last = df_gene_snp.groupby('block_id').agg({'CHR': 'last', 'END': 'last'})
     sorted_chr_pos_last = list(zip(sorted_chr_pos_last.CHR.values, sorted_chr_pos_last.END.values))
-    #
+    
     tmp_sorted_chr_pos = [val for pair in zip(sorted_chr_pos_first, sorted_chr_pos_last) for val in pair]
     position_cM = get_position_cM_table( tmp_sorted_chr_pos, geneticmap_file )
     phase_switch_prob = compute_phase_switch_probability_position(position_cM, tmp_sorted_chr_pos, nu)
@@ -1078,12 +1086,25 @@ def summarize_counts_for_bins(df_gene_snp, sp_single_X_rdr, sp_single_X_b, sp_si
     #     involved_genes = [x for x in df_bin_contents.gene.values[b] if not x is None]
     #     bin_single_X[b, 0, :] = np.sum( adata.layers['count'][:, adata.var.index.isin(involved_genes)], axis=1 )
 
+    # incorporate phase indicator into B allele count and generate phased_sp_single_X_b
+    # collect all nonzero entries in sp_single_total_bb_RD, collect the corresponding B count from sp_single_X_b
+    df_allele_count = pd.DataFrame({'row':sp_single_total_bb_RD.nonzero()[0], 
+                                   'col':sp_single_total_bb_RD.nonzero()[1], 
+                                   'val':sp_single_total_bb_RD[sp_single_total_bb_RD.nonzero()].A.flatten()})
+    df_allele_count['unphased_B'] = sp_single_X_b[ (df_allele_count.row, df_allele_count.col) ].A.flatten()
+    # add phase indicator information
+    df_allele_count['phase_indicator'] = phase_indicator[ df_allele_count.row.values ]
+    # get phased B count
+    df_allele_count['phased_B'] = np.where(df_allele_count.phase_indicator, df_allele_count.unphased_B, df_allele_count.val - df_allele_count.unphased_B)
+    # create phased_sp_single_X_b
+    phased_sp_single_X_b = scipy.sparse.csr_matrix((df_allele_count.phased_B.values, (df_allele_count.row.values, df_allele_count.col.values)), shape=sp_single_X_b.shape)
+
     n_bins = len(df_gene_snp.bin_id.unique())
     N = sp_single_X_rdr.shape[1]
     mul = scipy.sparse.csr_matrix((np.ones(df_gene_snp.shape[0]), (df_gene_snp.bin_id, df_gene_snp.block_id)) )
     bin_single_X = np.zeros((n_bins, 2, N))
     bin_single_X[:,0,:] = (mul @ sp_single_X_rdr).toarray()
-    bin_single_X[:,1,:] = (mul @ sp_single_X_b).toarray()
+    bin_single_X[:,1,:] = (mul @ phased_sp_single_X_b).toarray()
     bin_single_total_bb_RD = (mul @ sp_single_total_bb_RD).toarray()
     bin_single_base_nb_mean = np.zeros(bin_single_total_bb_RD.shape)
 

@@ -140,6 +140,55 @@ def choose_adjacency_by_KNN(coords, exp_counts=None, w=1, maxspots_pooling=7):
     return smooth_mat, adjacency_mat
 
 
+def choose_adjacency_by_triangulation(coords, maxspots_pooling=7):
+    """
+    Create adjacency matrix by delauney triangulation, and then expand the adjacency matrix by allow 2-step and 3-step edges until the number of adjacent spots gets close to maxspots_pooling.
+
+    Attributes
+    ----------
+    coords : array, shape (n_spots, 2)
+        Spatial coordinates of spots.
+
+    maxspots_pooling : int
+        Maximum number of adjacent spots.
+    """
+    # delauney triangulation
+    delaunay = scipy.spatial.Delaunay(coords)
+    num_points = coords.shape[0]
+    
+    # Use a set to store edges to avoid duplicates
+    edges_set = set()
+    for simplex in delaunay.simplices:
+        for i in range(len(simplex)):
+            for j in range(i + 1, len(simplex)):
+                edges_set.add(tuple(sorted((simplex[i], simplex[j]))))
+    
+    # Convert the set of edges to a list of tuples
+    edges = list(edges_set)
+    
+    # Create row and column indices for the adjacency matrix
+    row_ind = [edge[0] for edge in edges]
+    col_ind = [edge[1] for edge in edges]
+    
+    # Create the adjacency matrix in CSR format
+    adjacency_matrix = scipy.sparse.csr_matrix((np.ones(len(edges)), (row_ind, col_ind)), shape=(num_points, num_points))
+
+    # make sure the adjacency matrix is symmetric
+    adjacency_matrix = (adjacency_matrix + adjacency_matrix.T).astype(bool)
+    
+    # Make the adjacency matrix symmetric (undirected graph)
+    adjacency_matrix = adjacency_matrix + adjacency_matrix.T
+    adjacency_matrix = (adjacency_matrix > 0).astype(int) # Ensure values are 0 or 1
+
+    # Expand the adjacency matrix by allow 2-step, 3-step, and more edges
+    expand_adjacency_matrix = (adjacency_matrix @ adjacency_matrix).astype(bool)
+    while np.median(np.sum(expand_adjacency_matrix, axis=0).A1) < maxspots_pooling:
+        adjacency_matrix = expand_adjacency_matrix
+        expand_adjacency_matrix = (expand_adjacency_matrix @ adjacency_matrix).astype(bool)
+    
+    return adjacency_matrix, expand_adjacency_matrix - adjacency_matrix
+
+
 def choose_adjacency_by_readcounts_slidedna(coords, maxspots_pooling=30):
     """
     Merge spots such that 95% quantile of read count per SNP per spot exceed count_threshold.
@@ -157,21 +206,23 @@ def multislice_adjacency(sample_ids, sample_list, coords, single_total_bb_RD, ex
         index = np.where(sample_ids == i)[0]
         this_coords = np.array(coords[index,:])
         if construct_adjacency_method == "hexagon":
-            tmpsmooth_mat, tmpadjacency_mat = choose_adjacency_by_readcounts(this_coords, single_total_bb_RD[:,index], maxspots_pooling=maxspots_pooling)
+            try:
+                tmpsmooth_mat, tmpadjacency_mat = choose_adjacency_by_readcounts(this_coords, single_total_bb_RD[:,index], maxspots_pooling=maxspots_pooling)
+            # catch memory error, and then use choose_adjacency_by_triangulation
+            except MemoryError:
+                tmpsmooth_mat, tmpadjacency_mat = choose_adjacency_by_triangulation(this_coords, maxspots_pooling=maxspots_pooling)
         elif construct_adjacency_method == "KNN":
             # tmpsmooth_mat, tmpadjacency_mat = choose_adjacency_by_KNN(this_coords, exp_counts.iloc[index,:], w=construct_adjacency_w, maxspots_pooling=maxspots_pooling)
             tmpsmooth_mat, tmpadjacency_mat = choose_adjacency_by_KNN(this_coords, exp_counts[index,:], w=construct_adjacency_w, maxspots_pooling=maxspots_pooling)
         else:
             raise("Unknown adjacency construction method")
         # tmpsmooth_mat, tmpadjacency_mat = choose_adjacency_by_readcounts_slidedna(this_coords, maxspots_pooling=config["maxspots_pooling"])
-        adjacency_mat.append( tmpadjacency_mat.A )
-        smooth_mat.append( tmpsmooth_mat.A )
-    adjacency_mat = scipy.linalg.block_diag(*adjacency_mat)
-    adjacency_mat = scipy.sparse.csr_matrix( adjacency_mat )
+        adjacency_mat.append( tmpadjacency_mat )
+        smooth_mat.append( tmpsmooth_mat )
+    adjacency_mat = scipy.sparse.block_diag(adjacency_mat, format='csr')
     if not across_slice_adjacency_mat is None:
         adjacency_mat += across_slice_adjacency_mat
-    smooth_mat = scipy.linalg.block_diag(*smooth_mat)
-    smooth_mat = scipy.sparse.csr_matrix( smooth_mat )
+    smooth_mat = scipy.sparse.block_diag(smooth_mat, format='csr')
     return adjacency_mat, smooth_mat
 
 
@@ -648,15 +699,15 @@ def estimator_tumor_proportion(single_X, single_total_bb_RD, assignments, pred_c
     ----------
     0.5 ( 1-theta ) / (theta * RDR + 1 - theta) = B_count / Total_count for each LOH state.
     """
-    # def estimate_purity(T_loh, B_loh, rdr_values):
-    #     features =(T_loh / 2.0 + rdr_values * B_loh - B_loh)[T_loh>0].reshape(-1,1)
-    #     y = (T_loh / 2.0 - B_loh)[T_loh>0]
-    #     return np.linalg.lstsq(features, y, rcond=None)[0]
     def estimate_purity(T_loh, B_loh, rdr_values):
-        idx = np.where(T_loh > 0)[0]
-        model = BAF_Binom(endog=B_loh[idx], exog=np.ones((len(idx),1)), weights=np.ones(len(idx)), exposure=T_loh[idx], offset=np.log(rdr_values[idx]), scaling=0.5)
-        res = model.fit(disp=False)
-        return 1.0 / (1.0 + np.exp(res.params))
+        features =(T_loh / 2.0 + rdr_values * B_loh - B_loh)[T_loh>0].reshape(-1,1)
+        y = (T_loh / 2.0 - B_loh)[T_loh>0]
+        return np.linalg.lstsq(features, y, rcond=None)[0]
+    # def estimate_purity(T_loh, B_loh, rdr_values):
+    #     idx = np.where(T_loh > 0)[0]
+    #     model = BAF_Binom(endog=B_loh[idx], exog=np.ones((len(idx),1)), weights=np.ones(len(idx)), exposure=T_loh[idx], offset=np.log(rdr_values[idx]), scaling=0.5)
+    #     res = model.fit(disp=False)
+    #     return 1.0 / (1.0 + np.exp(res.params))
     #
     n_obs = single_X.shape[0]
     n_spots = single_X.shape[2]
