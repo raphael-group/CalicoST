@@ -124,14 +124,15 @@ def parse_visium(config):
     else:
         df_gene_snp = pd.read_pickle(f"{config['output_dir']}/parsed_inputs/df_gene_snp_combinegenesnps.pkl")
 
-    idx_snps_within = np.where(df_gene_snp[~df_gene_snp.is_interval].gene.notnull())[0]
-    df_gene_snp = df_gene_snp[df_gene_snp.gene.notnull()]
-    cell_snp_Aallele = cell_snp_Aallele[:, idx_snps_within]
-    cell_snp_Ballele = cell_snp_Ballele[:, idx_snps_within]
-    unique_snp_ids = unique_snp_ids[idx_snps_within]
+    # # TBD: need to set another user parameters to decide whether only restricted to SNPs within df_hgtable
+    # idx_snps_within = np.where(df_gene_snp[~df_gene_snp.is_interval].gene.notnull())[0]
+    # df_gene_snp = df_gene_snp[df_gene_snp.gene.notnull()]
+    # cell_snp_Aallele = cell_snp_Aallele[:, idx_snps_within]
+    # cell_snp_Ballele = cell_snp_Ballele[:, idx_snps_within]
+    # unique_snp_ids = unique_snp_ids[idx_snps_within]
 
     if not Path(f"{config['output_dir']}/parsed_inputs/df_gene_snp_haplotypeblock.pkl").exists():
-        df_gene_snp = create_haplotype_block_ranges(df_gene_snp, adata, cell_snp_Aallele, cell_snp_Ballele, unique_snp_ids, initial_min_umi=config['initial_min_umi'])
+        df_gene_snp = create_haplotype_block_ranges(df_gene_snp, adata, cell_snp_Aallele, cell_snp_Ballele, unique_snp_ids, htblock_min_snps=config['htblock_min_snps'], htblock_min_umi=config['initial_min_umi'])
         # save temp output
         df_gene_snp.to_pickle(f"{config['output_dir']}/parsed_inputs/df_gene_snp_haplotypeblock.pkl")
     else:
