@@ -221,6 +221,23 @@ def initialization_by_gmm(n_states, X, base_nb_mean, total_bb_RD, params, random
     return gmm_log_mu, gmm_p_binom
 
 
+def initialization_log_mu_percentile(n_states, X_rdr, base_nb_mean, random_state, min_percentile=30, max_percentile=70, min_log_mu=-2, max_log_mu=2):
+    # prepare input
+    n_bins, n_spots = X_rdr.shape
+    X_gmm_rdr = np.vstack([ X_rdr[:,s]/base_nb_mean[:,s] for s in range(n_spots) ]).T
+    # initialize HMM parameters by percentiles of linspace(30, 70, n_states) for each clone
+    init_log_mu = np.zeros((n_states, n_spots))
+    for i in range(n_spots):
+        subset_X_gmm_rdr = X_gmm_rdr[:, i]
+        subset_X_gmm_rdr = subset_X_gmm_rdr[~np.isnan(subset_X_gmm_rdr)]
+        subset_X_gmm_rdr = subset_X_gmm_rdr[~np.isinf(subset_X_gmm_rdr)]
+        init_mu = np.percentile(subset_X_gmm_rdr, np.linspace(min_percentile, max_percentile, n_states))
+        init_log_mu[:, i] = np.log(init_mu)
+    init_log_mu[init_log_mu < min_log_mu] = min_log_mu
+    init_log_mu[init_log_mu > max_log_mu] = max_log_mu
+    return init_log_mu
+
+
 ############################################################
 # E step related
 ############################################################
