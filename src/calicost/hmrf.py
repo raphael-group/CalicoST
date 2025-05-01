@@ -296,14 +296,14 @@ def merge_by_minspots(assignment, res, single_total_bb_RD, min_spots_thresholds=
     return merging_groups, merged_res
 
 
-def hmrf_pipeline(outdir, single_X, lengths, single_base_nb_mean, single_total_bb_RD, initial_clone_index, n_states, \
+def hmrf_pipeline(outdir, prefix, single_X, lengths, single_base_nb_mean, single_total_bb_RD, initial_clone_index, n_states, \
     log_sitewise_transmat, coords=None, smooth_mat=None, adjacency_mat=None, sample_ids=None, max_iter_outer=5, nodepotential="max", \
     hmmclass=hmm_sitewise, params="stmp", t=1-1e-6, random_state=0, init_log_mu=None, init_p_binom=None, init_alphas=None, init_taus=None,\
     fix_NB_dispersion=False, shared_NB_dispersion=True, fix_BB_dispersion=False, shared_BB_dispersion=True, \
     is_diag=True, max_iter=100, tol=1e-4, unit_xsquared=9, unit_ysquared=3, spatial_weight=1.0):
     n_obs, _, n_spots = single_X.shape
     n_clones = len(initial_clone_index)
-    # spot adjacency matric
+    # checking input
     assert not (coords is None and adjacency_mat is None)
     if adjacency_mat is None:
         adjacency_mat = compute_adjacency_mat(coords, unit_xsquared, unit_ysquared)
@@ -338,14 +338,43 @@ def hmrf_pipeline(outdir, single_X, lengths, single_base_nb_mean, single_total_b
         last_assignment[idx] = c
     # HMM
     for r in range(max_iter_outer):
-        if not Path(f"{outdir}/round{r}_nstates{n_states}_{params}.npz").exists():
+        # assuming file f"{outdir}/{prefix}_nstates{n_states}_{params}.npz" exists. When r == 0, f"{outdir}/{prefix}_nstates{n_states}_{params}.npz" should contain two keys: "num_iterations" and f"round_-1_assignment" for clone initialization
+        allres = np.load(f"{outdir}/{prefix}_nstates{n_states}_{params}.npz", allow_pickle=True)
+        allres = dict(allres)
+        if allres["num_iterations"] > r:
+            res = {"new_log_mu":allres[f"round{r}_new_log_mu"], "new_alphas":allres[f"round{r}_new_alphas"], \
+                "new_p_binom":allres[f"round{r}_new_p_binom"], "new_taus":allres[f"round{r}_new_taus"], \
+                "new_log_startprob":allres[f"round{r}_new_log_startprob"], "new_log_transmat":allres[f"round{r}_new_log_transmat"], "log_gamma":allres[f"round{r}_log_gamma"], \
+                "pred_cnv":allres[f"round{r}_pred_cnv"], "llf":allres[f"round{r}_llf"], "total_llf":allres[f"round{r}_total_llf"], \
+                "prev_assignment":allres[f"round{r-1}_assignment"], "new_assignment":allres[f"round{r}_assignment"]}
+        else:
             ##### initialize with the parameters of last iteration #####
-            res = pipeline_baum_welch(None, X, lengths, n_states, base_nb_mean, total_bb_RD, log_sitewise_transmat, \
-                              hmmclass=hmmclass, params=params, t=t, random_state=random_state, \
-                              fix_NB_dispersion=fix_NB_dispersion, shared_NB_dispersion=shared_NB_dispersion, \
-                              fix_BB_dispersion=fix_BB_dispersion, shared_BB_dispersion=shared_BB_dispersion, \
-                              is_diag=is_diag, init_log_mu=last_log_mu, init_p_binom=last_p_binom, init_alphas=last_alphas, init_taus=last_taus, max_iter=max_iter, tol=tol)
-            pred = np.argmax(res["log_gamma"], axis=0)
+            res_list = []
+            for c in range(X.shape[2]):
+                res = pipeline_baum_welch(None, X[:,:,c:(c+1)], lengths, n_states, base_nb_mean[:,c:(c+1)], total_bb_RD[:,c:(c+1)], log_sitewise_transmat, \
+                                hmmclass=hmmclass, params=params, t=t, random_state=random_state, \
+                                fix_NB_dispersion=fix_NB_dispersion, shared_NB_dispersion=shared_NB_dispersion, \
+                                fix_BB_dispersion=fix_BB_dispersion, shared_BB_dispersion=shared_BB_dispersion, \
+                                is_diag=is_diag, 
+                                init_log_mu=last_log_mu[:,c:(c+1)] if not last_log_mu is None else None, 
+                                init_p_binom=last_p_binom[:,c:(c+1)] if not last_p_binom is None else None, \
+                                init_alphas=last_alphas[:,c:(c+1)] if not last_alphas is None else None, \
+                                init_taus=last_taus[:,c:(c+1)] if not last_taus is None else None, \
+                                max_iter=max_iter, tol=tol)
+                res_list.append(res)
+            # concatenate results for each inferred clone
+            res = {
+                   'new_log_mu':np.hstack([tmp['new_log_mu'] for tmp in res_list]), 
+                   'new_alphas':np.hstack([tmp['new_alphas'] for tmp in res_list]),
+                   'new_p_binom':np.hstack([tmp['new_p_binom'] for tmp in res_list]),
+                   'new_taus':np.hstack([tmp['new_taus'] for tmp in res_list]),
+                   'new_log_startprob':np.vstack([tmp['new_log_startprob'] for tmp in res_list]).mean(axis=0), 
+                   'new_log_transmat':res_list[0]['new_log_transmat'], 
+                   'log_gamma':np.stack([tmp['log_gamma'] for tmp in res_list], axis=-1), 
+                   'pred_cnv':np.vstack([tmp['pred_cnv'] for tmp in res_list]).T, 
+                   'llf':np.sum([tmp['llf'] for tmp in res_list])
+                   }
+            pred = res['pred_cnv']
             # clone assignmment
             if nodepotential == "max":
                 new_assignment, single_llf, total_llf = aggr_hmrf_reassignment(single_X, single_base_nb_mean, single_total_bb_RD, res, pred, \
@@ -355,6 +384,7 @@ def hmrf_pipeline(outdir, single_X, lengths, single_base_nb_mean, single_total_b
                     smooth_mat, adjacency_mat, last_assignment, sample_ids, log_persample_weights, spatial_weight=spatial_weight, hmmclass=hmmclass)
             else:
                 raise Exception("Unknown mode for nodepotential!")
+
             # handle the case when one clone has zero spots
             if len(np.unique(new_assignment)) < X.shape[2]:
                 res["assignment_before_reindex"] = new_assignment
@@ -365,27 +395,32 @@ def hmrf_pipeline(outdir, single_X, lengths, single_base_nb_mean, single_total_b
             res["prev_assignment"] = last_assignment
             res["new_assignment"] = new_assignment
             res["total_llf"] = total_llf
-
-            # save results
-            np.savez(f"{outdir}/round{r}_nstates{n_states}_{params}.npz", **res)
-
-        else:
-            res = np.load(f"{outdir}/round{r}_nstates{n_states}_{params}.npz")
-
+            # append to allres
+            for k,v in res.items():
+                if k == "prev_assignment":
+                    allres[f"round{r-1}_assignment"] = v
+                elif k == "new_assignment":
+                    allres[f"round{r}_assignment"] = v
+                else:
+                    allres[f"round{r}_{k}"] = v
+            allres["num_iterations"] = r + 1
+            np.savez(f"{outdir}/{prefix}_nstates{n_states}_{params}.npz", **allres)
+        #
         # regroup to pseudobulk
         clone_index = [np.where(res["new_assignment"] == c)[0] for c in np.sort(np.unique(res["new_assignment"]))]
         X, base_nb_mean, total_bb_RD = merge_pseudobulk_by_index(single_X, single_base_nb_mean, single_total_bb_RD, clone_index)
-
-        # update last parameter
-        if "mp" in params:
-            print("outer iteration {}: total_llf = {}, difference between parameters = {}, {}".format( r, res["total_llf"], np.mean(np.abs(last_log_mu-res["new_log_mu"])), np.mean(np.abs(last_p_binom-res["new_p_binom"])) ))
-        elif "m" in params:
-            print("outer iteration {}: total_llf = {}, difference between NB parameters = {}".format( r, res["total_llf"], np.mean(np.abs(last_log_mu-res["new_log_mu"])) ))
-        elif "p" in params:
-            print("outer iteration {}: total_llf = {}, difference between BetaBinom parameters = {}".format( r, res["total_llf"], np.mean(np.abs(last_p_binom-res["new_p_binom"])) ))
+        #
+        # if "mp" in params:
+        #     print("outer iteration {}: difference between parameters = {}, {}".format( r, np.mean(np.abs(last_log_mu-res["new_log_mu"])), np.mean(np.abs(last_p_binom-res["new_p_binom"])) ))
+        # elif "m" in params:
+        #     print("outer iteration {}: difference between NB parameters = {}".format( r, np.mean(np.abs(last_log_mu-res["new_log_mu"])) ))
+        # elif "p" in params:
+        #     print("outer iteration {}: difference between BetaBinom parameters = {}".format( r, np.mean(np.abs(last_p_binom-res["new_p_binom"])) ))
         print("outer iteration {}: ARI between assignment = {}".format( r, adjusted_rand_score(last_assignment, res["new_assignment"]) ))
+        # if np.all( last_assignment == res["new_assignment"] ):
         if adjusted_rand_score(last_assignment, res["new_assignment"]) > 0.99 or len(np.unique(res["new_assignment"])) == 1:
             break
+        
         last_log_mu = res["new_log_mu"]
         last_p_binom = res["new_p_binom"]
         last_alphas = res["new_alphas"]
@@ -496,12 +531,12 @@ def hmrf_concatenate_pipeline(outdir, prefix, single_X, lengths, single_base_nb_
         clone_index = [np.where(res["new_assignment"] == c)[0] for c in np.sort(np.unique(res["new_assignment"]))]
         X, base_nb_mean, total_bb_RD = merge_pseudobulk_by_index(single_X, single_base_nb_mean, single_total_bb_RD, clone_index)
         #
-        if "mp" in params:
-            print("outer iteration {}: difference between parameters = {}, {}".format( r, np.mean(np.abs(last_log_mu-res["new_log_mu"])), np.mean(np.abs(last_p_binom-res["new_p_binom"])) ))
-        elif "m" in params:
-            print("outer iteration {}: difference between NB parameters = {}".format( r, np.mean(np.abs(last_log_mu-res["new_log_mu"])) ))
-        elif "p" in params:
-            print("outer iteration {}: difference between BetaBinom parameters = {}".format( r, np.mean(np.abs(last_p_binom-res["new_p_binom"])) ))
+        # if "mp" in params:
+        #     print("outer iteration {}: difference between parameters = {}, {}".format( r, np.mean(np.abs(last_log_mu-res["new_log_mu"])), np.mean(np.abs(last_p_binom-res["new_p_binom"])) ))
+        # elif "m" in params:
+        #     print("outer iteration {}: difference between NB parameters = {}".format( r, np.mean(np.abs(last_log_mu-res["new_log_mu"])) ))
+        # elif "p" in params:
+        #     print("outer iteration {}: difference between BetaBinom parameters = {}".format( r, np.mean(np.abs(last_p_binom-res["new_p_binom"])) ))
         print("outer iteration {}: ARI between assignment = {}".format( r, adjusted_rand_score(last_assignment, res["new_assignment"]) ))
         # if np.all( last_assignment == res["new_assignment"] ):
         if adjusted_rand_score(last_assignment, res["new_assignment"]) > 0.99 or len(np.unique(res["new_assignment"])) == 1:
@@ -975,12 +1010,12 @@ def hmrfmix_concatenate_pipeline(outdir, prefix, single_X, lengths, single_base_
         clone_index = [np.where(res["new_assignment"] == c)[0] for c in np.sort(np.unique(res["new_assignment"]))]
         X, base_nb_mean, total_bb_RD, tumor_prop = merge_pseudobulk_by_index_mix(single_X, single_base_nb_mean, single_total_bb_RD, clone_index, single_tumor_prop, threshold=tumorprop_threshold)
         #
-        if "mp" in params:
-            print("outer iteration {}: difference between parameters = {}, {}".format( r, np.mean(np.abs(last_log_mu-res["new_log_mu"])), np.mean(np.abs(last_p_binom-res["new_p_binom"])) ))
-        elif "m" in params:
-            print("outer iteration {}: difference between NB parameters = {}".format( r, np.mean(np.abs(last_log_mu-res["new_log_mu"])) ))
-        elif "p" in params:
-            print("outer iteration {}: difference between BetaBinom parameters = {}".format( r, np.mean(np.abs(last_p_binom-res["new_p_binom"])) ))
+        # if "mp" in params:
+        #     print("outer iteration {}: difference between parameters = {}, {}".format( r, np.mean(np.abs(last_log_mu-res["new_log_mu"])), np.mean(np.abs(last_p_binom-res["new_p_binom"])) ))
+        # elif "m" in params:
+        #     print("outer iteration {}: difference between NB parameters = {}".format( r, np.mean(np.abs(last_log_mu-res["new_log_mu"])) ))
+        # elif "p" in params:
+        #     print("outer iteration {}: difference between BetaBinom parameters = {}".format( r, np.mean(np.abs(last_p_binom-res["new_p_binom"])) ))
         print("outer iteration {}: ARI between assignment = {}".format( r, adjusted_rand_score(last_assignment, res["new_assignment"]) ))
         # if np.all( last_assignment == res["new_assignment"] ):
         if adjusted_rand_score(last_assignment, res["new_assignment"]) > 0.99 or len(np.unique(res["new_assignment"])) == 1:
