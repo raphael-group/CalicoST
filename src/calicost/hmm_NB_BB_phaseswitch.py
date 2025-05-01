@@ -573,6 +573,26 @@ def eval_neymanpearson_bafonly(log_emission_baf_c1, pred_c1, log_emission_baf_c2
     return np.mean(llf_original) - np.mean(llf_switch)
 
 
+def eval_neymanpearson_exponly(log_emission_rdr_c1, pred_c1, log_emission_rdr_c2, pred_c2, bidx, n_states, res, p):
+    assert log_emission_rdr_c1.shape[0] == n_states or log_emission_rdr_c1.shape[0] == 2 * n_states
+    # likelihood under the corresponding state
+    llf_original = np.append(log_emission_rdr_c1[pred_c1[bidx], bidx], log_emission_rdr_c2[pred_c2[bidx], bidx]).reshape(-1,1)
+    # likelihood under the switched state
+    if log_emission_rdr_c1.shape[0] == 2 * n_states:
+        if (res["new_p_binom"][p[0],0] > 0.5) == (res["new_p_binom"][p[1],0] > 0.5):
+            switch_pred_c1 = n_states * (pred_c1 >= n_states) + (pred_c2 % n_states)
+            switch_pred_c2 = n_states * (pred_c2 >= n_states) + (pred_c1 % n_states)
+        else:
+            switch_pred_c1 = n_states * (pred_c1 < n_states) + (pred_c2 % n_states)
+            switch_pred_c2 = n_states * (pred_c2 < n_states) + (pred_c1 % n_states)
+    else:
+        switch_pred_c1 = pred_c2
+        switch_pred_c2 = pred_c1
+    llf_switch = np.append(log_emission_rdr_c1[switch_pred_c1[bidx], bidx], log_emission_rdr_c2[switch_pred_c2[bidx], bidx]).reshape(-1,1)
+    # log likelihood difference
+    return np.mean(llf_original) - np.mean(llf_switch)
+
+
 def eval_neymanpearson_rdrbaf(log_emission_rdr_c1, log_emission_baf_c1, pred_c1, log_emission_rdr_c2, log_emission_baf_c2, pred_c2, bidx, n_states, res, p):
     assert log_emission_baf_c1.shape[0] == n_states or log_emission_baf_c1.shape[0] == 2 * n_states
     # likelihood under the corresponding state
@@ -683,6 +703,8 @@ def similarity_components_rdrbaf_neymanpearson(X, base_nb_mean, total_bb_RD, res
                     t_neymanpearson = eval_neymanpearson_rdrbaf(log_emission_rdr[:,:,c1], log_emission_baf[:,:,c1], reshaped_pred[c1,:], log_emission_rdr[:,:,c2], log_emission_baf[:,:,c2], reshaped_pred[c2,:], bidx, n_states, res, p)
                 elif "p" in params:
                     t_neymanpearson = eval_neymanpearson_bafonly(log_emission_baf[:,:,c1], reshaped_pred[c1,:], log_emission_baf[:,:,c2], reshaped_pred[c2,:], bidx, n_states, res, p)
+                elif "m" in params:
+                    t_neymanpearson = eval_neymanpearson_exponly(log_emission_rdr[:,:,c1], reshaped_pred[c1,:], log_emission_rdr[:,:,c2], reshaped_pred[c2,:], bidx, n_states, res, p)
                 print(c1, c2, p, len(bidx), t_neymanpearson)
                 all_test_statistics.append( [c1, c2, p, t_neymanpearson] )
                 if len(bidx) >= minlength:
