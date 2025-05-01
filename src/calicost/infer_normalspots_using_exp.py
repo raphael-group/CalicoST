@@ -59,8 +59,8 @@ def special_load_data(input_filelist, spaceranger_dir, hgtable_file, min_genes, 
     return adata, sample_list, sample_ids, coords, df_gene_snp, lengths, single_X, single_base_nb_mean, single_total_bb_RD, log_sitewise_transmat, single_tumor_prop
 
 
-def special_plotting_spatial(coords, hue, palette, title):
-    fig, ax = plt.subplots(1, 1, figsize=(6, 5))
+def special_plotting_spatial(coords, hue, palette, title, width_ratio=1):
+    fig, ax = plt.subplots(1, 1, figsize=(1 + 5 * width_ratio, 5))
     seaborn.scatterplot(x=coords[:,0], y=-coords[:,1], hue=hue, s=15, linewidth=0, ax=ax, palette=palette)
     ax.set_title(title)
     ax.legend(loc='upper right', bbox_to_anchor=(1, 1))
@@ -69,7 +69,7 @@ def special_plotting_spatial(coords, hue, palette, title):
     return fig
 
 
-def main(input_filelist, spaceranger_dir, hgtable_file, output_prefix, min_genes, min_snpumi_perspot, min_percent_expressed_spots, secondary_min_umi):
+def main(input_filelist, spaceranger_dir, hgtable_file, output_prefix, min_genes, min_snpumi_perspot, min_percent_expressed_spots, secondary_min_umi, min_normal_umi):
 
     ########## Proprocess input data ##########
     adata, sample_list, sample_ids, coords, df_gene_snp, lengths, single_X, single_base_nb_mean, single_total_bb_RD, log_sitewise_transmat, single_tumor_prop = special_load_data(
@@ -102,6 +102,9 @@ def main(input_filelist, spaceranger_dir, hgtable_file, output_prefix, min_genes
 
     # summary statistics for each leiden cluster
     sorted_cluster_ids = np.sort(adata.obs.leiden.unique())
+    
+    # retain cluster ids if the sum of umis across the spots within that cluster exceed min_normal_umi
+    sorted_cluster_ids = np.array([ c for c in sorted_cluster_ids if np.sum(adata[adata.obs.leiden==c].layers['count'].sum()) > min_normal_umi ])
 
     # average log UMI per cluster
     log_umis = [ np.log1p(adata[adata.obs.leiden==c].layers['count'].sum(axis=1)).mean() for c in sorted_cluster_ids ]
@@ -120,24 +123,32 @@ def main(input_filelist, spaceranger_dir, hgtable_file, output_prefix, min_genes
     log_normalized_cluster_X = np.log1p(cluster_X / cluster_X.sum(axis=0,keepdims=True))
     std_cluster_X = np.std(log_normalized_cluster_X, axis=1)
 
+    # shift coordinates for plotting
+    shifted_coords = copy.copy(coords)
+    offset = 0
+    for i,s in enumerate(sample_list):
+        idx = np.where(sample_ids==i)[0]
+        shifted_coords[idx, 0] += (offset - np.min(shifted_coords[idx, 0]))
+        offset = np.max(shifted_coords[idx, 0]) + 5
+
     # plot leiden cluster and summary statistics
-    fig = special_plotting_spatial(coords, adata.obs.leiden, 'Set2', 'Leiden cluster')
+    fig = special_plotting_spatial(shifted_coords, adata.obs.leiden, 'Set2', 'Leiden cluster')
     fig.savefig(f'{output_prefix}_leiden_cluster.png')
     plt.close(fig)
 
-    fig = special_plotting_spatial(coords, adata.obs.leiden.map(dict(zip(sorted_cluster_ids, log_umis))).astype(float), 'coolwarm', 'Average log UMI')
+    fig = special_plotting_spatial(shifted_coords, adata.obs.leiden.map(dict(zip(sorted_cluster_ids, log_umis))).astype(float), 'coolwarm', 'Average log UMI', width_ratio=len(sample_list))
     fig.savefig(f'{output_prefix}_log_umis.png')
     plt.close(fig)
 
-    fig = special_plotting_spatial(coords, adata.obs.leiden.map(dict(zip(sorted_cluster_ids, log_num_expressedgenes))).astype(float), 'coolwarm', 'Average log number of expressed genes')
+    fig = special_plotting_spatial(shifted_coords, adata.obs.leiden.map(dict(zip(sorted_cluster_ids, log_num_expressedgenes))).astype(float), 'coolwarm', 'Average log number of expressed genes', width_ratio=len(sample_list))
     fig.savefig(f'{output_prefix}_log_num_expressedgenes.png')
     plt.close(fig)
 
-    fig = special_plotting_spatial(coords, adata.obs.leiden.map(dict(zip(sorted_cluster_ids, entropy))).astype(float), 'coolwarm', 'Entropy of gene expression')
+    fig = special_plotting_spatial(shifted_coords, adata.obs.leiden.map(dict(zip(sorted_cluster_ids, entropy))).astype(float), 'coolwarm', 'Entropy of gene expression', width_ratio=len(sample_list))
     fig.savefig(f'{output_prefix}_entropy.png')
     plt.close(fig)
 
-    fig = special_plotting_spatial(coords, adata.obs.leiden.map(dict(zip(sorted_cluster_ids, std_cluster_X))).astype(float), 'coolwarm', 'Standard deviation of log-normalized UMI counts per bin')
+    fig = special_plotting_spatial(shifted_coords, adata.obs.leiden.map(dict(zip(sorted_cluster_ids, std_cluster_X))).astype(float), 'coolwarm', 'Standard deviation of log-normalized UMI counts per bin', width_ratio=len(sample_list))
     fig.savefig(f'{output_prefix}_std_cluster_X.png')
     plt.close(fig)
 
@@ -150,22 +161,22 @@ def main(input_filelist, spaceranger_dir, hgtable_file, output_prefix, min_genes
     fig, axes = plt.subplots(1, 4, figsize=(20, 5))
     # selected normal spots based on log_umis
     np.savetxt(f'{output_prefix}_normalidx_from_log_umis.tsv', adata.obs[adata.obs.leiden.isin([sorted_cluster_ids[np.argmin(log_umis)]])].index.values, fmt='%s')
-    seaborn.scatterplot(x=coords[:,0], y=-coords[:,1], hue=adata.obs.leiden.isin([sorted_cluster_ids[np.argmin(log_umis)]]), s=15, linewidth=0, ax=axes[0], palette=seaborn.color_palette(['lightgrey', 'red']))
+    seaborn.scatterplot(x=shifted_coords[:,0], y=-shifted_coords[:,1], hue=adata.obs.leiden.isin([sorted_cluster_ids[np.argmin(log_umis)]]), s=15, linewidth=0, ax=axes[0], palette=seaborn.color_palette(['lightgrey', 'red']))
     axes[0].set_title('Normal spots based on log UMI')
 
     # selected normal spots based on log_num_expressedgenes
     np.savetxt(f'{output_prefix}_normalidx_from_log_num_expressedgenes.tsv', adata.obs[adata.obs.leiden.isin([sorted_cluster_ids[np.argmin(log_num_expressedgenes)]])].index.values, fmt='%s')
-    seaborn.scatterplot(x=coords[:,0], y=-coords[:,1], hue=adata.obs.leiden.isin([sorted_cluster_ids[np.argmin(log_num_expressedgenes)]]), s=15, linewidth=0, ax=axes[1], palette=seaborn.color_palette(['lightgrey', 'red']))
+    seaborn.scatterplot(x=shifted_coords[:,0], y=-shifted_coords[:,1], hue=adata.obs.leiden.isin([sorted_cluster_ids[np.argmin(log_num_expressedgenes)]]), s=15, linewidth=0, ax=axes[1], palette=seaborn.color_palette(['lightgrey', 'red']))
     axes[1].set_title('Normal spots based on log number of expressed genes')
 
     # selected normal spots based on entropy
     np.savetxt(f'{output_prefix}_normalidx_from_entropy.tsv', adata.obs[adata.obs.leiden.isin([sorted_cluster_ids[np.argmin(entropy)]])].index.values, fmt='%s')
-    seaborn.scatterplot(x=coords[:,0], y=-coords[:,1], hue=adata.obs.leiden.isin([sorted_cluster_ids[np.argmin(entropy)]]), s=15, linewidth=0, ax=axes[2], palette=seaborn.color_palette(['lightgrey', 'red']))
+    seaborn.scatterplot(x=shifted_coords[:,0], y=-shifted_coords[:,1], hue=adata.obs.leiden.isin([sorted_cluster_ids[np.argmin(entropy)]]), s=15, linewidth=0, ax=axes[2], palette=seaborn.color_palette(['lightgrey', 'red']))
     axes[2].set_title('Normal spots based on entropy')
 
     # selected normal spots based on std_cluster_X
     np.savetxt(f'{output_prefix}_normalidx_from_std_cluster_X.tsv', adata.obs[adata.obs.leiden.isin([sorted_cluster_ids[np.argmin(std_cluster_X)]])].index.values, fmt='%s')
-    seaborn.scatterplot(x=coords[:,0], y=-coords[:,1], hue=adata.obs.leiden.isin([sorted_cluster_ids[np.argmin(std_cluster_X)]]), s=15, linewidth=0, ax=axes[3], palette=seaborn.color_palette(['lightgrey', 'red']))
+    seaborn.scatterplot(x=shifted_coords[:,0], y=-shifted_coords[:,1], hue=adata.obs.leiden.isin([sorted_cluster_ids[np.argmin(std_cluster_X)]]), s=15, linewidth=0, ax=axes[3], palette=seaborn.color_palette(['lightgrey', 'red']))
     axes[3].set_title('Normal spots based on std log-normalized UMI')
     fig.tight_layout()
     fig.savefig('selected_normal_spots.png')
@@ -184,7 +195,8 @@ if __name__ == "__main__":
     parser.add_argument('--min_snpumi_perspot', type=int, default=50, help='Minimum number of SNP UMI per spot')
     parser.add_argument('--min_percent_expressed_spots', type=float, default=0.005, help='Minimum percentage of expressed spots per gene')
     parser.add_argument('--secondary_min_umi', type=int, default=400, help='Secondary minimum number of UMI per spot')
+    parser.add_argument('--min_normal_umi', type=int, default=1e5, help='A cluster can be labeled as normal cluster if the total UMI exceeds this threshold')
     parser.add_argument('--output_prefix', type=str, help='Output prefix (including path).')
     args = parser.parse_args()
 
-    main(args.input_filelist, args.spaceranger_dir, args.hgtable_file, args.output_prefix, args.min_genes, args.min_snpumi_perspot, args.min_percent_expressed_spots, args.secondary_min_umi)
+    main(args.input_filelist, args.spaceranger_dir, args.hgtable_file, args.output_prefix, args.min_genes, args.min_snpumi_perspot, args.min_percent_expressed_spots, args.secondary_min_umi, args.min_normal_umi)
