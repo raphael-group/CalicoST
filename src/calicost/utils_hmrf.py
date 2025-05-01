@@ -394,7 +394,30 @@ def reorder_results_merged(res, n_obs):
     new_res["log_gamma"] = np.hstack([ res["log_gamma"][:, (c*n_obs):(c*n_obs + n_obs)] for c in reidx ])
     new_res["pred_cnv"] = np.concatenate([ res["pred_cnv"][(c*n_obs):(c*n_obs + n_obs)] for c in reidx ])
     return new_res
+
+
+def reorder_results_exponly(res, n_obs):
+    n_spots = len(res['new_assignment'])
+    n_states = res["new_p_binom"].shape[0]
+    n_clones = int(len(res["pred_cnv"]) / n_obs)
+    new_res = copy.copy(res)
+
+    # select near-normal clone and set to clone 0
+    pred_cnv = np.vstack([ res["pred_cnv"][(n_obs*c):(n_obs*c+n_obs)] for c in range(n_clones) ]).T
+    # median-centered log RDR profile
+    logrdr_profiles = np.array([ res["new_log_mu"][pred_cnv[:,c], 0] - np.median(res["new_log_mu"][pred_cnv[:,c], 0]) for c in range(n_clones) ])
+    # sort clones by the deviation of logrdr profiles from 0
+    deviation_from_zero = np.sum(np.abs(logrdr_profiles), axis=1)
+    sortidx = np.argsort(deviation_from_zero)
+    map_reidx = {c:i for i,c in enumerate(sortidx)}
+
+    # re-order entries in res
+    new_res["new_assignment"] = np.array([ map_reidx[c] for c in res["new_assignment"] ])
+    new_res["log_gamma"] = np.hstack([ res["log_gamma"][:, (n_obs*c):(n_obs*c+n_obs)] for c in sortidx ])
+    new_res["pred_cnv"] = np.concatenate([ res["pred_cnv"][(n_obs*c):(n_obs*c+n_obs)] for c in sortidx ])
     
+    return new_res
+ 
 
 def load_hmrf_last_iteration(filename):
     allres = dict( np.load(filename, allow_pickle=True) )
