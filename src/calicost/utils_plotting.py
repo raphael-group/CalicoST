@@ -16,7 +16,6 @@ import matplotlib.patches as mpatches
 
 from calicost.utils_IO import *
 from calicost.utils_phase_switch import *
-from calicost.hmrf import *
 from calicost.arg_parse import *
 
 
@@ -1189,6 +1188,90 @@ def plot_rdr_baf_from_df(df, clone_ids=None, clone_names=None, base_height=3.2, 
         '(4, 1)','(5, 0)', '(3, 3)','(4, 2)','(5, 1)','(6, 0)'], ncol=2, loc='upper left', bbox_to_anchor=(1,1))
 
     fig.tight_layout()
+    fig.subplots_adjust(hspace=0.1)
+    return fig, axes
+
+
+def plot_rdr_exponly_from_df(df, new_log_mu, clone_ids=None, clone_names=None, base_height=2.0, rdr_ylim=4, linewidth=0, pointsize=30, chrtext_shift=-0.3, add_legend=False, remove_xticks=True, palette='tab10'):
+    """
+    Attributes
+    ----------
+    df : pandas.DataFrame
+        dataframe with columns: CHR, clone1 RD, clone1 BAF, clone1 A, clone1 B, ... for each clone
+    """
+    # load allele specific integer copy numbers
+    final_clone_ids = np.unique([ x.split(" ")[0][5:] for x in df.columns if "RD" in x ])
+    assert (clone_ids is None) or np.all([ (cid in final_clone_ids) for cid in clone_ids])
+    unique_chrs = np.unique(df.CHR.values)
+
+    n_states = new_log_mu.shape[0]
+    n_obs = df.shape[0]
+
+    # plotting all clones
+    if clone_ids is None:
+        fig, axes = plt.subplots(len(final_clone_ids), 1, figsize=(20, base_height*len(final_clone_ids)), dpi=200, facecolor="white")
+        for s,c in enumerate(final_clone_ids):
+            ax = axes[s] if len(final_clone_ids) > 1 else axes
+
+            # copy number state for coloring
+            cn_state = df[f"clone{c} state"].values
+            segments, labs = get_intervals(cn_state)
+
+            # plot points
+            seaborn.scatterplot(x=np.arange(df.shape[0]), y=df[f'clone{c} RD'].values, \
+                hue=pd.Categorical(cn_state, categories=np.arange(n_states), ordered=True), \
+                palette=palette, s=pointsize, edgecolor="black", linewidth=linewidth, alpha=1, legend=False, ax=ax)
+            ax.set_ylabel(f"clone {c}\nRDR")
+            ax.set_yticks(np.arange(1, rdr_ylim, 1))
+            ax.set_ylim([0,rdr_ylim])
+            ax.set_xlim([0, n_obs])
+            if remove_xticks:
+                ax.set_xticks([])
+            for i, seg in enumerate(segments):
+                ax.plot(seg, [np.exp(new_log_mu[labs[i],0]), np.exp(new_log_mu[labs[i],0])], c="black", linewidth=2)
+
+        for i in unique_chrs:
+            median_len = np.percentile(np.where(df.CHR.values == i)[0], 50)
+            max_len = np.max(np.where(df.CHR.values == i)[0])
+            axes[-1].text(median_len-5, chrtext_shift, i, transform=axes[-1].get_xaxis_transform(), ha='center')
+            if max_len + 1 < df.shape[0]:
+                for k in range(len(final_clone_ids)):
+                    axes[k].axvline(x=max_len, c="grey", linewidth=1)
+
+        fig.tight_layout()
+    # plot a given clone
+    else:
+        fig, axes = plt.subplots(len(clone_ids), 1, figsize=(20, base_height*len(clone_ids)), dpi=200, facecolor="white")
+        for s,c in enumerate(clone_ids):
+            ax = axes[s] if len(final_clone_ids) > 1 else axes
+
+            # copy number state for coloring
+            cn_state = df[f"clone{c} state"].values
+            segments, labs = get_intervals(cn_state)
+
+            # plot points
+            seaborn.scatterplot(x=np.arange(df.shape[0]), y=df[f'clone{c} RD'].values, \
+                hue=pd.Categorical(cn_state, categories=np.arange(n_states), ordered=True), \
+                palette=palette, s=pointsize, edgecolor="black", linewidth=linewidth, alpha=1, legend=False, ax=ax)
+            ax.set_ylabel(f"clone {c}\nRDR" if clone_names is None else f"clone {clone_names[s]}\nRDR")
+            ax.set_yticks(np.arange(1, rdr_ylim, 1))
+            ax.set_ylim([0,5])
+            ax.set_xlim([0, n_obs])
+            if remove_xticks:
+                ax.set_xticks([])
+            for i, seg in enumerate(segments):
+                ax.plot(seg, [np.exp(new_log_mu[labs[i],0]), np.exp(new_log_mu[labs[i],0])], c="black", linewidth=2)
+        
+        for i in unique_chrs:
+            median_len = np.percentile(np.where(df.CHR.values == i)[0], 50)
+            max_len = np.max(np.where(df.CHR.values == i)[0])
+            axes[-1].text(median_len-5, chrtext_shift, i, transform=axes[-1].get_xaxis_transform(), ha='center')
+            if max_len + 1 < df.shape[0]:
+                for k in range(len(clone_ids)):
+                    axes[k].axvline(x=max_len, c="grey", linewidth=1)
+
+        fig.tight_layout()
+
     fig.subplots_adjust(hspace=0.1)
     return fig, axes
 
