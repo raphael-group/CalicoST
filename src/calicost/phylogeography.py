@@ -102,7 +102,8 @@ def project_phylogeneny_space(newick_file, coords, clone_label, single_tumor_pro
     obs_1 = df_centers.set_index('clone').loc[list_leaf_nodes].values
 
     # conditional expectation internal node position | leaf node position = mu_1
-    expected_internal = mu_2 + Sigma_12.T @ (np.linalg.inv(Sigma_11) @ (obs_1 - mu_1))
+    EPS = 1e-5 # a small diagonal value to avoid singular matrix
+    expected_internal = mu_2 + Sigma_12.T @ (np.linalg.inv(Sigma_11 + EPS * np.eye(Sigma_11.shape[0])) @ (obs_1 - mu_1))
     df_centers = pd.concat([ df_centers, pd.DataFrame({'clone':list_internal_nodes, 'x':expected_internal[:,0], 'y':expected_internal[:,1]}) ])
 
     # add to tree features
