@@ -711,7 +711,7 @@ def similarity_components_rdrbaf_neymanpearson(X, base_nb_mean, total_bb_RD, res
                     list_t_neymanpearson.append(t_neymanpearson)
             if len(list_t_neymanpearson) == 0 or np.max(list_t_neymanpearson) < threshold:
                 max_v = np.max(list_t_neymanpearson) if len(list_t_neymanpearson) > 0 else 1e-3
-                G.add_weighted_edges_from([ (c1, c2, max_v) ])                
+                G.add_weighted_edges_from([ (c1, c2, max_v) ])
     # maximal cliques
     cliques = []
     for x in nx.find_cliques(G):
@@ -723,7 +723,13 @@ def similarity_components_rdrbaf_neymanpearson(X, base_nb_mean, total_bb_RD, res
     merging_groups = []
     for c in cliques:
         if len(set(c[0]) & covered_nodes) == 0:
-            merging_groups.append( list(c[0]) )
+            clones_to_merge = c[0]
+            # order clones in clones_to_merge by their sizes
+            involved_clone_with_sizes = [ (i, np.sum(res['new_assignment']==i)) for i in clones_to_merge ]
+            involved_clone_with_sizes.sort(key = lambda x:x[1], reverse=True)
+            clones_to_merge = [ x[0] for x in involved_clone_with_sizes ]
+            # in this way, the first clone in each merging group will be the dominant clone
+            merging_groups.append( clones_to_merge )
             covered_nodes = covered_nodes | set(c[0])
     for c in range(n_clones):
         if not (c in covered_nodes):
