@@ -198,16 +198,16 @@ def main(config):
             lambd = base_nb_mean[:,s] / np.sum(base_nb_mean[:,s])
             this_pred_cnv = res['pred_cnv'][(s*n_obs):(s*n_obs+n_obs)]
             adjusted_log_mu = np.log( np.exp(res["new_log_mu"][:,0]) / np.sum(np.exp(res["new_log_mu"][this_pred_cnv,0]) * lambd) )
-            df_adj_log_rdr[f'clone_{s}_logrdr'] = adjusted_log_mu[this_pred_cnv]
-        df_adj_log_rdr.to_csv(f"{outdir}/adjusted_logrdr_beforemerging.txt", sep="\t", index=False)
+            df_adj_log_rdr[f'clone{s} logrdr'] = adjusted_log_mu[this_pred_cnv]
+        df_adj_log_rdr.to_csv(f"{outdir}/adjusted_logrdr_beforemerging.tsv", sep="\t", index=False)
 
         # convert to copy number states (neu, amp, del)
         for s in range(X.shape[2]):
-            df_adj_log_rdr[f'clone_{s}_cnv'] = convert_calicost_3_logrdr_to_states(df_adj_log_rdr[f'clone_{s}_logrdr'].values)
-        df_adj_log_rdr[ ['CHR', 'START', 'END']  + [f'clone_{s}_cnv' for s in range(X.shape[2])] ].to_csv(f"{outdir}/cnv_beforemerging.txt", sep="\t", index=False)
+            df_adj_log_rdr[f'clone{s} cnv'] = convert_calicost_3_logrdr_to_states(df_adj_log_rdr[f'clone{s} logrdr'].values)
+        df_adj_log_rdr[ ['CHR', 'START', 'END']  + [f'clone{s} cnv' for s in range(X.shape[2])] ].to_csv(f"{outdir}/cnv_beforemerging.tsv", sep="\t", index=False)
 
         # output clone labels before merging as a tsv file
-        pd.DataFrame({'clone_label':res['new_assignment']}, index=adata.obs.index).to_csv(f"{outdir}/clone_labels_beforemerging.txt", sep="\t", index=True, header=True)
+        pd.DataFrame({'clone_label':res['new_assignment']}, index=adata.obs.index).to_csv(f"{outdir}/clone_labels_beforemerging.tsv", sep="\t", index=True, header=True)
 
         # plot clones in space and cnv states along the genome
         Path(f'{outdir}/plots').mkdir(parents=True, exist_ok=True)
@@ -266,16 +266,16 @@ def main(config):
             lambd = base_nb_mean[:,s] / np.sum(base_nb_mean[:,s])
             this_pred_cnv = final_res['pred_cnv'][(s*n_obs):(s*n_obs+n_obs)]
             adjusted_log_mu = np.log( np.exp(final_res["new_log_mu"][:,0]) / np.sum(np.exp(final_res["new_log_mu"][this_pred_cnv,0]) * lambd) )
-            df_adj_log_rdr[f'clone_{s}_logrdr'] = adjusted_log_mu[this_pred_cnv]
-        df_adj_log_rdr.to_csv(f"{outdir}/adjusted_logrdr.txt", sep="\t", index=False)
+            df_adj_log_rdr[f'clone{s} logrdr'] = adjusted_log_mu[this_pred_cnv]
+        df_adj_log_rdr.to_csv(f"{outdir}/adjusted_logrdr.tsv", sep="\t", index=False)
 
         # convert to copy number states (neu, amp, del)
         for s in range(X.shape[2]):
-            df_adj_log_rdr[f'clone_{s}_cnv'] = convert_calicost_3_logrdr_to_states(df_adj_log_rdr[f'clone_{s}_logrdr'].values)
-        df_adj_log_rdr[ ['CHR', 'START', 'END']  + [f'clone_{s}_cnv' for s in range(X.shape[2])] ].to_csv(f"{outdir}/cnv.txt", sep="\t", index=False)
+            df_adj_log_rdr[f'clone{s} cnv'] = convert_calicost_3_logrdr_to_states(df_adj_log_rdr[f'clone{s} logrdr'].values)
+        df_adj_log_rdr[ ['CHR', 'START', 'END']  + [f'clone{s} cnv' for s in range(X.shape[2])] ].to_csv(f"{outdir}/cnv.tsv", sep="\t", index=False)
 
         # output clone labels as a tsv file
-        pd.DataFrame({'clone_label':final_res['new_assignment']}, index=adata.obs.index).to_csv(f"{outdir}/clone_labels.txt", sep="\t", index=True, header=True)
+        pd.DataFrame({'clone_label':final_res['new_assignment']}, index=adata.obs.index).to_csv(f"{outdir}/clone_labels.tsv", sep="\t", index=True, header=True)
 
         # plot clones in space and cnv states along the genome
         assignment = pd.Series([f"clone {x}" for x in final_res['new_assignment'] ])
