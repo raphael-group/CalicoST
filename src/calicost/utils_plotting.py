@@ -705,17 +705,31 @@ def plot_total_cn(df_cnv, ax_handle, df_highlight_events=None, palette_mode=6, c
                     ax_handle.fill_between( np.arange(interval[0], interval[1]), y1, y2, color="none", edgecolor="black", linewidth=2)
 
     if add_chrbar:
-        # add chr color
-        chr_palette = cycle(['#525252', '#969696', '#cccccc'])
-        lut = {c:next(chr_palette) for c in np.unique(chr_ids.values)}
-        col_colors = chr_ids.map(lut)
-        for i, color in enumerate(col_colors):
-            ax_handle.add_patch(plt.Rectangle(xy=(i, 1 + 0.02*chrbar_thickness), width=1, height=chrbar_thickness, color=color, lw=0, transform=ax_handle.get_xaxis_transform(), clip_on=False, rasterized=True))
+        chr_ids = df_cnv.CHR
+        h =  df_cnv.columns.str.startswith("clone").sum() if clone_ids is None else len(clone_ids)
+        # ax_handle.add_patch(plt.Rectangle(xy=(0, h + chrbar_thickness), width=df_cnv.shape[0], height=chrbar_thickness, color='white', lw=0, transform=ax_handle.transData, clip_on=False, rasterized=rasterized))
 
-        for c in np.unique(chr_ids.values):
+        for i,c in enumerate(np.unique(chr_ids.values)):
             interval = np.where(chr_ids.values == c)[0]
+            # add vertical separation between chromosomes
+            if not np.max(interval) + 1 >= df_cnv.shape[0]:
+                ax_handle.axvline(x=np.max(interval), color='black', lw=0.5, ymax=1+0.5/(h+1), clip_on = False)
             mid = np.percentile(interval, 45)
-            ax_handle.text(mid-10, 1 + 0.2*chrbar_thickness, str(c), transform=ax_handle.get_xaxis_transform())
+            if i % 2 == 0:
+                ax_handle.text(mid, -0.1*chrbar_thickness, str(c), ha='center', transform=ax_handle.transData)
+            else:
+                ax_handle.text(mid, -0.8*chrbar_thickness, str(c), ha='center', transform=ax_handle.transData)
+        # # add chr color
+        # chr_palette = cycle(['#525252', '#969696', '#cccccc'])
+        # lut = {c:next(chr_palette) for c in np.unique(chr_ids.values)}
+        # col_colors = chr_ids.map(lut)
+        # for i, color in enumerate(col_colors):
+        #     ax_handle.add_patch(plt.Rectangle(xy=(i, 1 + 0.02*chrbar_thickness), width=1, height=chrbar_thickness, color=color, lw=0, transform=ax_handle.get_xaxis_transform(), clip_on=False, rasterized=True))
+
+        # for c in np.unique(chr_ids.values):
+        #     interval = np.where(chr_ids.values == c)[0]
+        #     mid = np.percentile(interval, 45)
+        #     ax_handle.text(mid-10, 1 + 0.2*chrbar_thickness, str(c), transform=ax_handle.get_xaxis_transform())
 
     ax_handle.set_yticklabels(ax_handle.get_yticklabels(), rotation=0)
     if remove_xticks:
@@ -1233,10 +1247,14 @@ def plot_rdr_exponly_from_df(df, new_log_mu, clone_ids=None, clone_names=None, b
         for i in unique_chrs:
             median_len = np.percentile(np.where(df.CHR.values == i)[0], 50)
             max_len = np.max(np.where(df.CHR.values == i)[0])
-            axes[-1].text(median_len-5, chrtext_shift, i, transform=axes[-1].get_xaxis_transform(), ha='center')
+            if len(final_clone_ids) > 1:
+                axes[-1].text(median_len-5, chrtext_shift, i, transform=axes[-1].get_xaxis_transform(), ha='center')
+            else:
+                axes.text(median_len-5, chrtext_shift, i, transform=axes.get_xaxis_transform(), ha='center')
             if max_len + 1 < df.shape[0]:
                 for k in range(len(final_clone_ids)):
-                    axes[k].axvline(x=max_len, c="grey", linewidth=1)
+                    ax = axes[k] if len(final_clone_ids) > 1 else axes
+                    ax.axvline(x=max_len, c="grey", linewidth=1)
 
         fig.tight_layout()
     # plot a given clone
@@ -1265,10 +1283,14 @@ def plot_rdr_exponly_from_df(df, new_log_mu, clone_ids=None, clone_names=None, b
         for i in unique_chrs:
             median_len = np.percentile(np.where(df.CHR.values == i)[0], 50)
             max_len = np.max(np.where(df.CHR.values == i)[0])
-            axes[-1].text(median_len-5, chrtext_shift, i, transform=axes[-1].get_xaxis_transform(), ha='center')
+            if len(clone_ids) > 1:
+                axes[-1].text(median_len-5, chrtext_shift, i, transform=axes[-1].get_xaxis_transform(), ha='center')
+            else:
+                axes.text(median_len-5, chrtext_shift, i, transform=axes.get_xaxis_transform(), ha='center')
             if max_len + 1 < df.shape[0]:
                 for k in range(len(clone_ids)):
-                    axes[k].axvline(x=max_len, c="grey", linewidth=1)
+                    ax = axes[k] if len(clone_ids) > 1 else axes
+                    ax.axvline(x=max_len, c="grey", linewidth=1)
 
         fig.tight_layout()
 
