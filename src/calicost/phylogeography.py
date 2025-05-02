@@ -6,6 +6,10 @@ from matplotlib import pyplot as plt
 import seaborn
 from ete3 import Tree
 import networkx as nx
+from pathlib import Path
+from calicost.utils_plotting import *
+
+import argparse
 
 
 def clone_centers(coords, clone_label, single_tumor_prop=None, sample_list=None, sample_ids=None, tumorprop_threshold=0.6):
@@ -106,4 +110,53 @@ def project_phylogeneny_space(newick_file, coords, clone_label, single_tumor_pro
         i = np.where(df_centers.clone.values == node.name)[0][0]
         node.add_features( x=df_centers.x.values[i], y=df_centers.y.values[i] )
 
-    return t
+    return df_centers, t
+
+
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser(description='Infer spatial coordinates of all nodes in a phylogenetic tree (phylogeography_clone_coordinates.tsv) and plot the phylogeography (phylogeography_plot.pdf). This script only supports a single SRT slice.',
+                                     formatter_class=argparse.ArgumentDefaultsHelpFormatter)
+    parser.add_argument('--tissue_positions_file', type=str, required=True, help='Path to the spatial coordinate file under 10x visium spaceranger directory.')
+    parser.add_argument('--newick_file', type=str, required=True, help='Path to the newick file.')
+    parser.add_argument('--clone_label_file', type=str, required=True, help='Path to the clone label file output by CalicoST. The file name should be clone_label.tsv.')
+    parser.add_argument('--outputdir', type=str, required=True, help='Path to the output directory.')
+    args = parser.parse_args()
+
+    Path(args.outputdir).mkdir(parents=True, exist_ok=True)
+    
+    # read spatial coordinates
+    if '_list' in args.tissue_positions_file:
+        df_pos = pd.read_csv(args.tissue_positions_file, sep=",", header=None, names=["barcode", "in_tissue", "x", "y", "pixel_row", "pixel_col"])
+    else:
+        df_pos = pd.read_csv(args.tissue_positions_file, sep=",", header=0, names=["barcode", "in_tissue", "x", "y", "pixel_row", "pixel_col"])
+    df_pos.set_index('barcode', inplace=True)
+
+    # read clone label
+    df_clone = pd.read_csv(args.clone_label_file, sep="\t", header=0, index_col=0)
+    df_clone.clone_label = 'clone' + df_clone.clone_label.astype(str)
+    # reorder df_pos according to df_clone barcodes
+    df_pos = df_pos.loc[df_clone.index]
+    coords = df_pos[['x', 'y']].values
+    single_tumor_prop=None if not 'tumor_proportion' in df_clone.columns else df_clone.tumor_proportion.values
+
+    df_centers, t = project_phylogeneny_space(args.newick_file, coords, df_clone.clone_label.values, single_tumor_prop, sample_list=None, sample_ids=None)
+    # output spatial location of observed clones and inferred ancestors to tsv file
+    df_centers.to_csv(f"{args.outputdir}/phylogeography_clone_coordinates.tsv", sep="\t", index=True, header=True)
+
+    # plot phylogeography
+    fig = plot_individual_spots_in_space(coords, df_clone.clone_label, single_tumor_prop, base_height=3)
+    axes = plt.gca()
+
+    # clone centers + ancestors
+    for node in t.traverse():
+        axes.scatter( node.x, -node.y, marker="D", linewidth=2, edgecolor='black', facecolor="None", s=50)
+
+    # edges
+    for node in t.iter_leaves():
+        while not node.is_root():
+            p = node.up
+            if np.abs(node.x - p.x) + np.abs(node.y - p.y) > 1:
+                axes.annotate("", xy=(node.x, -node.y), xytext=(p.x, -p.y), arrowprops=dict(mutation_scale=15, lw=1, arrowstyle="->", color="black"))
+            node = p
+            
+    fig.savefig(f"{args.outputdir}/phylogeography_plot.pdf", dpi=300, bbox_inches='tight', transparent=True)
