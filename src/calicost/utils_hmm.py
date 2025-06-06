@@ -387,7 +387,7 @@ def update_transition_sitewise(log_xi, is_diag=False):
 
 
 def update_emission_params_nb_sitewise_uniqvalues(unique_values, mapping_matrices, log_gamma, base_nb_mean, alphas, \
-    start_log_mu=None, fix_NB_dispersion=False, shared_NB_dispersion=False, min_log_rdr=-2, max_log_rdr=2, min_estep_weight=0.1):
+    start_log_mu=None, fix_NB_dispersion=False, shared_NB_dispersion=False, min_log_rdr=-2, max_log_rdr=0.6, min_estep_weight=0.1):
     """
     Attributes
     ----------
@@ -489,7 +489,7 @@ def update_emission_params_nb_sitewise_uniqvalues(unique_values, mapping_matrice
 
 
 def update_emission_params_nb_sitewise_uniqvalues_mix(unique_values, mapping_matrices, log_gamma, base_nb_mean, alphas, tumor_prop, \
-    start_log_mu=None, fix_NB_dispersion=False, shared_NB_dispersion=False, min_log_rdr=-2, max_log_rdr=2):
+    start_log_mu=None, fix_NB_dispersion=False, shared_NB_dispersion=False, min_log_rdr=-2, max_log_rdr=0.6):
     """
     Attributes
     ----------
@@ -884,7 +884,7 @@ def update_transition_nophasing(log_xi, is_diag=False):
 
 
 def update_emission_params_nb_nophasing_uniqvalues(unique_values, mapping_matrices, log_gamma, alphas, \
-    start_log_mu=None, fix_NB_dispersion=False, shared_NB_dispersion=False, min_log_rdr=-2, max_log_rdr=2):
+    start_log_mu=None, fix_NB_dispersion=False, shared_NB_dispersion=False, min_log_rdr=-2, max_log_rdr=0.6, temperature=1.0):
     """
     Attributes
     ----------
@@ -900,6 +900,12 @@ def update_emission_params_nb_nophasing_uniqvalues(unique_values, mapping_matric
     n_spots = len(unique_values)
     n_states = log_gamma.shape[0]
     gamma = np.exp(log_gamma)
+
+    # temperature-scaled expectation
+    temperature = 1.5
+    gamma = np.exp(log_gamma / temperature)
+    gamma /= np.sum(gamma, axis=0, keepdims=True)
+
     # initialization
     new_log_mu = copy.copy(start_log_mu) if not start_log_mu is None else np.zeros((n_states, n_spots))
     new_alphas = copy.copy(alphas)
@@ -986,7 +992,7 @@ def update_emission_params_nb_nophasing_uniqvalues(unique_values, mapping_matric
 
 
 def update_emission_params_nb_nophasing_uniqvalues_mix(unique_values, mapping_matrices, log_gamma, alphas, tumor_prop, \
-    start_log_mu=None, fix_NB_dispersion=False, shared_NB_dispersion=False, min_log_rdr=-2, max_log_rdr=2):
+    start_log_mu=None, fix_NB_dispersion=False, shared_NB_dispersion=False, min_log_rdr=-2, max_log_rdr=0.6):
     """
     Attributes
     ----------
