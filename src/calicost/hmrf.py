@@ -477,6 +477,7 @@ def hmrf_concatenate_pipeline(outdir, prefix, single_X, lengths, single_base_nb_
         last_assignment[idx] = c
 
     # HMM
+    temperature = 2.0
     for r in range(max_iter_outer):
         # assuming file f"{outdir}/{prefix}_nstates{n_states}_{params}.npz" exists. When r == 0, f"{outdir}/{prefix}_nstates{n_states}_{params}.npz" should contain two keys: "num_iterations" and f"round_-1_assignment" for clone initialization
         allres = np.load(f"{outdir}/{prefix}_nstates{n_states}_{params}.npz", allow_pickle=True)
@@ -492,7 +493,8 @@ def hmrf_concatenate_pipeline(outdir, prefix, single_X, lengths, single_base_nb_
                             base_nb_mean.flatten("F").reshape(-1,1), total_bb_RD.flatten("F").reshape(-1,1),  np.tile(log_sitewise_transmat, X.shape[2]), \
                             hmmclass=hmmclass, params=params, t=t, random_state=random_state, \
                             fix_NB_dispersion=fix_NB_dispersion, shared_NB_dispersion=shared_NB_dispersion, fix_BB_dispersion=fix_BB_dispersion, shared_BB_dispersion=shared_BB_dispersion, \
-                            is_diag=is_diag, init_log_mu=last_log_mu, init_p_binom=last_p_binom, init_alphas=last_alphas, init_taus=last_taus, max_iter=max_iter, tol=tol)
+                            is_diag=is_diag, init_log_mu=last_log_mu, init_p_binom=last_p_binom, init_alphas=last_alphas, init_taus=last_taus, max_iter=max_iter, tol=tol, temperature=temperature)
+            temperature = max(1.0, temperature*0.9)
             pred = np.argmax(res["log_gamma"], axis=0)
             # HMRF clone assignmment
             if nodepotential == "max":

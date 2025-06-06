@@ -226,7 +226,7 @@ class hmm_nophasing_v2(object):
     #
     def run_baum_welch_nb_bb(self, X, lengths, n_states, base_nb_mean, total_bb_RD, log_sitewise_transmat=None, tumor_prop=None, \
         fix_NB_dispersion=False, shared_NB_dispersion=False, fix_BB_dispersion=False, shared_BB_dispersion=False, \
-        is_diag=False, init_log_mu=None, init_p_binom=None, init_alphas=None, init_taus=None, max_iter=100, tol=1e-4, **kwargs):
+        is_diag=False, init_log_mu=None, init_p_binom=None, init_alphas=None, init_taus=None, max_iter=100, tol=1e-4, temperature=1.0, **kwargs):
         '''
         Input
             X: size n_observations * n_components * n_spots.
@@ -295,7 +295,7 @@ class hmm_nophasing_v2(object):
             if "m" in self.params:
                 if tumor_prop is None:
                     new_log_mu, new_alphas = update_emission_params_nb_nophasing_uniqvalues(unique_values_nb, mapping_matrices_nb, log_gamma, alphas, start_log_mu=log_mu, \
-                        fix_NB_dispersion=fix_NB_dispersion, shared_NB_dispersion=shared_NB_dispersion)
+                        fix_NB_dispersion=fix_NB_dispersion, shared_NB_dispersion=shared_NB_dispersion, temperature=temperature)
                 else:
                     new_log_mu, new_alphas = update_emission_params_nb_nophasing_uniqvalues_mix(unique_values_nb, mapping_matrices_nb, log_gamma, alphas, tumor_prop, start_log_mu=log_mu, \
                         fix_NB_dispersion=fix_NB_dispersion, shared_NB_dispersion=shared_NB_dispersion)

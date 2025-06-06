@@ -484,7 +484,7 @@ def viterbi_nb_bb_sitewise(X, lengths, base_nb_mean, log_mu, alphas, total_bb_RD
 def pipeline_baum_welch(output_prefix, X, lengths, n_states, base_nb_mean, total_bb_RD, log_sitewise_transmat, tumor_prop=None, \
     hmmclass=hmm_sitewise, params="smp", t=1-1e-6, random_state=0, \
     in_log_space=True, only_minor=False, fix_NB_dispersion=False, shared_NB_dispersion=True, fix_BB_dispersion=False, shared_BB_dispersion=True, \
-    init_log_mu=None, init_p_binom=None, init_alphas=None, init_taus=None, is_diag=True, max_iter=100, tol=1e-4, **kwargs):
+    init_log_mu=None, init_p_binom=None, init_alphas=None, init_taus=None, is_diag=True, max_iter=100, tol=1e-4, temperature=1.0, **kwargs):
     """
     tumor_prop : array, (n_obs, n_spots)
         Probability of sequencing a tumor read. (tumor cell proportion weighted by ploidy)
@@ -515,7 +515,8 @@ def pipeline_baum_welch(output_prefix, X, lengths, n_states, base_nb_mean, total
         fix_NB_dispersion=fix_NB_dispersion, shared_NB_dispersion=shared_NB_dispersion, \
         fix_BB_dispersion=fix_BB_dispersion, shared_BB_dispersion=shared_BB_dispersion, \
         is_diag=is_diag, init_log_mu=init_log_mu, init_p_binom=init_p_binom, init_alphas=init_alphas, init_taus=init_taus, \
-        max_iter=max_iter, tol=tol, **remain_kwargs)
+        max_iter=max_iter, tol=tol, temperature=temperature, **remain_kwargs)
+    print('temperature = ', temperature)
 
     # likelihood
     if tumor_prop is None:
