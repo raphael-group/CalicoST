@@ -12,6 +12,7 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(
 logger = logging.getLogger()
 import copy
 from pathlib import Path
+import shutil
 import functools
 import subprocess
 from calicost.utils_hmrf import *
@@ -134,6 +135,44 @@ def collapse_cnv_profiles(df_adj_log_rdr):
     return collapse_df_adj_log_rdr
 
 
+def identify_tumor_clone_ids(res, min_percent_cnas=0.005):
+    """
+    Identify tumor clone ids from the HMRF results.
+
+    Attributes
+    ----------
+    res : dict
+        The HMRF results dictionary containing 'new_assignment' and 'pred_cnv'.
+    
+    Returns
+    -------
+    id_tumor_clones : list
+        A list of tumor clone ids.
+    """
+    unique_assignment = np.sort(np.unique(res['new_assignment']))
+    n_obs = int(len(res['pred_cnv']) / len(unique_assignment))
+    id_tumor_clones = []
+    for c in unique_assignment:
+        this_pred_cnv = res['pred_cnv'][(c*n_obs):(c*n_obs+n_obs)]
+        # count the number of each CN state
+        cn_counts = np.bincount(this_pred_cnv)
+        # excluding the largest state, if the remaining states has > min_percent_cnas * n_obs counts will be considered as a tumor clone
+        # this is equivalent to largest state has <= (1-min_percent_cnas) * n_obs counts
+        if np.max(cn_counts) <= (1-min_percent_cnas) * n_obs:
+            id_tumor_clones.append(c)
+    assert len(id_tumor_clones) > 0, "No tumor clones identified! Please check the HMRF results."
+    id_tumor_clones = np.array(id_tumor_clones)
+
+    tumor_spots = np.where(np.isin(res['new_assignment'], id_tumor_clones))[0]
+
+    tumor_res = copy.copy(res)
+    tumor_res["new_assignment"] = pd.Series(res["new_assignment"][tumor_spots]).replace({x:i for i,x in enumerate(id_tumor_clones)}).values
+    tumor_res["pred_cnv"] = np.concatenate([ res["pred_cnv"][(c*n_obs):(c*n_obs+n_obs)] for c in id_tumor_clones ])
+    tumor_res["log_gamma"] = np.hstack([ res["log_gamma"][:, (c*n_obs):(c*n_obs+n_obs)] for c in id_tumor_clones ])
+
+    return id_tumor_clones, tumor_spots, tumor_res
+
+
 def main(config):
     print("Configurations:")
     for k in sorted(list(config.keys())):
@@ -207,220 +246,237 @@ def main(config):
     n_obs = single_X.shape[0]
 
     ########## Run HMRF-HMM ##########
-    r_hmrf_initialization = config['r_hmrf_initialization']
-    if config['initialization_method'] == 'coordinates':
-        outdir = f"{config['output_dir']}/clone{config['n_clones']}_rectangle{r_hmrf_initialization}_w{config['spatial_weight']:.1f}"
+    for r_hmrf_initialization in range(config['num_initializations']):
+        if config['initialization_method'] == 'coordinates':
+            outdir = f"{config['output_dir']}/clone{config['n_clones']}_rectangle{r_hmrf_initialization}_w{config['spatial_weight']:.1f}"
+            if config["tumorprop_file"] is None:
+                initial_clone_index = rectangle_initialize_initial_clone(coords, config["n_clones"], random_state=r_hmrf_initialization)
+            else:
+                initial_clone_index = rectangle_initialize_initial_clone_mix(coords, config["n_clones"], single_tumor_prop, threshold=config["tumorprop_threshold"], random_state=r_hmrf_initialization)
+        elif config['initialization_method'] == 'expression':
+            outdir = f"{config['output_dir']}/clone{config['n_clones']}_expression_w{config['spatial_weight']:.1f}"
+            initial_clone_index = clustering_initialize_initial_clone(single_X[:,0,:], smooth_mat, config['n_clones'])
+        elif config['initialization_method'] == 'mix':
+            outdir = f"{config['output_dir']}/clone{config['n_clones']}_mix{r_hmrf_initialization}_w{config['spatial_weight']:.1f}"
+            initial_clone_index = mix_initialize_initial_clone(single_X[:,0,:], smooth_mat, coords, config['n_clones'], random_state=r_hmrf_initialization)
+
+        # create directory
+        Path(f'{outdir}').mkdir(parents=True, exist_ok=True)
+        Path(f'{outdir}/plots').mkdir(parents=True, exist_ok=True)
+        # save clone initialization into npz file
+        prefix = "allspots"
+        if not Path(f"{outdir}/{prefix}_nstates{config['n_states']}_sm.npz").exists():
+            initial_assignment = np.zeros(single_X.shape[2], dtype=int)
+            for c,idx in enumerate(initial_clone_index):
+                initial_assignment[idx] = c
+            allres = {"num_iterations":0, "round-1_assignment":initial_assignment}
+            np.savez(f"{outdir}/{prefix}_nstates{config['n_states']}_sm.npz", **allres)
+
+        # run HMRF + HMM
         if config["tumorprop_file"] is None:
-            initial_clone_index = rectangle_initialize_initial_clone(coords, config["n_clones"], random_state=r_hmrf_initialization)
+            # pseudobulk
+            X, base_nb_mean, total_bb_RD = merge_pseudobulk_by_index(single_X, single_base_nb_mean, single_total_bb_RD, initial_clone_index)
+            # initialize HMM parameters by percentiles of linspace(30, 70, n_states)
+            init_log_mu = initialization_log_mu_percentile(config["n_states"], X[:,0,:].flatten("F").reshape(-1,1), base_nb_mean.flatten("F").reshape(-1,1), random_state=0)
+            init_p_binom = np.linspace(0.01, 0.99, config["n_states"]).reshape(-1,1)
+
+            hmrf_concatenate_pipeline(outdir, prefix, single_X, lengths, single_base_nb_mean, single_total_bb_RD, initial_clone_index, n_states=config["n_states"], \
+                log_sitewise_transmat=log_sitewise_transmat, smooth_mat=smooth_mat, adjacency_mat=adjacency_mat, sample_ids=sample_ids, max_iter_outer=config["max_iter_outer"], nodepotential=config["nodepotential"], \
+                hmmclass=hmm_nophasing_v2, params="sm", t=config["t"], random_state=0, \
+                fix_NB_dispersion=False, shared_NB_dispersion=True, \
+                fix_BB_dispersion=False, shared_BB_dispersion=True, \
+                init_log_mu=init_log_mu, init_p_binom=init_p_binom, init_alphas=0.1 * np.ones((config["n_states"], 1)), \
+                is_diag=True, max_iter=config["max_iter"], tol=config["tol"], spatial_weight=config["spatial_weight"])
+
         else:
-            initial_clone_index = rectangle_initialize_initial_clone_mix(coords, config["n_clones"], single_tumor_prop, threshold=config["tumorprop_threshold"], random_state=r_hmrf_initialization)
-    elif config['initialization_method'] == 'expression':
-        outdir = f"{config['output_dir']}/clone{config['n_clones']}_expression_w{config['spatial_weight']:.1f}"
-        initial_clone_index = clustering_initialize_initial_clone(single_X[:,0,:], smooth_mat, config['n_clones'])
-    elif config['initialization_method'] == 'mix':
-        outdir = f"{config['output_dir']}/clone{config['n_clones']}_mix{r_hmrf_initialization}_w{config['spatial_weight']:.1f}"
-        initial_clone_index = mix_initialize_initial_clone(single_X[:,0,:], smooth_mat, coords, config['n_clones'], random_state=r_hmrf_initialization)
+            # pseudobulk
+            X, base_nb_mean, total_bb_RD, tumor_prop = merge_pseudobulk_by_index_mix(single_X, single_base_nb_mean, single_total_bb_RD, initial_clone_index, single_tumor_prop, threshold=config["tumorprop_threshold"])
+            # initialize HMM parameters by percentiles of linspace(30, 70, n_states)
+            init_log_mu = initialization_log_mu_percentile(config["n_states"], X[:,0,:].flatten("F").reshape(-1,1), base_nb_mean.flatten("F").reshape(-1,1), random_state=0)
+            init_p_binom = np.linspace(0.01, 0.99, config["n_states"]).reshape(-1,1)
 
-    # create directory
-    Path(f'{outdir}').mkdir(parents=True, exist_ok=True)
-    Path(f'{outdir}/plots').mkdir(parents=True, exist_ok=True)
-    # save clone initialization into npz file
-    prefix = "allspots"
-    if not Path(f"{outdir}/{prefix}_nstates{config['n_states']}_sm.npz").exists():
-        initial_assignment = np.zeros(single_X.shape[2], dtype=int)
-        for c,idx in enumerate(initial_clone_index):
-            initial_assignment[idx] = c
-        allres = {"num_iterations":0, "round-1_assignment":initial_assignment}
-        np.savez(f"{outdir}/{prefix}_nstates{config['n_states']}_sm.npz", **allres)
+            hmrfmix_concatenate_pipeline(outdir, prefix, single_X, lengths, single_base_nb_mean, single_total_bb_RD, single_tumor_prop, initial_clone_index, n_states=config["n_states"], \
+                log_sitewise_transmat=log_sitewise_transmat, smooth_mat=smooth_mat, adjacency_mat=adjacency_mat, sample_ids=sample_ids, max_iter_outer=config["max_iter_outer"], nodepotential=config["nodepotential"], \
+                hmmclass=hmm_nophasing_v2, params="sm", t=config["t"], random_state=0, \
+                fix_NB_dispersion=False, shared_NB_dispersion=True, \
+                fix_BB_dispersion=False, shared_BB_dispersion=True, \
+                init_log_mu=init_log_mu, init_p_binom=None,  init_alphas=0.1 * np.ones((config["n_states"], 1)), \
+                is_diag=True, max_iter=config["max_iter"], tol=config["tol"], spatial_weight=config["spatial_weight"], tumorprop_threshold=config["tumorprop_threshold"])
 
-    # run HMRF + HMM
-    if config["tumorprop_file"] is None:
-        # pseudobulk
-        X, base_nb_mean, total_bb_RD = merge_pseudobulk_by_index(single_X, single_base_nb_mean, single_total_bb_RD, initial_clone_index)
-        # initialize HMM parameters by percentiles of linspace(30, 70, n_states)
-        init_log_mu = initialization_log_mu_percentile(config["n_states"], X[:,0,:].flatten("F").reshape(-1,1), base_nb_mean.flatten("F").reshape(-1,1), random_state=0)
-        init_p_binom = np.linspace(0.01, 0.99, config["n_states"]).reshape(-1,1)
+        # load HMRF results and output a table adjusted log rdr per bin per clone
+        res = load_hmrf_last_iteration(f"{outdir}/{prefix}_nstates{config['n_states']}_sm.npz")
+        n_obs = single_X.shape[0]
+        res = reorder_results_exponly(res, n_obs)
+        # detect tumor clone ids
+        id_tumor_clones, tumor_spots, tumor_res = identify_tumor_clone_ids(res)
 
-        hmrf_concatenate_pipeline(outdir, prefix, single_X, lengths, single_base_nb_mean, single_total_bb_RD, initial_clone_index, n_states=config["n_states"], \
-            log_sitewise_transmat=log_sitewise_transmat, smooth_mat=smooth_mat, adjacency_mat=adjacency_mat, sample_ids=sample_ids, max_iter_outer=config["max_iter_outer"], nodepotential=config["nodepotential"], \
-            hmmclass=hmm_nophasing_v2, params="sm", t=config["t"], random_state=0, \
-            fix_NB_dispersion=False, shared_NB_dispersion=True, \
-            fix_BB_dispersion=False, shared_BB_dispersion=True, \
-            init_log_mu=init_log_mu, init_p_binom=init_p_binom, init_alphas=0.1 * np.ones((config["n_states"], 1)), \
-            is_diag=True, max_iter=config["max_iter"], tol=config["tol"], spatial_weight=config["spatial_weight"])
+        # aggregate counts into clones
+        unique_assignment = np.sort(np.unique(res['new_assignment']))
+        clone_index = [np.where(res['new_assignment'] == c)[0] for c in unique_assignment]
+        if config["tumorprop_file"] is None:
+            X, base_nb_mean, total_bb_RD = merge_pseudobulk_by_index(single_X, single_base_nb_mean, single_total_bb_RD, clone_index)
+        else:
+            X, base_nb_mean, total_bb_RD, tumor_prop = merge_pseudobulk_by_index_mix(single_X, single_base_nb_mean, single_total_bb_RD, clone_index, single_tumor_prop, threshold=config["tumorprop_threshold"])
 
-    else:
-        # pseudobulk
-        X, base_nb_mean, total_bb_RD, tumor_prop = merge_pseudobulk_by_index_mix(single_X, single_base_nb_mean, single_total_bb_RD, initial_clone_index, single_tumor_prop, threshold=config["tumorprop_threshold"])
-        # initialize HMM parameters by percentiles of linspace(30, 70, n_states)
-        init_log_mu = initialization_log_mu_percentile(config["n_states"], X[:,0,:].flatten("F").reshape(-1,1), base_nb_mean.flatten("F").reshape(-1,1), random_state=0)
-        init_p_binom = np.linspace(0.01, 0.99, config["n_states"]).reshape(-1,1)
+        
+        # adjust the scaling factor for each clone
+        df_adj_log_rdr = df_bininfo[['CHR', 'START', 'END']].copy()
+        for s,idx in enumerate(id_tumor_clones):
+            this_pred_cnv = res['pred_cnv'][(idx*n_obs):(idx*n_obs+n_obs)]
+            df_adj_log_rdr[f'clone{s+1} logrdr'] = np.exp(res["new_log_mu"][:,0])[this_pred_cnv]
+        df_adj_log_rdr.to_csv(f"{outdir}/adjusted_logrdr_beforemerging.tsv", sep="\t", index=False)
 
-        hmrfmix_concatenate_pipeline(outdir, prefix, single_X, lengths, single_base_nb_mean, single_total_bb_RD, single_tumor_prop, initial_clone_index, n_states=config["n_states"], \
-            log_sitewise_transmat=log_sitewise_transmat, smooth_mat=smooth_mat, adjacency_mat=adjacency_mat, sample_ids=sample_ids, max_iter_outer=config["max_iter_outer"], nodepotential=config["nodepotential"], \
-            hmmclass=hmm_nophasing_v2, params="sm", t=config["t"], random_state=0, \
-            fix_NB_dispersion=False, shared_NB_dispersion=True, \
-            fix_BB_dispersion=False, shared_BB_dispersion=True, \
-            init_log_mu=init_log_mu, init_p_binom=None,  init_alphas=0.1 * np.ones((config["n_states"], 1)), \
-            is_diag=True, max_iter=config["max_iter"], tol=config["tol"], spatial_weight=config["spatial_weight"], tumorprop_threshold=config["tumorprop_threshold"])
+        # convert to copy number states (neu, amp, del)
+        state_mapping = rdr_state_mapping(df_adj_log_rdr.iloc[:,3:].values, np.bincount(res['new_assignment'])[id_tumor_clones], min_clone_size=config['min_spots_per_clone'])
+        EPS = 1e-4
+        for s,idx in enumerate(id_tumor_clones):
+            cnv_vec = np.array(['neu'] * df_adj_log_rdr.shape[0])
+            if len( np.unique(df_adj_log_rdr[f'clone{s+1} logrdr'].values) ) > 1:
+                for k,v in state_mapping.items():
+                    cnv_vec[ np.abs(df_adj_log_rdr[f'clone{s+1} logrdr'].values - k) < EPS ] = v
+            df_adj_log_rdr[f'clone{s+1} cnv'] = cnv_vec
+        df_adj_log_rdr = df_adj_log_rdr[ ['CHR', 'START', 'END']  + [f'clone{s+1} cnv' for s in range(len(id_tumor_clones))] ]
+        # plot total copy number along genome
+        fig, ax = plt.subplots(1, 1, figsize=(15, 1+0.5*len(id_tumor_clones)))
+        plot_total_cn(df_adj_log_rdr.rename(columns={f'clone{s+1} cnv':f'clone{s+1}' for s in range(len(id_tumor_clones))}), ax, palette_mode=3)
+        fig.savefig(f"{outdir}/plots/total_cn_beforemerging.pdf", dpi=300, bbox_inches='tight', transparent=True)
 
-    # load HMRF results and output a table adjusted log rdr per bin per clone
-    res = load_hmrf_last_iteration(f"{outdir}/{prefix}_nstates{config['n_states']}_sm.npz")
-    n_obs = single_X.shape[0]
-    res = reorder_results_exponly(res, n_obs)
+        # save copy number states to file
+        df_adj_log_rdr = collapse_cnv_profiles(df_adj_log_rdr)
+        df_adj_log_rdr.to_csv(f"{outdir}/cnv_beforemerging.tsv", sep="\t", index=False)
+
+        # output clone labels before merging as a tsv file
+        assignment = pd.DataFrame({'clone_label': ['normal']*len(res['new_assignment'])}, index=adata.obs.index)
+        for s,idx in enumerate(id_tumor_clones):
+            assignment.iloc[np.where(res['new_assignment']==idx)[0], 0] = f"clone{s+1}"
+        assignment.iloc[np.where(normal_candidate)[0], 0] = "normal"
+        assignment.to_csv(f"{outdir}/clone_labels_beforemerging.tsv", sep="\t", index=True, header=True)
+
+        # plot clones in space and cnv states along the genome
+        assignment = pd.Categorical(assignment['clone_label'], categories=["normal"] + [f"clone{s+1}" for s in range(len(id_tumor_clones))], ordered=True)
+        fig = plot_individual_spots_in_space_categorical(coords, assignment, single_tumor_prop=None, sample_list=sample_list, sample_ids=sample_ids, base_height=3, palette='Set2')
+        fig.savefig(f"{outdir}/plots/clone_spatial_beforemerging.pdf", dpi=300, bbox_inches='tight', transparent=True)
+
+        # plot RDR along the genome for each clone
+        df_rdr = df_bininfo[['CHR', 'START', 'END']].copy()
+        for s,idx in enumerate(id_tumor_clones):
+            this_pred_cnv = res['pred_cnv'][(idx*n_obs):(idx*n_obs+n_obs)]
+            df_rdr[f'clone{s+1} RD'] = X[:,0,idx]/base_nb_mean[:,idx]
+            df_rdr[f'clone{s+1} state'] = this_pred_cnv
+        fig, axes = plot_rdr_exponly_from_df(df_rdr, res['new_log_mu'], rdr_ylim=4, remove_xticks=True, palette='tab10')
+        fig.savefig(f"{outdir}/plots/rdr_beforemerging.pdf", dpi=300, bbox_inches='tight', transparent=True)
+
+        ########### Post-process clone merging ##########
+        # merge by thresholding BAF profile similarity
+        # only consider tumor spots to merge, ignore normal spots
+        if config["tumorprop_file"] is None:
+            X, base_nb_mean, total_bb_RD = merge_pseudobulk_by_index(single_X, single_base_nb_mean, single_total_bb_RD, [tumor_spots[np.where(tumor_res["new_assignment"]==c)[0]] for c in np.sort(np.unique(tumor_res["new_assignment"]))])
+            tumor_prop = None
+        else:
+            X, base_nb_mean, total_bb_RD, tumor_prop = merge_pseudobulk_by_index_mix(single_X, single_base_nb_mean, single_total_bb_RD, [tumor_spots[np.where(tumor_res["new_assignment"]==c)[0]] for c in np.sort(np.unique(tumor_res["new_assignment"]))], single_tumor_prop, threshold=config["tumorprop_threshold"])
+            tumor_prop = np.repeat(tumor_prop, X.shape[0]).reshape(-1,1)
+
+        merging_groups, merged_res = similarity_components_rdrbaf_neymanpearson(X, base_nb_mean, total_bb_RD, tumor_res, threshold=config['clone_similarity_threshold'], minlength=10, params="sm", tumor_prop=None, hmmclass=hmm_nophasing_v2)
+        print(f"Clone merging after comparing similarity: {merging_groups}")
+        #
+        if config["tumorprop_file"] is None:
+            merging_groups, merged_res = merge_by_minspots(merged_res["new_assignment"], merged_res, single_total_bb_RD[:,tumor_spots], min_spots_thresholds=config["min_spots_per_clone"], min_umicount_thresholds=0)
+        else:
+            merging_groups, merged_res = merge_by_minspots(merged_res["new_assignment"], merged_res, single_total_bb_RD[:,tumor_spots], min_spots_thresholds=config["min_spots_per_clone"], min_umicount_thresholds=0, single_tumor_prop=single_tumor_prop, threshold=config["tumorprop_threshold"])
+        print(f"Clone merging after requiring minimum # spots: {merging_groups}")
+
+        # save final HMM results for tumor spots
+        final_res = reorder_results_exponly(merged_res, n_obs)
+        # add back normal spots
+        if len(np.setdiff1d(res['new_assignment'], id_tumor_clones)) > 0:
+            id_normal_clones = np.setdiff1d(res['new_assignment'], id_tumor_clones)
+            all_assignment = np.array([0] * len(res['new_assignment']))
+            all_assignment[tumor_spots] = final_res['new_assignment'] + 1
+            final_res['new_assignment'] = all_assignment
+            final_res['pred_cnv'] = np.append(res['pred_cnv'][(id_normal_clones[0]*n_obs):(id_normal_clones[0]*n_obs+n_obs)], final_res['pred_cnv'])
+            final_res['log_gamma'] = np.hstack([res['log_gamma'][:, (id_normal_clones[0]*n_obs):(id_normal_clones[0]*n_obs+n_obs)], final_res['log_gamma']])
+        np.savez(f"{outdir}/mergedallspots_nstates{config['n_states']}_sm.npz", **final_res)
+
+        # detect tumor clone ids
+        id_tumor_clones, _, _ = identify_tumor_clone_ids(final_res)
+        print(id_tumor_clones)
+
+        # aggregate counts into clones
+        unique_assignment = np.sort(np.unique(final_res['new_assignment']))
+        clone_index = [np.where(final_res['new_assignment'] == c)[0] for c in unique_assignment]
+        if config["tumorprop_file"] is None:
+            X, base_nb_mean, total_bb_RD = merge_pseudobulk_by_index(single_X, single_base_nb_mean, single_total_bb_RD, clone_index)
+        else:
+            X, base_nb_mean, total_bb_RD, tumor_prop = merge_pseudobulk_by_index_mix(single_X, single_base_nb_mean, single_total_bb_RD, clone_index, single_tumor_prop, threshold=config["tumorprop_threshold"])
+
+        # adjust the scaling factor for each clone
+        df_adj_log_rdr = df_bininfo[['CHR', 'START', 'END']].copy()
+        for s,idx in enumerate(id_tumor_clones):
+            this_pred_cnv = final_res['pred_cnv'][(idx*n_obs):(idx*n_obs+n_obs)]
+            df_adj_log_rdr[f'clone{s+1} logrdr'] = np.exp(final_res["new_log_mu"][:,0])[this_pred_cnv]
+        df_adj_log_rdr.to_csv(f"{outdir}/adjusted_logrdr.tsv", sep="\t", index=False)
+
+        # convert to copy number states (neu, amp, del)
+        state_mapping = rdr_state_mapping(df_adj_log_rdr.iloc[:,3:].values, np.bincount(final_res['new_assignment'])[id_tumor_clones], min_clone_size=config['min_spots_per_clone'])
+        EPS = 1e-4
+        for s in range(len(id_tumor_clones)):
+            cnv_vec = np.array(['neu'] * df_adj_log_rdr.shape[0])
+            if len( np.unique(df_adj_log_rdr[f'clone{s+1} logrdr'].values) ) > 1:
+                for k,v in state_mapping.items():
+                    cnv_vec[ np.abs(df_adj_log_rdr[f'clone{s+1} logrdr'].values - k) < EPS ] = v
+            df_adj_log_rdr[f'clone{s+1} cnv'] = cnv_vec
+        df_adj_log_rdr = df_adj_log_rdr[ ['CHR', 'START', 'END']  + [f'clone{s+1} cnv' for s in range(len(id_tumor_clones))] ]
+        # plot total copy number along genome
+        fig, ax = plt.subplots(1, 1, figsize=(15, 1+0.5*(len(id_tumor_clones))))
+        plot_total_cn(df_adj_log_rdr.rename(columns={f'clone{s+1} cnv':f'clone{s}' for s in range(len(id_tumor_clones))}), ax, palette_mode=3)
+        fig.savefig(f"{outdir}/plots/total_cn.pdf", dpi=300, bbox_inches='tight', transparent=True)
+
+        # save copy number states to file
+        df_adj_log_rdr = collapse_cnv_profiles(df_adj_log_rdr)
+        df_adj_log_rdr.to_csv(f"{outdir}/cnv.tsv", sep="\t", index=False)
+
+        # output clone labels as a tsv file
+        assignment = pd.DataFrame({'clone_label': ['normal'] * len(final_res['new_assignment']) }, index=adata.obs.index)
+        for s,idx in enumerate(id_tumor_clones):
+            assignment.iloc[np.where(final_res['new_assignment']==idx)[0], 0] = f"clone{s+1}"
+        assignment.iloc[np.where(normal_candidate)[0], 0] = "normal"
+        assignment.to_csv(f"{outdir}/clone_labels.tsv", sep="\t", index=True, header=True)
+
+        # plot clones in space and cnv states along the genome
+        assignment = pd.Categorical(assignment['clone_label'], categories=["normal"] + [f"clone{s+1}" for s in range(len(id_tumor_clones))], ordered=True)
+        fig = plot_individual_spots_in_space_categorical(coords, assignment, single_tumor_prop=None, sample_list=sample_list, sample_ids=sample_ids, base_height=3, palette='Set2')
+        fig.savefig(f"{outdir}/plots/clone_spatial.pdf", dpi=300, bbox_inches='tight', transparent=True)
+
+        # plot RDR along the genome for each clone
+        df_rdr = df_bininfo[['CHR', 'START', 'END']].copy()
+        for s,idx in enumerate(id_tumor_clones):
+            this_pred_cnv = final_res['pred_cnv'][(idx*n_obs):(idx*n_obs+n_obs)]
+            df_rdr[f'clone{s+1} RD'] = X[:,0,idx]/base_nb_mean[:,idx]
+            df_rdr[f'clone{s+1} state'] = this_pred_cnv
+        fig, axes = plot_rdr_exponly_from_df(df_rdr, final_res['new_log_mu'], rdr_ylim=4, remove_xticks=True, palette='tab10')
+        fig.savefig(f"{outdir}/plots/rdr.pdf", dpi=300, bbox_inches='tight', transparent=True)
+
+    ########### Select final initialization based on log-likelihood stored in allspots_nstates{config['n_states']}_sm.npz ##########
+    df_loglikelihood = pd.DataFrame(index=np.arange(config['num_initializations']), columns=["path", "loglikelihood"])
+    for r_hmrf_initialization in range(config['num_initializations']):
+        outdir = f"{config['output_dir']}/clone{config['n_clones']}_rectangle{r_hmrf_initialization}_w{config['spatial_weight']:.1f}" if config['initialization_method'] == 'coordinates' else \
+                 f"{config['output_dir']}/clone{config['n_clones']}_expression_w{config['spatial_weight']:.1f}" if config['initialization_method'] == 'expression' else \
+                 f"{config['output_dir']}/clone{config['n_clones']}_mix{r_hmrf_initialization}_w{config['spatial_weight']:.1f}"
+        res = load_hmrf_last_iteration(f"{outdir}/allspots_nstates{config['n_states']}_sm.npz")
+        df_loglikelihood.loc[r_hmrf_initialization, "path"] = outdir
+        df_loglikelihood.loc[r_hmrf_initialization, "loglikelihood"] = res["total_llf"]
+    # get the initialization with the highest log-likelihood
+    best_initialization = df_loglikelihood["loglikelihood"].idxmax()
     
-    # aggregate counts into clones
-    unique_assignment = np.sort(np.unique(res['new_assignment']))
-    clone_index = [np.where(res['new_assignment'] == c)[0] for c in unique_assignment]
-    if config["tumorprop_file"] is None:
-        X, base_nb_mean, total_bb_RD = merge_pseudobulk_by_index(single_X, single_base_nb_mean, single_total_bb_RD, [np.where(res["new_assignment"]==c)[0] for c in np.sort(np.unique(res["new_assignment"]))])
-    else:
-        X, base_nb_mean, total_bb_RD, tumor_prop = merge_pseudobulk_by_index_mix(single_X, single_base_nb_mean, single_total_bb_RD, [np.where(res["new_assignment"]==c)[0] for c in np.sort(np.unique(res["new_assignment"]))], single_tumor_prop, threshold=config["tumorprop_threshold"])
-
-    # adjust the scaling factor for each clone
-    df_adj_log_rdr = df_bininfo[['CHR', 'START', 'END']].copy()
-    for s in range(X.shape[2]):
-        # lambd = base_nb_mean[:,s] / np.sum(base_nb_mean[:,s])
-        this_pred_cnv = res['pred_cnv'][(s*n_obs):(s*n_obs+n_obs)]
-        # adjusted_log_mu = np.log( np.exp(res["new_log_mu"][:,0]) / np.sum(np.exp(res["new_log_mu"][this_pred_cnv,0]) * lambd) )
-        # df_adj_log_rdr[f'clone{s} logrdr'] = adjusted_log_mu[this_pred_cnv]
-        df_adj_log_rdr[f'clone{s} logrdr'] = np.exp(res["new_log_mu"][:,0])[this_pred_cnv]
-    df_adj_log_rdr.to_csv(f"{outdir}/adjusted_logrdr_beforemerging.tsv", sep="\t", index=False)
-
-    # convert to copy number states (neu, amp, del)
-    # for s in range(X.shape[2]):
-    #     df_adj_log_rdr[f'clone{s} cnv'] = convert_calicost_3_logrdr_to_states(df_adj_log_rdr[f'clone{s} logrdr'].values)
-    state_mapping = rdr_state_mapping(df_adj_log_rdr.iloc[:,3:].values, np.bincount(res['new_assignment']), min_clone_size=config['min_spots_per_clone'])
-    EPS = 1e-4
-    for s in range(X.shape[2]):
-        cnv_vec = np.array(['neu'] * df_adj_log_rdr.shape[0])
-        if len( np.unique(df_adj_log_rdr[f'clone{s} logrdr'].values) ) > 1:
-            for k,v in state_mapping.items():
-                cnv_vec[ np.abs(df_adj_log_rdr[f'clone{s} logrdr'].values - k) < EPS ] = v
-        df_adj_log_rdr[f'clone{s} cnv'] = cnv_vec
-    df_adj_log_rdr = df_adj_log_rdr[ ['CHR', 'START', 'END']  + [f'clone{s} cnv' for s in range(X.shape[2])] ]
-    # plot total copy number along genome
-    fig, ax = plt.subplots(1, 1, figsize=(15, 1+0.5*(X.shape[2])))
-    plot_total_cn(df_adj_log_rdr.rename(columns={f'clone{s} cnv':f'clone {s}' for s in range(X.shape[2])}), ax, palette_mode=3)
-    fig.savefig(f"{outdir}/plots/total_cn_beforemerging.pdf", dpi=300, bbox_inches='tight', transparent=True)
-
-    # save copy number states to file
-    df_adj_log_rdr = collapse_cnv_profiles(df_adj_log_rdr)
-    df_adj_log_rdr.to_csv(f"{outdir}/cnv_beforemerging.tsv", sep="\t", index=False)
-
-    # output clone labels before merging as a tsv file
-    assignment = pd.DataFrame({'clone_label': [str(x) for x in res['new_assignment'] ]}, index=adata.obs.index)
-    assignment.iloc[np.where(normal_candidate)[0], 0] = "normal_ref"
-    assignment.to_csv(f"{outdir}/clone_labels_beforemerging.tsv", sep="\t", index=True, header=True)
-
-    # plot clones in space and cnv states along the genome
-    assignment = pd.Series([f"clone {x}" for x in res['new_assignment'] ])
-    assignment.iloc[np.where(normal_candidate)[0]] = "normal_ref"
-    assignment = pd.Categorical(assignment, categories=["normal_ref"] + [f"clone {x}" for x in np.sort(np.unique(res['new_assignment']))], ordered=True)
-    fig = plot_individual_spots_in_space_categorical(coords, assignment, single_tumor_prop=None, sample_list=sample_list, sample_ids=sample_ids, base_height=3, palette='Set2')
-    fig.savefig(f"{outdir}/plots/clone_spatial_beforemerging.pdf", dpi=300, bbox_inches='tight', transparent=True)
-
-    # plot RDR along the genome for each clone
-    df_rdr = df_bininfo[['CHR', 'START', 'END']].copy()
-    for s in range(X.shape[2]):
-        this_pred_cnv = res['pred_cnv'][(s*n_obs):(s*n_obs+n_obs)]
-        df_rdr[f'clone{s} RD'] = X[:,0,s]/base_nb_mean[:,s]
-        df_rdr[f'clone{s} state'] = this_pred_cnv
-    fig, axes = plot_rdr_exponly_from_df(df_rdr, res['new_log_mu'], rdr_ylim=4, remove_xticks=True, palette='tab10')
-    fig.savefig(f"{outdir}/plots/rdr_beforemerging.pdf", dpi=300, bbox_inches='tight', transparent=True)
-
-    ########### Post-process clone merging ##########
-    # merge by thresholding BAF profile similarity
-    if config["tumorprop_file"] is None:
-        X, base_nb_mean, total_bb_RD = merge_pseudobulk_by_index(single_X, single_base_nb_mean, single_total_bb_RD, [np.where(res["new_assignment"]==c)[0] for c in np.sort(np.unique(res["new_assignment"]))])
-        tumor_prop = None
-    else:
-        X, base_nb_mean, total_bb_RD, tumor_prop = merge_pseudobulk_by_index_mix(single_X, single_base_nb_mean, single_total_bb_RD, [np.where(res["new_assignment"]==c)[0] for c in np.sort(np.unique(res["new_assignment"]))], single_tumor_prop, threshold=config["tumorprop_threshold"])
-        tumor_prop = np.repeat(tumor_prop, X.shape[0]).reshape(-1,1)
-
-    merging_groups, merged_res = similarity_components_rdrbaf_neymanpearson(X, base_nb_mean, total_bb_RD, res, threshold=config['clone_similarity_threshold'], minlength=10, params="sm", tumor_prop=None, hmmclass=hmm_nophasing_v2)
-    print(f"BAF clone merging after comparing similarity: {merging_groups}")
-    #
-    if config["tumorprop_file"] is None:
-        merging_groups, merged_res = merge_by_minspots(merged_res["new_assignment"], merged_res, single_total_bb_RD, min_spots_thresholds=config["min_spots_per_clone"], min_umicount_thresholds=0)
-    else:
-        merging_groups, merged_res = merge_by_minspots(merged_res["new_assignment"], merged_res, single_total_bb_RD, min_spots_thresholds=config["min_spots_per_clone"], min_umicount_thresholds=0, single_tumor_prop=single_tumor_prop, threshold=config["tumorprop_threshold"])
-    print(f"BAF clone merging after requiring minimum # spots: {merging_groups}")
-
-    # save final HMM results
-    final_res = reorder_results_exponly(merged_res, n_obs)
-    np.savez(f"{outdir}/mergedallspots_nstates{config['n_states']}_sm.npz", **final_res)
-
-    # clones in a merging group have different HMM states, which HMM states to use for the merged clone?
-    # dirctly infer the HMM state again using forward-backward algorithm on the merged clone
-    if config["tumorprop_file"] is None:
-        X, base_nb_mean, total_bb_RD = merge_pseudobulk_by_index(single_X, single_base_nb_mean, single_total_bb_RD, [np.where(merged_res["new_assignment"]==c)[0] for c in np.sort(np.unique(merged_res["new_assignment"]))])
-    else:
-        X, base_nb_mean, total_bb_RD, tumor_prop = merge_pseudobulk_by_index_mix(single_X, single_base_nb_mean, single_total_bb_RD, [np.where(merged_res["new_assignment"]==c)[0] for c in np.sort(np.unique(merged_res["new_assignment"]))], single_tumor_prop, threshold=config["tumorprop_threshold"])
-    # # HMM
-    # final_res = pipeline_baum_welch(None, np.vstack([X[:,0,:].flatten("F"), X[:,1,:].flatten("F")]).T.reshape(-1,2,1), np.tile(lengths, X.shape[2]), config['n_states'], \
-    #                     base_nb_mean.flatten("F").reshape(-1,1), total_bb_RD.flatten("F").reshape(-1,1),  np.tile(log_sitewise_transmat, X.shape[2]), \
-    #                     hmmclass=hmm_nophasing_v2, params='sm', t=config['t'], random_state=0, \
-    #                     fix_NB_dispersion=False, shared_NB_dispersion=False, fix_BB_dispersion=True, shared_BB_dispersion=True, \
-    #                     is_diag=True, init_log_mu=merged_res['new_log_mu'], init_p_binom=merged_res['new_p_binom'], init_alphas=None, init_taus=None, max_iter=1, tol=config['tol'])
-    # final_res['new_log_mu'] = res['new_log_mu']
-    # final_res['new_alphas'] = res['new_alphas']
-    # final_res['new_assignment'] = merged_res['new_assignment']
-    # final_res = reorder_results_exponly(final_res, n_obs)
-    # np.savez(f"{outdir}/mergedallspots_nstates{config['n_states']}_sm.npz", **final_res)
-
-    # adjust the scaling factor for each clone
-    df_adj_log_rdr = df_bininfo[['CHR', 'START', 'END']].copy()
-    for s in range(X.shape[2]):
-        # lambd = base_nb_mean[:,s] / np.sum(base_nb_mean[:,s])
-        this_pred_cnv = final_res['pred_cnv'][(s*n_obs):(s*n_obs+n_obs)]
-        # adjusted_log_mu = np.log( np.exp(final_res["new_log_mu"][:,0]) / np.sum(np.exp(final_res["new_log_mu"][this_pred_cnv,0]) * lambd) )
-        # df_adj_log_rdr[f'clone{s} logrdr'] = adjusted_log_mu[this_pred_cnv]
-        df_adj_log_rdr[f'clone{s} logrdr'] = np.exp(final_res["new_log_mu"][:,0])[this_pred_cnv]
-    df_adj_log_rdr.to_csv(f"{outdir}/adjusted_logrdr.tsv", sep="\t", index=False)
-
-    # convert to copy number states (neu, amp, del)
-    # for s in range(X.shape[2]):
-    #     df_adj_log_rdr[f'clone{s} cnv'] = convert_calicost_3_logrdr_to_states(df_adj_log_rdr[f'clone{s} logrdr'].values)
-    state_mapping = rdr_state_mapping(df_adj_log_rdr.iloc[:,3:].values, np.bincount(final_res['new_assignment']), min_clone_size=config['min_spots_per_clone'])
-    EPS = 1e-4
-    for s in range(X.shape[2]):
-        cnv_vec = np.array(['neu'] * df_adj_log_rdr.shape[0])
-        if len( np.unique(df_adj_log_rdr[f'clone{s} logrdr'].values) ) > 1:
-            for k,v in state_mapping.items():
-                cnv_vec[ np.abs(df_adj_log_rdr[f'clone{s} logrdr'].values - k) < EPS ] = v
-        df_adj_log_rdr[f'clone{s} cnv'] = cnv_vec
-    df_adj_log_rdr = df_adj_log_rdr[ ['CHR', 'START', 'END']  + [f'clone{s} cnv' for s in range(X.shape[2])] ]
-    # plot total copy number along genome
-    fig, ax = plt.subplots(1, 1, figsize=(15, 1+0.5*(X.shape[2])))
-    plot_total_cn(df_adj_log_rdr.rename(columns={f'clone{s} cnv':f'clone {s}' for s in range(X.shape[2])}), ax, palette_mode=3)
-    fig.savefig(f"{outdir}/plots/total_cn.pdf", dpi=300, bbox_inches='tight', transparent=True)
-
-    # save copy number states to file
-    df_adj_log_rdr = collapse_cnv_profiles(df_adj_log_rdr)
-    df_adj_log_rdr.to_csv(f"{outdir}/cnv.tsv", sep="\t", index=False)
-
-    # output clone labels as a tsv file
-    assignment = pd.DataFrame({'clone_label': [str(x) for x in final_res['new_assignment'] ]}, index=adata.obs.index)
-    assignment.iloc[np.where(normal_candidate)[0], 0] = "normal_ref"
-    assignment.to_csv(f"{outdir}/clone_labels.tsv", sep="\t", index=True, header=True)
-
-    # plot clones in space and cnv states along the genome
-    assignment = pd.Series([f"clone {x}" for x in final_res['new_assignment'] ])
-    assignment.iloc[np.where(normal_candidate)[0]] = "normal_ref"
-    assignment = pd.Categorical(assignment, categories=["normal_ref"] + [f"clone {x}" for x in np.sort(np.unique(final_res['new_assignment']))], ordered=True)
-    fig = plot_individual_spots_in_space_categorical(coords, assignment, single_tumor_prop=None, sample_list=sample_list, sample_ids=sample_ids, base_height=3, palette='Set2')
-    fig.savefig(f"{outdir}/plots/clone_spatial.pdf", dpi=300, bbox_inches='tight', transparent=True)
-
-    # plot RDR along the genome for each clone
-    df_rdr = df_bininfo[['CHR', 'START', 'END']].copy()
-    for s in range(X.shape[2]):
-        this_pred_cnv = final_res['pred_cnv'][(s*n_obs):(s*n_obs+n_obs)]
-        df_rdr[f'clone{s} RD'] = X[:,0,s]/base_nb_mean[:,s]
-        df_rdr[f'clone{s} state'] = this_pred_cnv
-    fig, axes = plot_rdr_exponly_from_df(df_rdr, final_res['new_log_mu'], rdr_ylim=4, remove_xticks=True, palette='tab10')
-    fig.savefig(f"{outdir}/plots/rdr.pdf", dpi=300, bbox_inches='tight', transparent=True)
-
+    # copy the folder of the best initialization and rename it to "clone{}_rectangle_best_w{config['spatial_weight']:.1f}" or "clone{}_expression_best_w{config['spatial_weight']:.1f}" or "clone{}_mix_best_w{config['spatial_weight']:.1f}"
+    if config['initialization_method'] == 'coordinates':
+        best_outdir = f"{config['output_dir']}/clone{config['n_clones']}_rectangle_best_w{config['spatial_weight']:.1f}"
+    elif config['initialization_method'] == 'expression':
+        best_outdir = f"{config['output_dir']}/clone{config['n_clones']}_expression_best_w{config['spatial_weight']:.1f}"
+    elif config['initialization_method'] == 'mix':
+        best_outdir = f"{config['output_dir']}/clone{config['n_clones']}_mix_best_w{config['spatial_weight']:.1f}"
+    
+    shutil.copytree(df_loglikelihood.loc[best_initialization, "path"], best_outdir, dirs_exist_ok=True)
 
 
 if __name__ == "__main__":
@@ -440,8 +496,8 @@ if __name__ == "__main__":
     # optional arguments
     # Clone inference
     clone_infer_group = parser.add_argument_group("Options for clone inference (by HMRF)")
-    clone_infer_group.add_argument('--n_clones', type=int, default=8, help='Number of clones')
-    clone_infer_group.add_argument('--random_state', type=int, default=0, help='Random state for initialization')
+    clone_infer_group.add_argument('--n_clones', type=int, default=3, help='Number of clones')
+    clone_infer_group.add_argument('--num_initializations', type=int, default=3, help='Number of random initializations for CNA and clones')
     clone_infer_group.add_argument('--spatial_weight', type=float, default=1.0, help='Weight of the spatial coherence in HMRF')
     clone_infer_group.add_argument('--max_iter_outer', type=int, default=20, help='Maximum number of clone inference (HMRF) iterations')
     clone_infer_group.add_argument('--nodepotential', type=str, default="weighted_sum", choices=["max", "weighted_sum"], help='Node potential in HMRF, "max" evaluates the probability at each node/spot using the most probable HMM path (viterbi decoding), "weighted_sum" evaluates the probability using the probability of multiple paths (forward-backward)')
@@ -485,7 +541,7 @@ if __name__ == "__main__":
 
         # Clone inference
         "n_clones": args.n_clones,
-        "r_hmrf_initialization": args.random_state,
+        "num_initializations": args.num_initializations,
         "spatial_weight": args.spatial_weight,
         "max_iter_outer": args.max_iter_outer,
         "nodepotential": args.nodepotential,
