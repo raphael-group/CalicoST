@@ -725,10 +725,14 @@ def similarity_components_rdrbaf_neymanpearson(X, base_nb_mean, total_bb_RD, res
     for c in cliques:
         if len(set(c[0]) & covered_nodes) == 0:
             clones_to_merge = c[0]
-            # order clones in clones_to_merge by their sizes
-            involved_clone_with_sizes = [ (i, np.sum(res['new_assignment']==i)) for i in clones_to_merge ]
-            involved_clone_with_sizes.sort(key = lambda x:x[1], reverse=True)
-            clones_to_merge = [ x[0] for x in involved_clone_with_sizes ]
+            # # order clones in clones_to_merge by their sizes
+            # involved_clone_with_sizes = [ (i, np.sum(res['new_assignment']==i)) for i in clones_to_merge ]
+            # involved_clone_with_sizes.sort(key = lambda x:x[1], reverse=True)
+            # clones_to_merge = [ x[0] for x in involved_clone_with_sizes ]
+            # order clones in clone_to_merge by the entropy of the copy number states
+            involved_clone_with_cnentropy = [ (i, scipy.stats.entropy( (np.bincount(res['pred_cnv'][(i*n_obs):(i*n_obs+n_obs)]) + 1) / (n_obs+3) )) for i in clones_to_merge ]
+            involved_clone_with_cnentropy.sort(key = lambda x:x[1], reverse=True)
+            clones_to_merge = [ x[0] for x in involved_clone_with_cnentropy ]
             # in this way, the first clone in each merging group will be the dominant clone
             merging_groups.append( clones_to_merge )
             covered_nodes = covered_nodes | set(c[0])
