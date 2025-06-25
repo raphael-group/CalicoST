@@ -58,28 +58,28 @@ from calicost.utils_plotting import *
 #     coarse_states[coarse_states == "neutral"] = "neu"
 #     return coarse_states
 
-def rdr_state_mapping(log_rdr_matrix, clone_sizes, min_clone_size=100):
-    # find the last clone with size >= min_clone_size. Note that we have sorted clone by their rdr variation from smallest to largest.
-    idx = np.where(clone_sizes >= min_clone_size)[0][-1]
-    # neutral state RDR
-    sorted_logRDR = np.sort(log_rdr_matrix[:, idx])
-    neu_state_logrdr = sorted_logRDR[len(sorted_logRDR) // 2]
-    # del and amp state RDR
-    del_state_logrdr = sorted_logRDR[sorted_logRDR < neu_state_logrdr][0] if len(sorted_logRDR[sorted_logRDR < neu_state_logrdr]) > 0 else None
+# def rdr_state_mapping(log_rdr_matrix, clone_sizes, min_clone_size=100):
+#     # find the last clone with size >= min_clone_size. Note that we have sorted clone by their rdr variation from smallest to largest.
+#     idx = np.where(clone_sizes >= min_clone_size)[0][-1]
+#     # neutral state RDR
+#     sorted_logRDR = np.sort(log_rdr_matrix[:, idx])
+#     neu_state_logrdr = sorted_logRDR[len(sorted_logRDR) // 2]
+#     # del and amp state RDR
+#     del_state_logrdr = sorted_logRDR[sorted_logRDR < neu_state_logrdr][0] if len(sorted_logRDR[sorted_logRDR < neu_state_logrdr]) > 0 else None
 
-    # construct a dictionary to map unique logRDR to states
-    EPS = 1e-4
-    unique_logRDR = np.unique(log_rdr_matrix.flatten())
-    state_mapping = {}
-    for log_rdr in unique_logRDR:
-        if log_rdr > neu_state_logrdr:
-            state_mapping[log_rdr] = "amp"
-        elif (not del_state_logrdr is None) and log_rdr < del_state_logrdr + EPS:
-            state_mapping[log_rdr] = "del"
-        else:
-            state_mapping[log_rdr] = "neu"
+#     # construct a dictionary to map unique logRDR to states
+#     EPS = 1e-4
+#     unique_logRDR = np.unique(log_rdr_matrix.flatten())
+#     state_mapping = {}
+#     for log_rdr in unique_logRDR:
+#         if log_rdr > neu_state_logrdr:
+#             state_mapping[log_rdr] = "amp"
+#         elif (not del_state_logrdr is None) and log_rdr < del_state_logrdr + EPS:
+#             state_mapping[log_rdr] = "del"
+#         else:
+#             state_mapping[log_rdr] = "neu"
     
-    return state_mapping
+#     return state_mapping
 
 
 def get_shared_intervals(cn_profile):
@@ -323,11 +323,12 @@ def main(config):
         df_adj_log_rdr = df_bininfo[['CHR', 'START', 'END']].copy()
         for s,idx in enumerate(id_tumor_clones):
             this_pred_cnv = res['pred_cnv'][(idx*n_obs):(idx*n_obs+n_obs)]
-            df_adj_log_rdr[f'clone{s+1} logrdr'] = np.exp(res["new_log_mu"][:,0])[this_pred_cnv]
+            df_adj_log_rdr[f'clone{s+1} logrdr'] = res["new_log_mu"][:,0][this_pred_cnv]
         df_adj_log_rdr.to_csv(f"{outdir}/adjusted_logrdr_beforemerging.tsv", sep="\t", index=False)
 
         # convert to copy number states (neu, amp, del)
-        state_mapping = rdr_state_mapping(df_adj_log_rdr.iloc[:,3:].values, np.bincount(res['new_assignment'])[id_tumor_clones], min_clone_size=config['min_spots_per_clone'])
+        # state_mapping = rdr_state_mapping(df_adj_log_rdr.iloc[:,3:].values, np.bincount(res['new_assignment'])[id_tumor_clones], min_clone_size=config['min_spots_per_clone'])
+        state_mapping = {np.sort(res['new_log_mu'].flatten())[i]: ['del', 'neu', 'amp'][i] for i in range(len(np.sort(res['new_log_mu'].flatten())))} # use the sorted logRDR as the mapping
         EPS = 1e-4
         for s,idx in enumerate(id_tumor_clones):
             cnv_vec = np.array(['neu'] * df_adj_log_rdr.shape[0])
@@ -370,20 +371,20 @@ def main(config):
         # merge by thresholding BAF profile similarity
         # only consider tumor spots to merge, ignore normal spots
         if config["tumorprop_file"] is None:
-            X, base_nb_mean, total_bb_RD = merge_pseudobulk_by_index(single_X, single_base_nb_mean, single_total_bb_RD, [tumor_spots[np.where(tumor_res["new_assignment"]==c)[0]] for c in np.sort(np.unique(tumor_res["new_assignment"]))])
-            tumor_prop = None
+            merging_groups, merged_res = merge_by_minspots(tumor_res["new_assignment"], tumor_res, single_total_bb_RD[:,tumor_spots], min_spots_thresholds=config["min_spots_per_clone"], min_umicount_thresholds=0)
         else:
-            X, base_nb_mean, total_bb_RD, tumor_prop = merge_pseudobulk_by_index_mix(single_X, single_base_nb_mean, single_total_bb_RD, [tumor_spots[np.where(tumor_res["new_assignment"]==c)[0]] for c in np.sort(np.unique(tumor_res["new_assignment"]))], single_tumor_prop, threshold=config["tumorprop_threshold"])
-            tumor_prop = np.repeat(tumor_prop, X.shape[0]).reshape(-1,1)
-
-        merging_groups, merged_res = similarity_components_rdrbaf_neymanpearson(X, base_nb_mean, total_bb_RD, tumor_res, threshold=config['clone_similarity_threshold'], minlength=10, params="sm", tumor_prop=None, hmmclass=hmm_nophasing_v2)
-        print(f"Clone merging after comparing similarity: {merging_groups}")
+            merging_groups, merged_res = merge_by_minspots(tumor_res["new_assignment"], tumor_res, single_total_bb_RD[:,tumor_spots], min_spots_thresholds=config["min_spots_per_clone"], min_umicount_thresholds=0, single_tumor_prop=single_tumor_prop, threshold=config["tumorprop_threshold"])
+        print(f"Clone merging after requiring minimum # spots: {merging_groups}")
         #
         if config["tumorprop_file"] is None:
-            merging_groups, merged_res = merge_by_minspots(merged_res["new_assignment"], merged_res, single_total_bb_RD[:,tumor_spots], min_spots_thresholds=config["min_spots_per_clone"], min_umicount_thresholds=0)
+            X, base_nb_mean, total_bb_RD = merge_pseudobulk_by_index(single_X, single_base_nb_mean, single_total_bb_RD, [tumor_spots[np.where(merged_res["new_assignment"]==c)[0]] for c in np.sort(np.unique(merged_res["new_assignment"]))])
+            tumor_prop = None
         else:
-            merging_groups, merged_res = merge_by_minspots(merged_res["new_assignment"], merged_res, single_total_bb_RD[:,tumor_spots], min_spots_thresholds=config["min_spots_per_clone"], min_umicount_thresholds=0, single_tumor_prop=single_tumor_prop, threshold=config["tumorprop_threshold"])
-        print(f"Clone merging after requiring minimum # spots: {merging_groups}")
+            X, base_nb_mean, total_bb_RD, tumor_prop = merge_pseudobulk_by_index_mix(single_X, single_base_nb_mean, single_total_bb_RD, [tumor_spots[np.where(merged_res["new_assignment"]==c)[0]] for c in np.sort(np.unique(merged_res["new_assignment"]))], single_tumor_prop, threshold=config["tumorprop_threshold"])
+            tumor_prop = np.repeat(tumor_prop, X.shape[0]).reshape(-1,1)
+
+        merging_groups, merged_res = similarity_components_rdrbaf_neymanpearson(X, base_nb_mean, total_bb_RD, merged_res, threshold=config['clone_similarity_threshold'], minlength=10, params="sm", tumor_prop=None, hmmclass=hmm_nophasing_v2)
+        print(f"Clone merging after comparing similarity: {merging_groups}")
 
         # save final HMM results for tumor spots
         final_res = reorder_results_exponly(merged_res, n_obs)
@@ -413,11 +414,12 @@ def main(config):
         df_adj_log_rdr = df_bininfo[['CHR', 'START', 'END']].copy()
         for s,idx in enumerate(id_tumor_clones):
             this_pred_cnv = final_res['pred_cnv'][(idx*n_obs):(idx*n_obs+n_obs)]
-            df_adj_log_rdr[f'clone{s+1} logrdr'] = np.exp(final_res["new_log_mu"][:,0])[this_pred_cnv]
+            df_adj_log_rdr[f'clone{s+1} logrdr'] = final_res["new_log_mu"][:,0][this_pred_cnv]
         df_adj_log_rdr.to_csv(f"{outdir}/adjusted_logrdr.tsv", sep="\t", index=False)
 
         # convert to copy number states (neu, amp, del)
-        state_mapping = rdr_state_mapping(df_adj_log_rdr.iloc[:,3:].values, np.bincount(final_res['new_assignment'])[id_tumor_clones], min_clone_size=config['min_spots_per_clone'])
+        # state_mapping = rdr_state_mapping(df_adj_log_rdr.iloc[:,3:].values, np.bincount(final_res['new_assignment'])[id_tumor_clones], min_clone_size=config['min_spots_per_clone'])
+        state_mapping = {np.sort(res['new_log_mu'].flatten())[i]: ['del', 'neu', 'amp'][i] for i in range(len(np.sort(res['new_log_mu'].flatten())))} # use the sorted logRDR as the mapping
         EPS = 1e-4
         for s in range(len(id_tumor_clones)):
             cnv_vec = np.array(['neu'] * df_adj_log_rdr.shape[0])
@@ -428,7 +430,7 @@ def main(config):
         df_adj_log_rdr = df_adj_log_rdr[ ['CHR', 'START', 'END']  + [f'clone{s+1} cnv' for s in range(len(id_tumor_clones))] ]
         # plot total copy number along genome
         fig, ax = plt.subplots(1, 1, figsize=(15, 1+0.5*(len(id_tumor_clones))))
-        plot_total_cn(df_adj_log_rdr.rename(columns={f'clone{s+1} cnv':f'clone{s}' for s in range(len(id_tumor_clones))}), ax, palette_mode=3)
+        plot_total_cn(df_adj_log_rdr.rename(columns={f'clone{s+1} cnv':f'clone{s+1}' for s in range(len(id_tumor_clones))}), ax, palette_mode=3)
         fig.savefig(f"{outdir}/plots/total_cn.pdf", dpi=300, bbox_inches='tight', transparent=True)
 
         # save copy number states to file
@@ -528,7 +530,7 @@ if __name__ == "__main__":
     # post-processing (clone merging based on similarity and clone size)
     post_process_group = parser.add_argument_group("Options for post-processing (clone merging based on similarity and clone size)")
     post_process_group.add_argument('--clone_similarity_threshold', type=float, default=0.3, help='Threshold to merrge based on their CNA similarity')
-    post_process_group.add_argument('--min_spots_perclone', type=int, default=20, help='Minimum number of spots per clone')
+    post_process_group.add_argument('--min_spots_perclone', type=int, default=200, help='Minimum number of spots per clone')
 
     args = parser.parse_args()
 
