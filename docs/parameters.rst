@@ -45,11 +45,20 @@ min_spots_per_clone: int, optional
 min_avgumi_per_clone: int, optional
     The minimum average UMI count required for a clone. Default is 10.
 
+maxspots_pooling: int, optional
+    If the UMI counts per spot are too low, CalicoST will pool this number of adjacent spots to infer the clone assignment at each HMRF step. Default is 7.
+
 nodepotential: str, optional
     One of the following two options: "max" or "weighted_sum". "max" refers to using the MLE decoding of HMM in evaluating the probability of spots being in each clone. "weighted_sum" refers to using the full HMM posterior probabilities to evaluate the probability of spots being in each clone. Default is "weighted_sum".
 
 spatial_weight: float, optional
     The strength of spatial coherence in HMRF. The higher the value, the stronger the spatial coherence. Default is 1.0.
+
+construct_adjacency_method: str, optional
+    Choosing from one of the two methods to construct the adjacency graph for HMRF, "hexagon" or "KNN". "hexagon" assumes the spot localization forms a hexagonal grid as in Visium platform. "KNN" assumes the spot localization is arbitrary and uses K-nearest neighbors to construct the adjacency graph. Default is "hexagon".
+
+construct_adjacency_w: float, optional
+    If using KNN to construct the adjacency matrix, CalicoST allows combining the spatial similarity with the expression similarity for the adjacency matrix. This weight, ranging between 0 and 1, specifies the weight of spatial similarity.  Default is 1.0.
 
 
 CNA inference parameters
