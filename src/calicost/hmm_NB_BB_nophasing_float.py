@@ -14,6 +14,8 @@ from calicost.utils_distribution_fitting import *
 from calicost.utils_hmm import *
 import networkx as nx
 
+from scipy.special import gammaln
+
 try:
     import torch
     device = 'cuda' if torch.cuda.is_available() else 'cpu'
@@ -26,11 +28,42 @@ except ImportError:
 Joint NB-BB HMM that accounts for tumor/normal genome proportions. Tumor genome proportion is weighted by mu in BB distribution.
 """
 
+def betabinom_logpmf_float(x, n, a, b):
+    """
+    Compute beta-binomial logpmf allowing x and n to be float values.
+
+    Attributes
+    ----------
+    x : np.array
+        Number of successes. Allowing float number.
+    n : np.array
+        Number of trials. Allowing float number.
+    a : np.array
+        Shape parameter of the beta distribution. Probability of success * tau, where tau is a transformation of the over-dispersion parameter.
+    b : np.array
+        Shape parameter of the beta distribution. Probability of failure * tau, where tau is a transformation of the over-dispersion parameter.
+    """
+    tau = a + b
+    d_choose_y = gammaln(n + 1) - \
+                 gammaln(x + 1) - \
+                 gammaln(n - x + 1)
+
+    logbeta_numer = gammaln(x + a) + \
+                    gammaln(n - x + b) - \
+                    gammaln(n + tau)
+
+    logbeta_denom = gammaln(a) + \
+                    gammaln(b) - \
+                    gammaln(tau)
+
+    return d_choose_y + logbeta_numer - logbeta_denom
+
+
 ############################################################
 # whole inference
 ############################################################
 
-class hmm_nophasing_v2(object):
+class hmm_nophasing_float(object):
     def __init__(self, params="stmp", t=1-1e-4):
         """
         Attributes
@@ -94,7 +127,7 @@ class hmm_nophasing_v2(object):
                 # AF from BetaBinom distribution
                 idx_nonzero_baf = np.where(total_bb_RD[:,s] > 0)[0]
                 if len(idx_nonzero_baf) > 0:
-                    log_emission_baf[i, idx_nonzero_baf, s] = scipy.stats.betabinom.logpmf(X[idx_nonzero_baf,1,s], total_bb_RD[idx_nonzero_baf,s], p_binom[i, s] * taus[i, s], (1-p_binom[i, s]) * taus[i, s])
+                    log_emission_baf[i, idx_nonzero_baf, s] = betabinom_logpmf_float(X[idx_nonzero_baf,1,s], total_bb_RD[idx_nonzero_baf,s], p_binom[i, s] * taus[i, s], (1-p_binom[i, s]) * taus[i, s])
         return log_emission_rdr, log_emission_baf
     #
     @staticmethod
@@ -159,7 +192,7 @@ class hmm_nophasing_v2(object):
                 if len(idx_nonzero_baf) > 0:
                     mix_p_A = p_binom[i, s] * this_weighted_tp[idx_nonzero_baf] + 0.5 * (1 - this_weighted_tp[idx_nonzero_baf])
                     mix_p_B = (1 - p_binom[i, s]) * this_weighted_tp[idx_nonzero_baf] + 0.5 * (1 - this_weighted_tp[idx_nonzero_baf])
-                    log_emission_baf[i, idx_nonzero_baf, s] += scipy.stats.betabinom.logpmf(X[idx_nonzero_baf,1,s], total_bb_RD[idx_nonzero_baf,s], mix_p_A * taus[i, s], mix_p_B * taus[i, s])
+                    log_emission_baf[i, idx_nonzero_baf, s] += betabinom_logpmf_float(X[idx_nonzero_baf,1,s], total_bb_RD[idx_nonzero_baf,s], mix_p_A * taus[i, s], mix_p_B * taus[i, s])
         return log_emission_rdr, log_emission_baf
     #
     @staticmethod
@@ -265,14 +298,16 @@ class hmm_nophasing_v2(object):
             log_transmat = np.zeros((1,1))
         # initialize log_gamma
         log_gamma = kwargs["log_gamma"] if "log_gamma" in kwargs else None
-        # a trick to speed up BetaBinom optimization: taking only unique values of (B allele count, total SNP covering read count)
-        unique_values_nb, mapping_matrices_nb = construct_unique_matrix(X[:,0,:], base_nb_mean)
-        unique_values_bb, mapping_matrices_bb = construct_unique_matrix(X[:,1,:], total_bb_RD)
+        # degenerative case of constructing a list of unique (observed count, expected count) values, and mapping count per bin to the index in the unique list
+        unique_values_nb = [np.vstack([X[:,0,s], base_nb_mean[:,s]]).T for s in range(n_spots)]
+        mapping_matrices_nb = [scipy.sparse.csr_matrix((np.ones(n_obs), (np.arange(n_obs), np.arange(n_obs)) ))]
+        unique_values_bb = [np.vstack([X[:,1,s], total_bb_RD[:,s]]).T for s in range(n_spots)]
+        mapping_matrices_bb = [scipy.sparse.csr_matrix((np.ones(n_obs), (np.arange(n_obs), np.arange(n_obs)) ))]
         # EM algorithm
         for r in trange(max_iter):
             # E step
             if tumor_prop is None:
-                log_emission_rdr, log_emission_baf = hmm_nophasing_v2.compute_emission_probability_nb_betabinom(X, base_nb_mean, log_mu, alphas, total_bb_RD, p_binom, taus)
+                log_emission_rdr, log_emission_baf = hmm_nophasing_float.compute_emission_probability_nb_betabinom(X, base_nb_mean, log_mu, alphas, total_bb_RD, p_binom, taus)
                 log_emission = log_emission_rdr + log_emission_baf
             else:
                 # compute mu as adjusted RDR
@@ -282,12 +317,12 @@ class hmm_nophasing_v2(object):
                         this_pred_cnv = np.argmax(log_gamma[:,np.sum(kwargs["sample_length"][:c]):np.sum(kwargs["sample_length"][:(c+1)])], axis=0)%n_states
                         logmu_shift.append( scipy.special.logsumexp(log_mu[this_pred_cnv,:] + np.log(kwargs["lambd"]).reshape(-1,1), axis=0) )
                     logmu_shift = np.vstack(logmu_shift)
-                    log_emission_rdr, log_emission_baf = hmm_nophasing_v2.compute_emission_probability_nb_betabinom_mix(X, base_nb_mean, log_mu, alphas, total_bb_RD, p_binom, taus, tumor_prop, logmu_shift=logmu_shift, sample_length=kwargs["sample_length"])
+                    log_emission_rdr, log_emission_baf = hmm_nophasing_float.compute_emission_probability_nb_betabinom_mix(X, base_nb_mean, log_mu, alphas, total_bb_RD, p_binom, taus, tumor_prop, logmu_shift=logmu_shift, sample_length=kwargs["sample_length"])
                 else:
-                    log_emission_rdr, log_emission_baf = hmm_nophasing_v2.compute_emission_probability_nb_betabinom_mix(X, base_nb_mean, log_mu, alphas, total_bb_RD, p_binom, taus, tumor_prop)
+                    log_emission_rdr, log_emission_baf = hmm_nophasing_float.compute_emission_probability_nb_betabinom_mix(X, base_nb_mean, log_mu, alphas, total_bb_RD, p_binom, taus, tumor_prop)
                 log_emission = log_emission_rdr + log_emission_baf
-            log_alpha = hmm_nophasing_v2.forward_lattice(lengths, log_transmat, log_startprob, log_emission, log_sitewise_transmat)
-            log_beta = hmm_nophasing_v2.backward_lattice(lengths, log_transmat, log_startprob, log_emission, log_sitewise_transmat)
+            log_alpha = hmm_nophasing_float.forward_lattice(lengths, log_transmat, log_startprob, log_emission, log_sitewise_transmat)
+            log_beta = hmm_nophasing_float.backward_lattice(lengths, log_transmat, log_startprob, log_emission, log_sitewise_transmat)
             log_gamma = compute_posterior_obs(log_alpha, log_beta)
             log_xi = compute_posterior_transition_nophasing(log_alpha, log_beta, log_transmat, log_emission)
             # M step
