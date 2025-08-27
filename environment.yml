@@ -1,4 +1,4 @@
-name: calicost_env
+name: calicost
 channels:
   - conda-forge
   - bioconda
