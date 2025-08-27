@@ -72,7 +72,7 @@ Replace the following paths `config.yaml`:
 
 Then you can run preprocessing pipeline by
 ```
-snakemake --cores <number threads> --configfile config.yaml --snakefile calicost.smk all
+snakemake --cores <number threads> --configfile config.yaml --snakefile calicost.smk --keep-incomplete all
 ```
 
 ### Inferring tumor purity per spot (optional)

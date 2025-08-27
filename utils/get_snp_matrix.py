@@ -93,14 +93,32 @@ def cell_by_gene_lefthap_counts(cellsnp_folder, eagle_folder, barcode_list):
     DP = DP[is_phased,:]
     AD = AD[is_phased,:]
 
-    # phasing
-    phased_AD = np.where( (df_snp.GT.values == "0|1").reshape(-1,1), AD.A, (DP-AD).A )
-    phased_AD = scipy.sparse.csr_matrix(phased_AD)
+    # phasing (keep sparse matrix)
+    # make a dataframe with row, col, value corresponding to the nonzero values in DP
+    row, col = DP.nonzero()
+    df_sparse_dp = pd.DataFrame({"row":row, "col":col, "DP":DP.data})
+    df_sparse_dp.index = df_sparse_dp.row.astype(str) + "_" + df_sparse_dp.col.astype(str)
+    # make a dataframe with row, col, value corresponding to the nonzero values in AD
+    row, col = AD.nonzero()
+    df_sparse_ad = pd.DataFrame({"row":row, "col":col, "AD":AD.data})
+    df_sparse_ad.index = df_sparse_ad.row.astype(str) + "_" + df_sparse_ad.col.astype(str)
+    df_sparse_dp = df_sparse_dp.join(df_sparse_ad[['AD']], how="outer")
+    # replace the NULL values in AD with 0
+    df_sparse_dp.AD = df_sparse_dp.AD.fillna(0)
+    df_sparse_dp.AD = df_sparse_dp.AD.astype(int)
+    # adjust for phasing: if df_sparse_dp.row in np.where(df_snp.GT.values != "0|1")[0], then set AD = DP - AD
+    df_sparse_dp['AD'] = np.where( (df_snp.GT.values != "0|1")[df_sparse_dp.row.values], df_sparse_dp.DP.values - df_sparse_dp.AD.values, df_sparse_dp.AD.values)
+    # re-construct the sparse matrix
+    phased_AD = scipy.sparse.csr_matrix((df_sparse_dp.AD.values, (df_sparse_dp.row.values, df_sparse_dp.col.values)), shape=DP.shape)
+
+    # # phasing
+    # phased_AD = np.where( (df_snp.GT.values == "0|1").reshape(-1,1), AD.A, (DP-AD).A )
+    # phased_AD = scipy.sparse.csr_matrix(phased_AD)
 
     # re-order based on barcode_list
     index = np.array([barcode_mapper[x] for x in barcode_list if x in barcode_mapper])
     DP = DP[:, index]
-    phased_AD = phased_AD[:, index]    
+    phased_AD = phased_AD[:, index] 
     
     # returned matrix has shape (N_cells, N_snps), which is the transpose of the original matrix
     return (DP-phased_AD).T, phased_AD.T, df_snp.snp_id.values
